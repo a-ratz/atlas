@@ -1,0 +1,10 @@
+# the pointer the installed skill writes when installed in link mode from this checkout
+skills/atlas/config.json
+# Atlas runtime state if the app is run from the repo
+skills/atlas/app/vault/.atlas/
+.atlas/
+__pycache__/
+.DS_Store
+.playwright-mcp/
+# the demo site build (site/build.py)
+site/dist/

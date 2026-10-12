@@ -1,0 +1,266 @@
+# This vault's registry: a copy of engine/registry.default.yaml you can edit.
+# Add a type when you add a kind of note, a command when you want one; the app needs no code change.
+#
+# per type:
+#   id/label/plural   names in the UI        section   nav group
+#   globs/exclude     files of this type     fields    frontmatter keys shown as facts
+#   status            field shown as status  date      field holding the content date
+#   group             derived grouping (frame)
+#   nav               false = indexed and linked, but no entry in the navigation
+#   moves             "Your move" buttons on its pages and chat cards: label shown,
+#                     send = the message your agent receives (with the page as context)
+#                     and may use {title}, {path} and {project} of the page
+#   checks            what `atlas.py check` enforces in the frontmatter: require (fields),
+#                     description_max, allowed ({field: [values]}), resolve (fields naming a note)
+#   recall            true = notes of this type are cards for people or organizations (see Cabinet below)
+# Every type shows in the navigation with its count, 0 until the first entry appears.
+#
+# commands: what the user can type after "/" in the chat. Typing "/" lists them.
+# drop:     where a file dropped on Atlas lands, and what the composer then holds (see below)
+#   name, args (hint), help (one line), send (what your agent receives; {args} = the rest)
+
+user:
+  name: ""            # how Atlas greets you; empty = no name
+
+commands:
+  - {name: learn, args: "<topic or question>", help: "Research it and land the result as a capture", send: "/learn {args}"}
+  - {name: distill, args: "[capture | all]", help: "Turn a capture into insights (the open one, the oldest, or all)", send: "/distill {args}"}
+  - {name: map, args: "[theme]", help: "Build or update a map over insights that belong together", send: "/map {args}"}
+  - {name: sketch, args: "<idea>", help: "Write down a product or project idea", send: "/sketch {args}"}
+  - {name: project, args: "<name>", help: "Start working on a project: load its memory, rules and checkout", send: "/project {args}"}
+  - {name: close, args: "", help: "Close the session: update threads, record decisions and lessons, commit", send: "/close"}
+  - {name: remember, args: "<something about you>", help: "Tell your agents something about you (goes to your profile)", send: "/remember {args}"}
+  - {name: check, args: "", help: "Find and fix broken links, bad frontmatter and unconnected notes", send: "/check"}
+  - {name: next, args: "", help: "What is worth doing next in this vault?", send: "/next"}
+  - {name: tour, args: "[since: date]", help: "A guided tour of what changed since then (default: since the last tour)", send: "Write an Atlas tour of what changed in the vault since {args} (atlas-operator skill, Tours)"}
+
+# drop: what happens to a file or link dropped on Atlas. Files land in `dir`; the composer then
+# holds `file` (with {path}) or `url` (with {url}), ready to send.
+drop:
+  dir: captures
+  file: "Read {path} and land what matters as a capture"
+  url: "Read {url} and land what matters as a capture"
+
+types:
+  # ---------------------------------------------------------------- Knowledge
+  - id: insight
+    label: Insight
+    plural: Insights
+    section: Knowledge
+    globs: ["insights/*.md"]
+    exclude: ["insights/*-map.md"]
+    fields: [category, confidence, revisit_after, superseded_by, source]
+    status: confidence
+    checks:
+      require: [description, confidence]
+      description_max: 150
+      allowed: {confidence: [speculative, working, proven]}
+      resolve: [source]
+    moves:
+      - {label: "🔗 Find connections", send: "Find notes this insight should link to, and link them"}
+      - {label: "⚔️ Challenge it", send: "Look for counter-evidence to this insight and tell me whether it still holds"}
+      - {label: "🧭 Next research avenues", send: "Recommend next research avenues that start from this insight"}
+
+  - id: map
+    label: Map
+    plural: Maps
+    section: Knowledge
+    globs: ["insights/*-map.md"]
+    fields: [description]
+    checks:
+      require: [description]
+      description_max: 150
+    moves:
+      - {label: "🧩 What's missing?", send: "What is missing from this map? Suggest notes or research that would fill the gaps"}
+      - {label: "🧭 Next research avenues", send: "Recommend next research avenues for this map's topic"}
+
+  - id: capture
+    label: Capture
+    plural: Captures
+    section: Knowledge
+    globs: ["captures/*.md"]
+    fields: [kind, project, source_type, question, date]
+    date: date
+    moves:
+      - {label: "⚗️ Distill into insights", send: "Distill this capture into insights"}
+      - {label: "🧭 Next research avenues", send: "Recommend next research avenues that start from this capture"}
+      - {label: "🔎 Dig deeper", send: "Research this capture's open questions in more depth"}
+
+  - id: source
+    label: Source
+    plural: Sources
+    section: Knowledge
+    globs: ["sources/**/*.md"]
+    fields: [url, date, source_type]
+    date: date
+    moves:
+      - {label: "🔎 Research further", send: "Research what this source leaves open"}
+
+  - id: frame
+    label: Research
+    plural: Research runs
+    section: Knowledge
+    globs: ["research/**/*.md"]   # research/<topic>/<run>/*.md or research/<topic>/*.md
+    group: frame
+    fields: [question, date]
+    moves:
+      - {label: "🧭 Next research avenues", send: "Recommend next research avenues that start from this research run"}
+
+  - id: question
+    label: Open question
+    plural: Open questions
+    section: Knowledge
+    globs: ["questions/*.md"]
+    fields: [status, raised]
+    status: status
+    date: raised
+    moves:
+      - {label: "🔎 Research this", send: "Research this open question"}
+
+  # ---------------------------------------------------------------- Ideas
+  - id: sketch
+    label: Sketch
+    plural: Sketches
+    section: Ideas
+    globs: ["sketches/*.md"]
+    fields: [status, date]
+    status: status
+    date: date
+    moves:
+      - {label: "🔎 Research prior art", send: "Research prior art for this idea"}
+      - {label: "⚔️ Find the weak spots", send: "What are the weakest assumptions in this idea, and how could we test them cheaply?"}
+
+  - id: spec
+    label: Spec
+    plural: Specs
+    section: Ideas
+    globs: ["specs/**/*.md"]
+    fields: [status, date, source_sketch]
+    status: status
+    date: date
+    moves:
+      - {label: "⚔️ Review it", send: "Review this spec: what is unclear, missing or risky?"}
+
+  # ---------------------------------------------------------------- Projects
+  # projects/<group>/_group.md, projects/<group>/<slug>/project.md and its threads/, decisions/, lessons/
+  - id: project
+    label: Project
+    plural: Projects
+    section: Projects
+    globs: ["projects/*/*/project.md"]
+    fields: [status, repo, paths]
+    status: status
+    moves:
+      - {label: "🚀 Work on it", send: "/project {project}"}
+      - {label: "🧭 What's next?", send: "What should happen next in this project?"}
+
+  - id: thread
+    label: Thread
+    plural: Threads
+    section: Projects
+    globs: ["projects/*/*/threads/*.md"]
+    fields: [status, next, blocked, branch]
+    status: status
+    checks:
+      allowed: {status: [open, closed]}
+    moves:
+      - {label: "▶️ Continue it", send: "Continue this thread: pick up its next step"}
+
+  - id: decision
+    label: Decision
+    plural: Decisions
+    section: Projects
+    globs: ["projects/*/*/decisions/*.md"]
+    fields: [status, date, branch, superseded_by]
+    status: status
+    date: date
+    checks:
+      allowed: {status: [proposed, accepted, superseded]}
+      resolve: [superseded_by]
+    moves:
+      - {label: "⚔️ Revisit it", send: "Does this decision still hold? Check it against what we know now"}
+
+  - id: lesson
+    label: Lesson
+    plural: Lessons
+    section: Projects
+    globs: ["projects/*/*/lessons/*.md"]
+    fields: [status, applies_to, branch, superseded_by, promoted_to]
+    status: status
+    checks:
+      require: [applies_to]
+      allowed: {status: [provisional, validated, superseded]}
+      resolve: [superseded_by]
+    moves:
+      - {label: "🌱 Promote to insight", send: "Should this lesson become an insight? If it holds beyond this project, distill it"}
+
+  - id: group
+    label: Project group
+    plural: Project groups
+    section: Projects
+    nav: false        # reached from its projects
+    globs: ["projects/*/_group.md"]
+
+  # ---------------------------------------------------------------- Cabinet
+  # cabinet/people/<name>.md and cabinet/orgs/<name>.md: who is who. Under the heading the current state
+  # (rewrite it when it changes), then an append-only `## Timeline`. recall: true attaches a card to a
+  # chat message that names it (`wait`, `atlas.py recall`); its page lists the notes that mention it,
+  # and the notes whose `authors:` name it. AGENTS.md, Cabinet, has the card format.
+  - id: person
+    label: Person
+    plural: People
+    section: Cabinet
+    globs: ["cabinet/people/*.md"]
+    fields: [role, org, relation, email, phone, updated]
+    date: updated
+    recall: true
+    moves:
+      - {label: "🔄 Update", send: "Update this card from recent notes and sessions; show me the new timeline entries before you write them"}
+
+  - id: org
+    label: Organization
+    plural: Organizations
+    section: Cabinet
+    globs: ["cabinet/orgs/*.md"]
+    fields: [kind, relation, website, updated]
+    date: updated
+    recall: true
+    moves:
+      - {label: "🔄 Update", send: "Update this card from recent notes and sessions; show me the new timeline entries before you write them"}
+      - {label: "🧭 What's next?", send: "What is next with this organization? Check its projects and timeline"}
+
+  # ---------------------------------------------------------------- You
+  - id: you
+    label: You
+    plural: Goals & profile
+    section: You
+    globs: ["you/*.md"]
+
+  - id: note
+    label: Your note
+    plural: Your notes
+    section: You
+    globs: ["you/notes/*.md", "inbox/*.md"]   # inbox/ = before 2026-10-10
+    fields: [action, target, status]
+    status: status
+    date: created
+    moves:
+      - {label: "✅ Handle it", send: "Handle this note"}
+
+  - id: tour
+    label: Tour
+    plural: Tours
+    section: You
+    globs: ["tours/*.md"]
+    fields: [since, until, written_by]
+    date: until
+    moves:
+      - {label: "🔁 Rewrite it", send: "Rewrite this tour: same period, check every stop against the notes as they are now"}
+
+  # ---------------------------------------------------------------- Agents
+  - id: agent
+    label: Agent
+    plural: Agents
+    section: Agents
+    globs: ["agents/*.md"]
+    fields: [harness, reach]

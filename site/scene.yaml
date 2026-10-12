@@ -1,0 +1,131 @@
+# The recorded demo on GitHub Pages. build.py installs Atlas with the demo vault, starts the real
+# engine, writes this chat, plays the scene for real (chat message, progress lines, notes written and
+# committed through the engine, check) and records every answer. demo.js replays the recording.
+
+user: Ada
+
+# The chat before the visitor arrives (minutes before the recording).
+earlier:
+  - {minutes: -48, role: user, to: codex, text: "How did the testers sleep with the cues?"}
+  - {minutes: -46, role: agent, agent: codex, text: "Two of five woke at the default volume. I proposed a cap at 45 dB with a ramp from silence; it waits for your call in **Needs you**."}
+
+welcome: |
+  Hi, I'm Claude. Or rather a recording of me. 👋
+
+  **No AI agent is connected to this demo.** What I say here was recorded in a real Atlas
+  session, and what you type gets a canned reply. With Atlas installed, your own agent
+  (Claude Code, Codex, …) answers here and writes into your vault.
+
+  Want to watch raw research turn into knowledge?
+
+  ```atlas:choices
+  title: Try it
+  options:
+    - label: Distill the oldest capture
+      send: /distill the oldest capture
+  ```
+
+# Replies to anything else the visitor types, before and after the scene played;
+# `all` follows the scene when the visitor asked to distill all captures.
+canned:
+  before: |
+    This is the recorded demo, so no agent reads what you type. 🙂 With Atlas installed, your own
+    agent answers here and writes into your vault. The recording can show one thing:
+
+    ```atlas:choices
+    title: Try it
+    options:
+      - label: Distill the oldest capture
+        send: /distill the oldest capture
+    ```
+  after: |
+    This is the recorded demo, so no agent reads what you type. 🙂 To grow your own vault:
+    `npx skills add a-ratz/atlas -g -s atlas`, then tell your agent "start atlas".
+  all: |
+    The recording stops after the first capture. With your own agent, `/distill all` goes on
+    through the rest, one capture at a time.
+
+# Any message starting with /distill plays the scene (the welcome's button sends this one).
+trigger: /distill the oldest capture
+
+# pause: milliseconds before the step plays back in the browser.
+steps:
+  - progress: "Reading the oldest capture: Sleep helps new words join the mental lexicon"
+    pause: 1100
+  - progress: "Checking each claim against its source: Dumay & Gaskell 2007, Tamminen et al. 2010"
+    pause: 1700
+  - progress: "No duplicates in insights/. Writing two notes, one claim each"
+    pause: 1600
+  - pause: 1900
+    write:
+      insights/new-words-join-the-lexicon-overnight.md: |
+        ---
+        description: A newly learned word slows recognition of similar known words only after sleep, the sign that it has joined the lexicon.
+        category: sleep
+        confidence: working
+        source: "[[sleep-and-vocabulary]]"
+        topics: ["[[sleep-and-memory-map]]"]
+        ---
+
+        # New words join the mental lexicon only after a night of sleep
+
+        After learning a made-up word that resembles a known one, people recognised the
+        known word more slowly, but only once they had slept; the same hours awake left
+        no such competition (Dumay & Gaskell 2007; Tamminen et al. 2010).
+
+        > "Lexical competition from new words appears after sleep, not after the same time awake."
+        > ([[sleep-and-vocabulary]])
+
+        Competition is the useful test: it shows the new word sits among the old ones,
+        not only that it can be recalled. Plain recall improves less.
+
+        Related:
+        - [[sleep-protects-new-facts]] — the same night, for facts
+        - [[naps-give-part-of-the-benefit]] — the open question: does a nap do it too?
+      insights/spindles-track-word-integration.md: |
+        ---
+        description: More spindles on the night after learning went with stronger integration of new words; one correlational study.
+        category: sleep
+        confidence: speculative
+        source: "[[sleep-and-vocabulary]]"
+        topics: ["[[sleep-and-memory-map]]"]
+        ---
+
+        # More sleep spindles go with better integration of new words
+
+        Tamminen et al. (2010) found that spindle activity on the night after learning
+        tracked how strongly the new words competed with known ones the next day.
+
+        > "Spindle density has been linked to the integration in some studies."
+        > ([[sleep-and-vocabulary]])
+
+        One correlational study: spindles might drive the integration, or both might
+        reflect something else. So it stays speculative until a study changes spindles
+        and watches the words.
+
+        Related:
+        - [[spindles-lock-to-slow-oscillations]] — where spindles sit in the mechanism
+        - [[new-words-join-the-lexicon-overnight]] — the effect this tries to explain
+    edit:
+      insights/sleep-and-memory-map.md:
+        - ["- [[sleep-favours-expected-memories]]\n", "- [[sleep-favours-expected-memories]]\n- [[new-words-join-the-lexicon-overnight]]\n"]
+        - ["- [[synaptic-scaling-makes-room]]\n", "- [[synaptic-scaling-makes-room]]\n- [[spindles-track-word-integration]]\n"]
+    move: {captures/sleep-and-vocabulary.md: sources/sleep-and-vocabulary.md}
+    commit: "distill: sleep-and-vocabulary"
+  - progress: "atlas.py check: no problems"
+    check: true
+    pause: 1200
+  - pause: 1300
+    open: insights/new-words-join-the-lexicon-overnight.md
+    say: |
+      Two insights from the capture:
+
+      ```atlas:notes
+      - insights/new-words-join-the-lexicon-overnight.md
+      - insights/spindles-track-word-integration.md
+      ```
+
+      The spindle link stays **speculative**: one correlational study. Both sit in the Sleep and
+      memory map now, and the capture moved to sources/.
+
+      That was the recording. On your own vault, this is one sentence to your agent.

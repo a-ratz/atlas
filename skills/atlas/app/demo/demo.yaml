@@ -1,0 +1,1120 @@
+# The demo: a researcher's vault on sleep, memory and learning, plus a sleep app (Nightlight) and a
+# thesis. `engine/atlas.py demo` writes the notes under `files:` into the vault and commits them in `steps:`,
+# dated relative to today (day 0); `{{day:N}}` and `{{now}}` become those dates. One file on purpose:
+# copies of the notes elsewhere in the home would make git call every demo note a copy of them.
+# `engine/atlas.py demo --remove` (the atlas-clean-demo skill) takes them out again.
+steps:
+- day: -10
+  time: '20:10'
+  agent: claude
+  message: 'agents: Claude and Codex'
+  paths:
+  - agents/claude.md
+  - agents/codex.md
+- day: -9
+  time: '21:05'
+  agent: claude
+  message: 'learn: sleep and memory'
+  paths:
+  - research/sleep-and-memory/first-pass/brief.md
+  - research/sleep-and-memory/first-pass/manifest.md
+- day: -8
+  time: '19:40'
+  agent: claude
+  message: 'learn: cueing analysis'
+  paths:
+  - research/sleep-and-memory/first-pass/analysis-cueing.md
+  - sources/diekelmann-born-2010.md
+- day: -8
+  time: '20:15'
+  agent: claude
+  message: 'distill: sleep protects new facts'
+  paths:
+  - insights/sleep-protects-new-facts.md
+  - insights/replay-reruns-the-day.md
+  - insights/sleep-loss-impairs-encoding.md
+- day: -7
+  time: '21:30'
+  agent: claude
+  message: 'distill: mechanisms'
+  paths:
+  - insights/spindles-lock-to-slow-oscillations.md
+  - insights/synaptic-scaling-makes-room.md
+  - insights/sleep-favours-expected-memories.md
+- day: -7
+  time: '21:50'
+  agent: claude
+  message: 'map: sleep and memory'
+  paths:
+  - insights/sleep-and-memory-map.md
+- day: -6
+  time: '19:20'
+  agent: claude
+  message: 'sketch: Nightlight'
+  paths:
+  - sketches/nightlight.md
+- day: -6
+  time: '22:00'
+  agent: codex
+  message: 'project nightlight: start'
+  paths:
+  - projects/private/nightlight/project.md
+  - projects/private/nightlight/threads/tester-recruiting.md
+- day: -5
+  time: '20:30'
+  agent: claude
+  message: 'distill: cueing'
+  paths:
+  - sources/hu-2020-tmr-meta-analysis.md
+  - insights/tmr-cues-reactivate-memories.md
+  - insights/tmr-effect-is-smaller-than-first-reports.md
+- day: -4
+  time: '18:10'
+  agent: claude
+  message: 'distill: closed-loop stimulation'
+  paths:
+  - sources/ngo-2013-closed-loop.md
+  - insights/closed-loop-stimulation-deepens-slow-oscillations.md
+- day: -4
+  time: '18:40'
+  agent: claude
+  message: 'distill: trackers stage loosely'
+  paths:
+  - insights/trackers-stage-sleep-loosely.md
+- day: -4
+  time: '19:05'
+  agent: claude
+  message: 'distill: cueing needs EEG'
+  paths:
+  - insights/cueing-at-home-needs-eeg.md
+  - insights/memory-interventions-map.md
+- day: -4
+  time: '21:20'
+  agent: codex
+  message: 'nightlight: cues only with EEG'
+  paths:
+  - projects/private/nightlight/decisions/no-cues-without-eeg.md
+  - projects/private/nightlight/threads/cue-timing.md
+- day: -3
+  time: '20:00'
+  agent: codex
+  message: 'spec: Nightlight cue mode'
+  paths:
+  - specs/nightlight-cue-mode.md
+  - projects/private/nightlight/lessons/tracker-stages-are-estimates.md
+- day: -2
+  time: '19:30'
+  agent: claude
+  message: 'distill: learning techniques'
+  paths:
+  - sources/dunlosky-2013-learning-techniques.md
+  - insights/testing-beats-rereading.md
+  - insights/spacing-beats-massing.md
+  - insights/optimal-gap-grows-with-retention.md
+  - insights/desirable-difficulties.md
+- day: -2
+  time: '20:03'
+  agent: claude
+  message: 'ideas: review before bed, cueing without EEG'
+  paths:
+  - questions/can-tmr-work-without-eeg.md
+  - sketches/review-before-bed.md
+- day: -2
+  time: '21:40'
+  agent: claude
+  message: 'distill: why learners choose wrong'
+  paths:
+  - insights/fluency-misleads-learners.md
+  - insights/interleaving-teaches-when.md
+  - insights/pretesting-primes-learning.md
+  - insights/errors-with-feedback-teach.md
+  - insights/elaboration-ties-new-to-old.md
+  - insights/learning-techniques-map.md
+- day: -1
+  time: '19:15'
+  agent: claude
+  message: 'project thesis: chapter 3'
+  paths:
+  - projects/work/thesis/project.md
+  - projects/work/thesis/threads/chapter-3-outline.md
+- day: -1
+  time: '20:45'
+  agent: claude
+  message: 'learn: sleep and vocabulary'
+  paths:
+  - captures/sleep-and-vocabulary.md
+  - insights/naps-give-part-of-the-benefit.md
+  - insights/rem-role-is-contested.md
+  - insights/spacing-plus-sleep.md
+- day: 0
+  time: '17:05'
+  agent: claude
+  message: 'learn: EEG headbands'
+  paths:
+  - captures/eeg-headbands.md
+- day: 0
+  time: '17:30'
+  agent: codex
+  message: 'nightlight: testers woke, propose a volume cap'
+  paths:
+  - captures/cue-volume-woke-testers.md
+  - projects/private/nightlight/decisions/cue-volume-cap.md
+  - projects/private/nightlight/lessons/test-on-light-sleepers.md
+  - questions/do-cues-disturb-sleep.md
+- day: 0
+  time: '17:50'
+  agent: claude
+  message: 'cabinet: who wrote the sleep papers, and where'
+  paths:
+  - cabinet/people/jan-born.md
+  - cabinet/people/susanne-diekelmann.md
+  - cabinet/orgs/university-of-tuebingen.md
+- day: 0
+  time: '18:00'
+  agent: claude
+  message: 'tour: this week'
+  paths:
+  - tours/this-week.md
+files:
+  cabinet/people/jan-born.md: |
+    ---
+    name: Jan Born
+    aliases: [Jan Born]
+    role: Sleep and memory researcher
+    relation: co-author of two papers in this vault
+    created_by: claude
+    updated_by: claude
+    updated: {{day:0}}
+    ---
+
+    # Jan Born
+
+    Sleep and memory researcher. In this vault he co-wrote the review on the memory function
+    of sleep and the closed-loop study that Nightlight's cue timing builds on. Notes that only
+    say "Born" are not matched: the surname alone is too common a word.
+
+    ## Timeline
+
+    - {{day:0}} · Card created from the `authors:` of [[diekelmann-born-2010]] and [[ngo-2013-closed-loop]]. (Source: the two source notes)
+  cabinet/people/susanne-diekelmann.md: |
+    ---
+    name: Susanne Diekelmann
+    aliases: [Susanne Diekelmann, Diekelmann]
+    role: Sleep and memory researcher
+    relation: first author of the sleep review in this vault
+    created_by: claude
+    updated_by: claude
+    updated: {{day:0}}
+    ---
+
+    # Susanne Diekelmann
+
+    Sleep and memory researcher, first author of the review that most sleep insights here
+    cite. Her surname is rare enough to serve as an alias, so "Diekelmann & Born" in an
+    insight counts as a mention.
+
+    ## Timeline
+
+    - {{day:0}} · Card created from the `authors:` of [[diekelmann-born-2010]]. (Source: the source note)
+  cabinet/orgs/university-of-tuebingen.md: |
+    ---
+    name: University of Tübingen
+    aliases: [University of Tübingen, Universität Tübingen]
+    kind: research
+    relation: where the closed-loop study behind Nightlight's cue timing was done
+    website: https://uni-tuebingen.de/
+    created_by: claude
+    updated_by: claude
+    updated: {{day:0}}
+    ---
+
+    # University of Tübingen
+
+    The closed-loop study that Nightlight's cue timing builds on lists its first author at
+    the university's Institute of Medical Psychology and Behavioral Neurobiology. The source
+    note names it in `orgs:`, so the paper shows up below.
+
+    ## Timeline
+
+    - {{day:0}} · Card created from the affiliation of [[ngo-2013-closed-loop]]. (Source: [PubMed 23583623](https://pubmed.ncbi.nlm.nih.gov/23583623/))
+  agents/claude.md: |
+    ---
+    harness: Claude Code
+    reach: the Atlas chat, or a Claude Code session in this folder
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Claude
+
+    Researches, distills and keeps the maps current. Short answers in the chat,
+    substance in files.
+  agents/codex.md: |
+    ---
+    harness: Codex
+    reach: the Atlas chat, or a Codex session in this folder
+    created_by: codex
+    updated_by: codex
+    ---
+
+    # Codex
+
+    Works on Nightlight: specs, decisions, the code. Reviews Claude's claims before
+    they reach a product decision.
+  captures/cue-volume-woke-testers.md: |
+    ---
+    kind: operational
+    project: nightlight
+    date: {{day:0}}
+    source_type: session
+    created_by: codex
+    updated_by: codex
+    ---
+
+    # Cue volume woke two of five testers
+
+    At the default volume two testers woke up within a minute of the first cue.
+    Needs a cap, or a ramp that starts below the hearing threshold.
+  captures/eeg-headbands.md: |
+    ---
+    kind: research
+    question: Which consumer EEG headbands can time sounds to slow oscillations?
+    date: {{day:0}}
+    source_type: web
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Consumer EEG headbands that can time sounds to slow oscillations
+
+    ## Short answer
+
+    A few research-grade headbands expose a live EEG stream and offer phase-locked
+    audio; most consumer sleep headbands only report stages after the night.
+
+    ## Open questions
+
+    - Latency from detection to sound on each device.
+    - Comfort over a full night.
+  captures/sleep-and-vocabulary.md: |
+    ---
+    kind: research
+    question: Does sleep help adults learn new words?
+    date: {{day:-1}}
+    source_type: web
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Sleep helps new words join the mental lexicon
+
+    ## Short answer
+
+    Probably yes: new words start to compete with known ones after a night of sleep,
+    a sign they have joined the lexicon (Dumay & Gaskell 2007). Effects on plain
+    recall are smaller.
+
+    ## What the sources say
+
+    - Lexical competition from new words appears after sleep, not after the same time awake.
+    - Spindle density has been linked to the integration in some studies.
+
+    ## Open questions
+
+    - Does a nap do the same?
+  insights/closed-loop-stimulation-deepens-slow-oscillations.md: |
+    ---
+    description: Clicks locked to the slow-oscillation phase enhanced the oscillations and overnight retention (Ngo et al. 2013).
+    category: interventions
+    confidence: speculative
+    source: "[[ngo-2013-closed-loop]]"
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Sounds timed to the up-phase of slow oscillations deepen them and improve next-day recall
+
+    Ngo et al. (2013) played short clicks in phase with ongoing slow oscillations.
+    The oscillations grew and word-pair retention improved; clicks out of phase did
+    nothing. Replications at home with consumer devices are still few.
+
+    Related:
+    - [[spindles-lock-to-slow-oscillations]] — the rhythm being amplified
+    - [[cueing-at-home-needs-eeg]] — phase-locking needs a live signal
+  insights/cueing-at-home-needs-eeg.md: |
+    ---
+    description: Both TMR in NREM and phase-locked stimulation depend on knowing the sleep stage and the oscillation phase in real time.
+    category: interventions
+    confidence: speculative
+    source: "[[ngo-2013-closed-loop]]"
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Cueing at home needs a live EEG signal, not an accelerometer
+
+    Follows from the two notes it links: cues only help in NREM, and phase-locked
+    sounds need the oscillation itself. A headband with EEG can provide both; a
+    wrist tracker cannot.
+
+    Related:
+    - [[trackers-stage-sleep-loosely]] — why the wrist is not enough
+    - [[closed-loop-stimulation-deepens-slow-oscillations]] — what phase-locking needs
+  insights/desirable-difficulties.md: |
+    ---
+    description: Spacing, testing and interleaving all feel harder during study and pay off on delayed tests (Bjork).
+    category: learning
+    confidence: working
+    source: "[[dunlosky-2013-learning-techniques]]"
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Conditions that slow learning down often make it last longer
+
+    Robert and Elizabeth Bjork's term for a family of findings: what makes study
+    feel slow and effortful often improves long-term retention. Not every
+    difficulty is desirable; it has to engage retrieval or discrimination.
+
+    Related:
+    - [[testing-beats-rereading]] — testing
+    - [[spacing-beats-massing]] — spacing
+    - [[interleaving-teaches-when]] — interleaving
+  insights/elaboration-ties-new-to-old.md: |
+    ---
+    description: Elaborative interrogation helps most when learners have prior knowledge of the domain (moderate utility in Dunlosky et al.).
+    category: learning
+    confidence: speculative
+    source: "[[dunlosky-2013-learning-techniques]]"
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Explaining why a fact is true ties it to what you already know
+
+    Asking "why would this be true?" for each fact improves recall in several
+    studies, more for learners who know the domain. Dunlosky et al. (2013) rate it
+    moderate utility.
+
+    Related:
+    - [[desirable-difficulties]] — effortful in the same way
+  insights/errors-with-feedback-teach.md: |
+    ---
+    description: High-confidence errors corrected by feedback are remembered especially well (the hypercorrection effect).
+    category: learning
+    confidence: speculative
+    source: "[[dunlosky-2013-learning-techniques]]"
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Errors followed by quick feedback teach more than errorless study
+
+    Butterfield & Metcalfe (2001) found that confidently wrong answers, once
+    corrected, were the most likely to be right later. The benefit needs feedback
+    soon after the error.
+
+    Related:
+    - [[pretesting-primes-learning]] — a deliberate use of it
+  insights/fluency-misleads-learners.md: |
+    ---
+    description: Judgments of learning follow ease of processing, which rereading raises without raising later recall.
+    category: learning
+    confidence: working
+    source: "[[dunlosky-2013-learning-techniques]]"
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Feeling fluent while rereading makes learners overrate what they know
+
+    Familiar text reads easily, and ease feels like knowing. Learners therefore
+    prefer rereading and underrate testing, the opposite of what delayed tests show.
+
+    Related:
+    - [[testing-beats-rereading]] — the counter-move
+    - [[desirable-difficulties]] — the general pattern
+  insights/interleaving-teaches-when.md: |
+    ---
+    description: Interleaved practice improved later test scores over blocked practice in maths problems (Rohrer & Taylor 2007).
+    category: learning
+    confidence: working
+    source: "[[dunlosky-2013-learning-techniques]]"
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Mixing problem types teaches when to use which method
+
+    Blocked practice tells you which method to use; interleaving makes you choose,
+    and choosing is part of what the test asks. Benefits are strongest when
+    problem types look alike.
+
+    Related:
+    - [[desirable-difficulties]] — a case of it
+  insights/learning-techniques-map.md: |
+    ---
+    description: Which study techniques hold up on delayed tests, and why the effective ones feel worse.
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Learning techniques
+
+    Ranked roughly by evidence; the thesis chapter draws on the first section.
+
+    ## Strong evidence
+
+    - [[testing-beats-rereading]]
+    - [[spacing-beats-massing]]
+    - [[optimal-gap-grows-with-retention]]
+
+    ## Moderate
+
+    - [[interleaving-teaches-when]]
+    - [[pretesting-primes-learning]]
+    - [[elaboration-ties-new-to-old]]
+
+    ## Why learners choose wrong
+
+    - [[desirable-difficulties]]
+    - [[fluency-misleads-learners]]
+    - [[errors-with-feedback-teach]]
+  insights/memory-interventions-map.md: |
+    ---
+    description: What can steer sleep-dependent memory, how big the effects are, and what an app could deliver.
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Memory interventions
+
+    From lab findings to what Nightlight can actually do at home.
+
+    ## Cueing
+
+    - [[tmr-cues-reactivate-memories]]
+    - [[tmr-effect-is-smaller-than-first-reports]]
+
+    ## Stimulation
+
+    - [[closed-loop-stimulation-deepens-slow-oscillations]]
+
+    ## At home
+
+    - [[trackers-stage-sleep-loosely]]
+    - [[cueing-at-home-needs-eeg]]
+    - [[spacing-plus-sleep]]
+  insights/naps-give-part-of-the-benefit.md: |
+    ---
+    description: Short daytime naps improved retention of word lists compared with staying awake in several lab studies.
+    category: sleep
+    confidence: speculative
+    source: "[[diekelmann-born-2010]]"
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # A nap with slow-wave sleep gives part of a night's benefit for new facts
+
+    Lab studies (Lahl et al. 2008; Mednick et al. 2003 for perceptual learning)
+    found benefits from naps of under an hour. Effects are smaller than a full
+    night and depend on whether the nap reaches slow-wave sleep.
+
+    Related:
+    - [[sleep-protects-new-facts]] — the full-night version
+    - [[spacing-plus-sleep]] — a nap between sessions as a cheap spacing gap
+  insights/optimal-gap-grows-with-retention.md: |
+    ---
+    description: To remember for a year, review weeks apart; for a week, a day apart (Cepeda et al. 2008).
+    category: learning
+    confidence: working
+    source: "[[dunlosky-2013-learning-techniques]]"
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # The best gap between reviews grows with how long you need to remember
+
+    Cepeda et al. (2008) varied gap and test delay at scale: the optimal gap was
+    roughly 10 to 20 percent of the retention interval, shrinking as a share for
+    longer intervals. A rule of thumb, not a law.
+
+    Related:
+    - [[spacing-beats-massing]] — the effect this tunes
+  insights/pretesting-primes-learning.md: |
+    ---
+    description: Trying to answer questions before studying, even wrongly, improved later recall of the answers (Richland et al. 2009).
+    category: learning
+    confidence: working
+    source: "[[dunlosky-2013-learning-techniques]]"
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Guessing before you study improves what you learn afterwards
+
+    Pretests direct attention to what matters and turn the later reading into
+    feedback. Wrong guesses do not seem to stick when the answer follows.
+
+    Related:
+    - [[errors-with-feedback-teach]] — why wrong guesses do not hurt
+    - [[testing-beats-rereading]] — testing after study
+  insights/rem-role-is-contested.md: |
+    ---
+    description: Findings that REM sleep strips the emotional tone from memories have not replicated cleanly.
+    category: sleep
+    confidence: speculative
+    source: "[[diekelmann-born-2010]]"
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # REM sleep's role in emotional memory is contested, so it should not anchor product claims
+
+    Some studies report that REM sleep preserves emotional memories while softening
+    their emotional charge; others fail to replicate it. Nightlight should not make
+    claims that rest on it.
+
+    Related:
+    - [[tmr-effect-is-smaller-than-first-reports]] — cueing in REM showed no reliable benefit either
+  insights/replay-reruns-the-day.md: |
+    ---
+    description: Place-cell sequences from waking exploration reappear in sleep, faster, in rats (Wilson & McNaughton 1994).
+    category: sleep
+    confidence: working
+    source: "[[diekelmann-born-2010]]"
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Hippocampal replay during sleep re-runs the day's sequences, compressed in time
+
+    Wilson & McNaughton (1994) found that hippocampal cells that fired together
+    during exploration fired together again during subsequent sleep. Later work
+    (Ji & Wilson 2007) showed whole sequences replayed several times faster.
+    Evidence in humans is indirect.
+
+    Related:
+    - [[spindles-lock-to-slow-oscillations]] — replay rides on sharp-wave ripples nested in spindles
+    - [[tmr-cues-reactivate-memories]] — cueing tries to trigger replay on purpose
+  insights/sleep-and-memory-map.md: |
+    ---
+    description: "What sleep does for new memories: the effect, the mechanisms, the open disputes."
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Sleep and memory
+
+    Read in order: the effect, then the mechanisms, then what is disputed.
+
+    ## The effect
+
+    - [[sleep-protects-new-facts]]
+    - [[sleep-loss-impairs-encoding]]
+    - [[naps-give-part-of-the-benefit]]
+    - [[sleep-favours-expected-memories]]
+
+    ## Mechanisms
+
+    - [[replay-reruns-the-day]]
+    - [[spindles-lock-to-slow-oscillations]]
+    - [[synaptic-scaling-makes-room]]
+
+    ## Disputed
+
+    - [[rem-role-is-contested]]
+  insights/sleep-favours-expected-memories.md: |
+    ---
+    description: Learners told they would be tested later benefited more from sleep than learners who were not (Wilhelm et al. 2011).
+    category: sleep
+    confidence: working
+    source: "[[diekelmann-born-2010]]"
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Sleep favours the memories you expect to need
+
+    In Wilhelm et al. (2011), sleep improved retention mainly when participants
+    expected a later test. Consolidation seems to select, not to keep everything.
+
+    Related:
+    - [[testing-beats-rereading]] — testing before sleep marks what matters
+    - [[sleep-protects-new-facts]] — the general benefit
+  insights/sleep-loss-impairs-encoding.md: |
+    ---
+    description: Sleep deprivation before learning reduced hippocampal activity during encoding and later recall (Yoo et al. 2007).
+    category: sleep
+    confidence: working
+    source: "[[diekelmann-born-2010]]"
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # A night without sleep cuts the next day's capacity to form new memories
+
+    In Yoo et al. (2007) a night of sleep deprivation before learning lowered recall
+    of pictures learned the next day, together with weaker hippocampal activation
+    during encoding. Sleep matters before learning, not only after.
+
+    Related:
+    - [[sleep-protects-new-facts]] — after learning
+    - [[synaptic-scaling-makes-room]] — one proposed reason
+  insights/sleep-protects-new-facts.md: |
+    ---
+    description: Retention after a night of sleep beats an equal waking interval, most clearly for declarative memories.
+    category: sleep
+    confidence: working
+    source: "[[diekelmann-born-2010]]"
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Sleep after learning protects new facts better than the same hours awake
+
+    Across many studies reviewed by Diekelmann & Born (2010), people who sleep after
+    learning word pairs or facts recall more than people who stay awake for the same
+    time. The benefit is largest for memories that were weakly encoded.
+
+    Related:
+    - [[replay-reruns-the-day]] — the mechanism the active systems account proposes
+    - [[sleep-loss-impairs-encoding]] — the other side: sleep before learning
+  insights/spacing-beats-massing.md: |
+    ---
+    description: The spacing effect is one of the most replicated findings in learning research (Cepeda et al. 2006).
+    category: learning
+    confidence: proven
+    source: "[[dunlosky-2013-learning-techniques]]"
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Spreading the same study time across days beats cramming it into one session
+
+    A meta-analysis by Cepeda et al. (2006) covering hundreds of experiments found
+    distributed practice beats massed practice for later recall. Dunlosky et al.
+    (2013) rate it high utility.
+
+    Related:
+    - [[optimal-gap-grows-with-retention]] — how long the gaps should be
+    - [[spacing-plus-sleep]] — what a night in the gap may add
+  insights/spacing-plus-sleep.md: |
+    ---
+    description: Distributed practice and sleep-dependent consolidation may add up when every gap between reviews contains a night.
+    category: interventions
+    confidence: speculative
+    source: "[[dunlosky-2013-learning-techniques]]"
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Spacing reviews across days lets each night consolidate the previous review
+
+    A combination worth testing rather than a finding: spacing works across many
+    gaps, and a gap with sleep in it adds consolidation. Few studies separate the
+    two effects.
+
+    Related:
+    - [[spacing-beats-massing]] — the spacing effect
+    - [[sleep-protects-new-facts]] — the sleep effect
+  insights/spindles-lock-to-slow-oscillations.md: |
+    ---
+    description: Precise coupling of spindles to the slow-oscillation up-state predicted retention in older adults (Helfrich et al. 2018).
+    category: sleep
+    confidence: speculative
+    source: "[[diekelmann-born-2010]]"
+    revisit_after: 2026-12-01
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Overnight retention tracks how tightly spindles lock to slow oscillations, not how many there are
+
+    Helfrich et al. (2018) reported that spindles arriving at the peak of the slow
+    oscillation predicted overnight memory, and that this coupling loosens with age.
+    One lab, one task: worth tracking, not yet worth building on.
+
+    Related:
+    - [[closed-loop-stimulation-deepens-slow-oscillations]] — a way to strengthen the oscillation itself
+    - [[replay-reruns-the-day]] — what the coupling is thought to carry
+  insights/synaptic-scaling-makes-room.md: |
+    ---
+    description: The synaptic homeostasis hypothesis (Tononi & Cirelli) says waking strengthens synapses and sleep renormalises them.
+    category: sleep
+    confidence: speculative
+    source: "[[diekelmann-born-2010]]"
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Sleep may make room for new learning by scaling synapses back down
+
+    On this account, the brain cannot keep strengthening synapses all day; slow-wave
+    sleep scales them down and keeps the strongest. It competes with, and partly
+    complements, the active systems account. Both explain some findings well.
+
+    Related:
+    - [[sleep-loss-impairs-encoding]] — would follow if sleep restores capacity
+    - [[sleep-protects-new-facts]] — the competing explanation
+  insights/testing-beats-rereading.md: |
+    ---
+    description: Practice tests beat rereading on delayed tests, even without feedback (Roediger & Karpicke 2006).
+    category: learning
+    confidence: proven
+    source: "[[dunlosky-2013-learning-techniques]]"
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Retrieving a fact strengthens it more than reading it again
+
+    Roediger & Karpicke (2006): students who took recall tests on a passage
+    remembered more a week later than students who reread it, although rereading
+    felt more effective. Dunlosky et al. (2013) rate practice testing high utility.
+
+    Related:
+    - [[fluency-misleads-learners]] — why rereading feels better
+    - [[sleep-favours-expected-memories]] — a test before sleep tags what to keep
+  insights/tmr-cues-reactivate-memories.md: |
+    ---
+    description: An odour or sound paired with learning and replayed in slow-wave sleep improved recall of that material.
+    category: interventions
+    confidence: working
+    source: "[[hu-2020-tmr-meta-analysis]]"
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Cues played during slow-wave sleep strengthen the memories they were paired with
+
+    Rasch et al. (2007) paired a rose odour with learning card locations and
+    presented it again during slow-wave sleep: recall improved. Rudoy et al. (2009)
+    did the same with object sounds, item by item. The method is called targeted
+    memory reactivation (TMR).
+
+    Related:
+    - [[tmr-effect-is-smaller-than-first-reports]] — how big the effect really is
+    - [[replay-reruns-the-day]] — what the cue is meant to trigger
+  insights/tmr-effect-is-smaller-than-first-reports.md: |
+    ---
+    description: A meta-analysis of 91 experiments found a small to moderate benefit for NREM cues and none for REM or wake cues.
+    category: interventions
+    confidence: working
+    source: "[[hu-2020-tmr-meta-analysis]]"
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Targeted memory reactivation helps, but less than the first studies suggested
+
+    Hu et al. (2020) pooled the TMR literature: cues during NREM sleep reliably
+    help, with a smaller effect than the early single studies. For Nightlight this
+    sets expectations: a modest, real effect, not a memory hack.
+
+    Related:
+    - [[tmr-cues-reactivate-memories]] — the original findings
+    - [[cueing-at-home-needs-eeg]] — what it takes to deliver cues in NREM at home
+  insights/trackers-stage-sleep-loosely.md: |
+    ---
+    description: Wrist trackers agree with lab polysomnography on sleep versus wake far better than on the stage of each 30-second epoch.
+    category: interventions
+    confidence: working
+    source: "[[hu-2020-tmr-meta-analysis]]"
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Consumer wearables estimate sleep stages too loosely to time cues to them
+
+    Validation studies of wrist-worn trackers find good agreement with
+    polysomnography for total sleep and modest agreement for stages. A cue meant for
+    slow-wave sleep would often land in the wrong stage.
+
+    Related:
+    - [[cueing-at-home-needs-eeg]] — the consequence for Nightlight
+    - [[tmr-effect-is-smaller-than-first-reports]] — a mistimed cue wastes a small effect
+  projects/private/nightlight/decisions/cue-volume-cap.md: |
+    ---
+    status: proposed
+    date: {{day:0}}
+    created_by: codex
+    updated_by: codex
+    ---
+
+    # Cap cue volume at 45 dB and ramp from silence
+
+    Why: two of five testers woke at the default volume.
+  projects/private/nightlight/decisions/no-cues-without-eeg.md: |
+    ---
+    status: accepted
+    date: {{day:-4}}
+    created_by: codex
+    updated_by: codex
+    ---
+
+    # Cues only with a live EEG signal
+
+    Why: [[trackers-stage-sleep-loosely]]. A cue in the wrong stage wastes a small effect.
+  projects/private/nightlight/lessons/test-on-light-sleepers.md: |
+    ---
+    status: provisional
+    applies_to: nightlight
+    evidence: two of five testers woke
+    created_by: codex
+    updated_by: codex
+    ---
+
+    # When sound plays at night, test on light sleepers first
+  projects/private/nightlight/lessons/tracker-stages-are-estimates.md: |
+    ---
+    status: validated
+    applies_to: everywhere
+    evidence: validation studies against polysomnography
+    created_by: codex
+    updated_by: codex
+    ---
+
+    # When a feature depends on the sleep stage, measure the stage instead of estimating it
+  projects/private/nightlight/project.md: |
+    ---
+    description: A sleep app that replays learning cues during deep sleep.
+    status: active
+    repo: "https://example.org/ada/nightlight"
+    created_by: codex
+    updated_by: codex
+    ---
+
+    # Nightlight
+
+    Cues during NREM sleep, timed by an EEG headband. Came from [[nightlight]].
+  projects/private/nightlight/threads/cue-timing.md: |
+    ---
+    status: open
+    next: Try the headband's phase API on three nights and log the cue latency
+    created_by: codex
+    updated_by: codex
+    ---
+
+    # Cue timing
+
+    ## Log
+    - {{day:-4}} (codex): Wrist data rejected for timing, see the decision.
+    - {{day:0}} (codex): Headband SDK arrived; phase API looks usable.
+  projects/private/nightlight/threads/tester-recruiting.md: |
+    ---
+    status: open
+    next: Recruit five more testers who learn a language daily
+    created_by: codex
+    updated_by: codex
+    ---
+
+    # Tester recruiting
+
+    ## Log
+    - {{day:-2}} (codex): Five testers, all evening learners.
+  projects/work/thesis/project.md: |
+    ---
+    description: "PhD thesis, chapter 3: spaced practice in vocabulary learning."
+    status: active
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Thesis
+
+    Chapter 3 draws on the [[learning-techniques-map]].
+  projects/work/thesis/threads/chapter-3-outline.md: |
+    ---
+    status: open
+    next: Draft section 3.2 on optimal gaps
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Chapter 3 outline
+
+    ## Log
+    - {{day:-1}} (claude): Outline agreed: effect, gaps, sleep, open questions.
+  questions/can-tmr-work-without-eeg.md: |
+    ---
+    status: open
+    raised: {{day:-2}}
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Can cueing work without an EEG at all?
+
+    If cues only help in NREM, could a fixed schedule (first 90 minutes) hit enough
+    slow-wave sleep to matter?
+  questions/do-cues-disturb-sleep.md: |
+    ---
+    status: open
+    raised: {{day:0}}
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Do the cues disturb sleep quality over weeks?
+  research/sleep-and-memory/first-pass/analysis-cueing.md: |
+    ---
+    date: {{day:-8}}
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Analysis: cueing during sleep
+
+    The first cueing studies reported large effects with small samples. The
+    meta-analysis (Hu et al. 2020) confirms a benefit for cues during NREM sleep,
+    smaller than the early studies, and none for REM. Timing the cue to the slow
+    oscillation needs a live EEG signal.
+  research/sleep-and-memory/first-pass/brief.md: |
+    ---
+    question: What does sleep do for new memories, and can it be steered?
+    date: {{day:-9}}
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Sleep and memory: what holds, what can be steered
+
+    Scope: reviews and replicated findings on sleep-dependent consolidation, then
+    interventions (cueing, stimulation) and what a consumer app could use.
+  research/sleep-and-memory/first-pass/manifest.md: |
+    ---
+    date: {{day:-9}}
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Manifest
+
+    - Diekelmann & Born 2010 (review), Rasch & Born 2013 (review)
+    - Wilson & McNaughton 1994, Ji & Wilson 2007 (replay)
+    - Rasch et al. 2007, Rudoy et al. 2009, Hu et al. 2020 (cueing)
+    - Ngo et al. 2013 (closed-loop stimulation)
+    - Yoo et al. 2007 (sleep loss and encoding)
+  sketches/nightlight.md: |
+    ---
+    status: specified
+    date: {{day:-6}}
+    spec: "[[nightlight-cue-mode]]"
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Nightlight: replay the day's learning while you sleep
+
+    Learn with a sound in the background; Nightlight plays the same sound quietly
+    during deep sleep the following night. Starts with language learners.
+  sketches/review-before-bed.md: |
+    ---
+    status: sketch
+    date: {{day:-2}}
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Review before bed
+
+    A five-minute retrieval quiz in the evening that tags what sleep should keep.
+  sources/diekelmann-born-2010.md: |
+    ---
+    authors: [Susanne Diekelmann, Jan Born]
+    url: "https://doi.org/10.1038/nrn2762"
+    date: 2010-02-01
+    source_type: paper
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # The memory function of sleep (Diekelmann & Born, 2010)
+
+    Review in Nature Reviews Neuroscience. Sleep after learning supports the consolidation of declarative and procedural memories; the active systems account puts slow oscillations, spindles and hippocampal ripples at the centre of it.
+  sources/dunlosky-2013-learning-techniques.md: |
+    ---
+    authors: [John Dunlosky, Katherine A. Rawson, Elizabeth J. Marsh, Mitchell J. Nathan, Daniel T. Willingham]
+    url: "https://doi.org/10.1177/1529100612453266"
+    date: 2013-01-01
+    source_type: paper
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Improving students' learning with effective learning techniques (Dunlosky et al., 2013)
+
+    Psychological Science in the Public Interest. Rates ten techniques: practice testing and distributed practice get high utility; elaborative interrogation and interleaving moderate; rereading and highlighting low.
+  sources/hu-2020-tmr-meta-analysis.md: |
+    ---
+    authors: [Xiaoqing Hu, Larry Y. Cheng, Man Hin Chiu, Ken A. Paller]
+    url: "https://doi.org/10.1037/bul0000223"
+    date: 2020-03-01
+    source_type: paper
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Promoting memory consolidation during sleep: a meta-analysis of targeted memory reactivation (Hu et al., 2020)
+
+    Psychological Bulletin. Across 91 experiments, cues during NREM sleep improved later memory with a small to moderate effect; cues during REM sleep and wake did not show a reliable benefit.
+  sources/ngo-2013-closed-loop.md: |
+    ---
+    authors: [Hong-Viet V. Ngo, Thomas Martinetz, Jan Born, Matthias Mölle]
+    orgs: [University of Tübingen]
+    url: "https://doi.org/10.1016/j.neuron.2013.03.006"
+    date: 2013-05-08
+    source_type: paper
+    created_by: claude
+    updated_by: claude
+    ---
+
+    # Auditory closed-loop stimulation of the sleep slow oscillation enhances memory (Ngo et al., 2013)
+
+    Neuron. Clicks timed to the up-phase of slow oscillations enhanced the oscillations and improved overnight retention of word pairs; out-of-phase clicks did not.
+  specs/nightlight-cue-mode.md: |
+    ---
+    status: draft
+    date: {{day:-3}}
+    source_sketch: "[[nightlight]]"
+    created_by: codex
+    updated_by: codex
+    ---
+
+    # Nightlight cue mode
+
+    ## Scope
+
+    Cues during NREM sleep only, detected by an EEG headband; no cues from wrist
+    data. Volume capped and ramped.
+
+    ## Evidence
+
+    - [[tmr-effect-is-smaller-than-first-reports]]: a modest effect, honestly marketed.
+    - [[cueing-at-home-needs-eeg]]: why the headband.
+  tours/this-week.md: |
+    ---
+    since: '{{day:-7}}T00:00:00'
+    until: '{{now}}'
+    written_by: claude
+    stops:
+      - path: insights/tmr-effect-is-smaller-than-first-reports.md
+        why: The number Nightlight's promise rests on. Cueing works in NREM, but the pooled effect is smaller than the first studies.
+        excerpt: For Nightlight this sets expectations
+      - path: insights/trackers-stage-sleep-loosely.md
+        why: The reason Codex rejected wrist data for cue timing.
+        excerpt: A cue meant for slow-wave sleep would often land in the wrong stage.
+      - path: projects/private/nightlight/decisions/cue-volume-cap.md
+        why: Two of five testers woke at the default volume; Codex proposes a cap and a ramp.
+        look_closely: Accept 45 dB as the cap, or test a lower ramp start first?
+      - path: insights/learning-techniques-map.md
+        why: A new map for the thesis, ranked by evidence.
+    mechanical: []
+    ---
+
+    # What changed this week
+
+    A week of cueing evidence and a product decision: Nightlight cues only with an EEG
+    signal, and the first testers say the cues are too loud.

@@ -1,0 +1,5 @@
+# Atlas runtime state (chat inbox/outbox, cursor, heartbeat) and backups from `restore`
+vault/.atlas/
+.atlas-backup/
+__pycache__/
+.DS_Store
