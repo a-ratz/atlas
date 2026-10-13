@@ -1,7 +1,7 @@
 ---
 demo: false
-timebox: 20
-max_steps: 25
+timebox: 25
+max_steps: 30
 ---
 
 # Research → distill → open questions
@@ -18,6 +18,7 @@ people and organizations involved.
 4. When the distill is done, open the new insights, the sidebar's "Open questions" and, if present,
    the cabinet (People, Organizations).
 5. Open one open question and press "Later" on it; check where it went.
+6. Open a person card the distill created and press "Expand"; when the agent is done, read the card again.
 
 ## Must be observable
 
@@ -27,9 +28,14 @@ people and organizations involved.
 - Open questions: only the few that would change a claim, each naming the insight it `affects`;
   never more than 7 open. "Later" moves one to "+N resting".
 - The sidebar numbers match the lists they open.
+- Cards: the distill created minimal cards only for the people and organizations the insights rest on,
+  with nothing on them the capture does not say. Expand completes one to the profile (role, earlier
+  roles, works, channels), every fact with a source, "not found" where it found nothing, and reports
+  the profiles it visited.
 
 ## Screenshots
 
 - The operator page while the agent researches
 - An insight page
 - The open questions list and one question's page
+- A card before and after Expand
