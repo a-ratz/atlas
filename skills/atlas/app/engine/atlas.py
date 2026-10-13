@@ -1554,8 +1554,13 @@ def make_app(index: Index):
 
     async def entity(request):
         await run_in_threadpool(fresh)
-        view = await run_in_threadpool(entity_view, index, request.query_params.get("id", ""))
-        return JSONResponse(view) if view else JSONResponse({"error": "not found"}, status_code=404)
+        eid = request.query_params.get("id", "")
+        view = await run_in_threadpool(entity_view, index, eid)
+        if view:
+            return JSONResponse(view)
+        # a note the agent moved (a capture to sources/) keeps its file name: point the open page there
+        moved = next((e.id for e in index.entities.values() if eid and Path(e.id).name == Path(eid).name), None)
+        return JSONResponse({"error": "not found", **({"moved_to": moved} if moved else {})}, status_code=404)
 
     async def graph(request):
         await run_in_threadpool(fresh)

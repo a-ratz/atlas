@@ -67,6 +67,8 @@ def main() -> None:
                     for e in errors:
                         failures.append(f"[{scheme}] {route}: {e}")
                 checks(page, srv.base, scheme)
+                if scheme == "light":  # the last pass: it edits and moves a demo note
+                    follows_changes(page, srv, vault)
                 ctx.close()
             browser.close()
             print(f"{len(pages)} pages × 2 color schemes opened")
@@ -91,6 +93,27 @@ def checks(page, base: str, scheme: str) -> None:
     page.wait_for_selector(".op-bar", timeout=15000)
     if not page.query_selector("#op-title"):
         failures.append(f"[{scheme}] the operator bar has no title slot (#1)")
+
+
+def follows_changes(page, srv: Server, vault: Path) -> None:
+    """An open page shows the agent's edit and follows a move (#13). The index looks every 10 seconds."""
+    item = srv.get("/api/list?type=capture")["items"][0]
+    page.goto(f"{srv.base}/#/e/{urllib.parse.quote(item['id'], safe='')}")
+    page.wait_for_selector(".reader, article, h1", timeout=15000)
+    path = vault / item["id"]
+    path.write_text(path.read_text(encoding="utf-8") + "\n\nAn edit the agent made while the page was open.\n",
+                    encoding="utf-8")
+    try:
+        page.wait_for_selector("text=An edit the agent made while the page was open.", timeout=25000)
+    except Exception:
+        failures.append("an open note did not show the agent's edit (#13)")
+    moved = vault / "sources" / path.name
+    moved.parent.mkdir(exist_ok=True)
+    path.rename(moved)
+    try:
+        page.wait_for_function("decodeURIComponent(location.hash).startsWith('#/e/sources/')", timeout=25000)
+    except Exception:
+        failures.append("an open note the agent moved did not follow it to its new folder (#13)")
 
 
 if __name__ == "__main__":

@@ -934,10 +934,30 @@ function marginHtml(e) {
   return parts.join("");
 }
 
+async function entityOrMoved(id) {  // a note the agent moved keeps its file name; the engine says where it went
+  const res = await fetch(`/api/entity?id=${enc(id)}`, { headers: { "x-atlas": "1" } }).catch(() => null);
+  if (!res) return {};
+  if (res.ok) return { e: await res.json() };
+  return { movedTo: (await res.json().catch(() => ({}))).moved_to };
+}
+
+// The vault changed (an agent wrote, moved or finished a note): an open note follows it, keeping the scroll
+// position. The composer lives in the dock, outside the page, so a draft stays.
+async function refreshOpenView() {
+  const [path, qs] = (location.hash || "#/").slice(1).split("?");
+  if (!path.startsWith("/e/") || !state.current) return;
+  const token = state.routeToken, y = scrollY;
+  const { e } = await entityOrMoved(state.current.id);
+  if (token !== state.routeToken || (e && e.modified === state.current.modified)) return;  // moved on, or another note changed
+  await viewEntity(decodeURIComponent(path.slice(3)), new URLSearchParams(qs || ""));  // follows a moved note
+  if (token === state.routeToken) scrollTo(0, y);
+}
+
 async function viewEntity(id, params = new URLSearchParams()) {
   const token = state.routeToken;
-  const e = await api(`/api/entity?id=${enc(id)}`).catch(() => null);
+  const { e, movedTo } = await entityOrMoved(id);
   if (token !== state.routeToken) return;  // the reader moved on while this page loaded
+  if (!e && movedTo) { toast(`Moved to ${movedTo.split("/")[0]}/`); location.replace(`#/e/${enc(movedTo)}`); return; }
   if (!e) { main.innerHTML = `<div class="empty">Not found: ${esc(id)}</div>`; return; }
   remember([e, ...(e.outlinks || []), ...(e.backlinks || []), ...(e.maps || [])]);
   state.current = e;
@@ -1920,6 +1940,7 @@ function connectStream() {
     state.meta = await api("/api/meta");
     renderNav();
     if (onChatPage() && state.wbEntity) renderWorkbench();
+    else refreshOpenView();
   });
 }
 
