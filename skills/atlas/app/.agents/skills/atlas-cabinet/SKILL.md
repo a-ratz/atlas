@@ -104,12 +104,20 @@ find is written as `not found (YYYY-MM-DD)`, never filled with a guess. A card
 is complete when every field is filled or marked not found: then set
 `depth: complete` and `checked: YYYY-MM-DD`.
 
+**Who may be looked up on the web:** organizations, and people the vault knows
+through their *public work*: authors of a source, speakers, founders, people
+named in the press. Cards from a distill are these. A private contact (someone
+the user knows personally, a colleague, a customer contact) stays vault-only:
+expand it only from the vault, and through LinkedIn only when
+`cabinet.enrich: linkedin` is set (section 3). When unsure, ask.
+
 **Budget** (`cabinet.expand` in `vault/atlas.yaml`): at most `lookups_per_card`
 searches or page fetches per card (default 6), about three minutes, and at most
 `cards_per_run` cards per run (default 10), the most-linked minimal cards first.
-Look in this order: the vault, the entity's own site and profiles, a web search,
-then LinkedIn only if `cabinet.enrich: linkedin` is set (section 3). Stop a card
-when the profile is full or its budget is spent.
+Look in this order: the vault, then, for organizations and people known for
+public work, the entity's own site and profiles and a web search, then LinkedIn
+only if `cabinet.enrich: linkedin` is set. Stop a card when the profile is full
+or its budget is spent.
 
 **Report** in Atlas: which cards became complete, which fields stayed not found,
 and every profile you visited (LinkedIn shows the visit). A complete card is

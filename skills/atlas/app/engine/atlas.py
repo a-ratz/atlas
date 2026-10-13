@@ -329,15 +329,22 @@ class Index:
                 for key in ("moves", "checks", "count"):
                     if key not in spec and defaults.get(tid, {}).get(key):
                         spec[key] = defaults[tid][key]
-            for tid in ("person", "org"):  # cards copied before 0.7 learn depth (minimal/complete) and Expand
+            legacy = {  # what 0.6.x shipped; only a type still in that shape is migrated, customizations stay
+                "person": (["role", "org", "relation", "email", "phone", "updated"], [["🔄 Update"]]),
+                "org": (["kind", "relation", "website", "updated"], [["🔄 Update", "🧭 What's next?"]]),
+            }
+            for tid, (old_fields, old_moves) in legacy.items():  # cards copied before 0.7 learn depth and Expand
                 spec, default = self.types.get(tid), defaults.get(tid, {})
-                if not spec or not default:
+                if not spec or not default or "status" in spec:
                     continue
-                spec.setdefault("status", default.get("status"))
-                spec["fields"] = [*spec.get("fields", []), *(f for f in default.get("fields", []) if f not in spec.get("fields", []))]
-                labels = [m.get("label") for m in spec.get("moves") or []]
-                spec["moves"] = [*(m for m in default.get("moves", []) if m.get("label") not in labels), *(spec.get("moves") or [])]
-            if self.commands is not None and not any(c.get("name") == "expand-cards" for c in self.commands):
+                if spec.get("fields") == old_fields:
+                    spec["fields"] = [*old_fields[:-1], "depth", "checked", old_fields[-1]]
+                    spec["status"] = default.get("status")
+                    spec.setdefault("checks", default.get("checks"))
+                if [m.get("label") for m in spec.get("moves") or []] in old_moves:
+                    spec["moves"] = [*(m for m in default.get("moves", []) if m.get("label") == "🔎 Expand"), *spec["moves"]]
+            old_commands = {"learn", "distill", "map", "sketch", "project", "close", "remember", "check", "next", "tour"}
+            if self.commands is not None and {c.get("name") for c in self.commands} == old_commands:
                 self.commands = [*self.commands, *(c for c in default_reg.get("commands") or [] if c.get("name") == "expand-cards")]
             q = self.types.get("question")
             if q and [m.get("label") for m in q.get("moves") or []] == ["🔎 Research this"]:  # copied before 0.6.4
@@ -1980,7 +1987,7 @@ def suggestions(index: Index) -> list[str]:
                  (h["attribution"], "attribution problem(s)"), (h["questions"], "open question(s) past the cap")) if n]
         out.append(f"{h['total']} note(s) need a fix ({', '.join(parts)}): run `engine/atlas.py check` and fix them; "
                    "a wrong link is usually a typo or a renamed title")
-    minimal = [e for e in ents if e.type in ("person", "org") and str(e.status) == "minimal"]
+    minimal = [e for e in ents if e.type in ("person", "org") and str(e.meta.get("depth")) == "minimal"]
     if minimal:
         out.append(f"{len(minimal)} cabinet card(s) are minimal: offer \"Expand cards\" (/expand-cards, skill "
                    "atlas-cabinet), which completes them within the budget in atlas.yaml")
