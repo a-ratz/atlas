@@ -103,7 +103,7 @@ suggestions as choices. Then listen again (mode A or B).
 
 ## Cabinet: people and organizations
 
-`vault/cabinet/people/<name>.md` and `vault/cabinet/orgs/<name>.md` hold one card per
+`vault/cabinet/people/<name>.md` and `vault/cabinet/orgs/<name>.md` (lowercase ASCII with hyphens: `jan-born.md`) hold one card per
 person or organization: who they are, how they relate to the user, contact
 details and the projects they touch.
 Until 0.6.1 this was the Brain in `vault/brain/`; the engine moves that folder

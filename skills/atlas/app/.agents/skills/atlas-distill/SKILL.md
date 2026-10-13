@@ -166,7 +166,9 @@ that is only mentioned ("as Netflix does") gets no card.
    ```
 
    People go to `cabinet/people/<name>.md`, organizations to
-   `cabinet/orgs/<name>.md` (with `kind:` instead of `role:`).
+   `cabinet/orgs/<name>.md` (with `kind:` instead of `role:`). The file name is
+   the name in lowercase ASCII with hyphens: `jan-born.md`,
+   `university-of-tuebingen.md`, `dumay.md`.
 3. At most **five new cards per capture**, the actors the insights lean on most.
    List the others as candidates in your summary.
 

@@ -6,7 +6,8 @@ description: Create and update Cabinet cards for people and organizations in vau
 # Cabinet cards
 
 One card per person in `vault/cabinet/people/<name>.md` and per organization in
-`vault/cabinet/orgs/<name>.md`. AGENTS.md, Cabinet, has the card format and the
+`vault/cabinet/orgs/<name>.md`, the name in lowercase ASCII with hyphens
+(`jan-born.md`, `university-of-tuebingen.md`). AGENTS.md, Cabinet, has the card format and the
 content rules. This skill covers creating cards, keeping them current, and
 optional enrichment from LinkedIn.
 
