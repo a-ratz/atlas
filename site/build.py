@@ -34,6 +34,7 @@ import sys
 import tempfile
 import time
 import urllib.parse
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -52,6 +53,7 @@ class Recorder:
         self.state = self.vault / ".atlas"
         self.bodies: list = []
         self.seen: dict[str, int] = {}
+        self.ids: set[str] = set()  # every note any recorded state had, to record where the moved ones went
         self.server = None
         self.base = ""
 
@@ -146,6 +148,14 @@ class Recorder:
         for i in sorted(ids):
             out[f"entity:{i}"] = self.keep(self.get("/api/entity" + q(id=i)))
             out[f"card:{i}"] = self.keep(self.get("/api/card" + q(id=i)))
+        for gone in sorted(self.ids - ids):  # an open page follows a moved note (#13)
+            try:
+                self.get("/api/entity" + q(id=gone))
+            except urllib.error.HTTPError as err:
+                body = json.loads(err.read() or b"{}")
+                if body.get("moved_to"):
+                    out[f"moved:{gone}"] = self.keep(body)
+        self.ids |= ids
         out["search"] = self.keep(self.search_table())
         return out
 
@@ -271,6 +281,10 @@ def record(scene: dict, work: Path) -> dict:
             steps.append(row)
         if after is None:
             sys.exit("the scene changes no notes")
+        for step in scene["steps"]:  # an open page follows a moved note in the demo too (#14, review round 1)
+            for src, dst in (step.get("move") or {}).items():
+                if f"moved:{src}" not in after or rec.bodies[after[f"moved:{src}"]].get("moved_to") != dst:
+                    sys.exit(f"the scene moves {src} to {dst}, but the recording does not say so")
         return {
             "version": version, "recorded_at": recorded_at, "record_day": dt.date.today().isoformat(),
             "user": scene["user"], "bodies": rec.bodies, "states": {"before": before, "after": after},

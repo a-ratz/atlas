@@ -946,18 +946,30 @@ async function entityOrMoved(id) {  // a note the agent moved keeps its file nam
 async function refreshOpenView() {
   const [path, qs] = (location.hash || "#/").slice(1).split("?");
   if (!path.startsWith("/e/") || !state.current) return;
-  const token = state.routeToken, y = scrollY;
-  const { e } = await entityOrMoved(state.current.id);
-  if (token !== state.routeToken || (e && e.modified === state.current.modified)) return;  // moved on, or another note changed
+  const token = state.routeToken, id = state.current.id;
+  const { e } = await entityOrMoved(id);
+  if (token !== state.routeToken || (e && e.rev === state.current.rev)) return;  // moved on, or another note changed
+  state.keepScroll = { id, y: scrollY };
+  disposeView();  // a tour's key handlers
   await viewEntity(decodeURIComponent(path.slice(3)), new URLSearchParams(qs || ""));  // follows a moved note
-  if (token === state.routeToken) scrollTo(0, y);
+}
+// The scroll position a re-rendered (or moved) note keeps; any other page opens at the top.
+function keptScroll(id) {
+  const k = state.keepScroll;
+  state.keepScroll = null;
+  return k?.id === id ? k.y : 0;
 }
 
 async function viewEntity(id, params = new URLSearchParams()) {
   const token = state.routeToken;
   const { e, movedTo } = await entityOrMoved(id);
   if (token !== state.routeToken) return;  // the reader moved on while this page loaded
-  if (!e && movedTo) { toast(`Moved to ${movedTo.split("/")[0]}/`); location.replace(`#/e/${enc(movedTo)}`); return; }
+  if (!e && movedTo) {
+    if (state.keepScroll?.id === id) state.keepScroll.id = movedTo;
+    toast(`Moved to ${movedTo.split("/")[0]}/`);
+    location.replace(`#/e/${enc(movedTo)}`);
+    return;
+  }
   if (!e) { main.innerHTML = `<div class="empty">Not found: ${esc(id)}</div>`; return; }
   remember([e, ...(e.outlinks || []), ...(e.backlinks || []), ...(e.maps || [])]);
   state.current = e;
@@ -976,7 +988,7 @@ async function viewEntity(id, params = new URLSearchParams()) {
     </div></article>
     <aside class="margin" aria-label="About this note">${marginHtml(e)}</aside></div>`;
   $("#copy-path").onclick = () => navigator.clipboard?.writeText(e.path).then(() => toast("Path copied"));
-  window.scrollTo(0, 0);
+  window.scrollTo(0, keptScroll(e.id));
 }
 
 // ------------------------------------------------------------------ views: projects
@@ -1161,7 +1173,7 @@ function renderProject(e) {
         <section><h3 class="kicker" style="margin:0 0 8px">File</h3><div class="path">${esc(e.path)}</div></section>
       </aside>
     </div>`;
-  window.scrollTo(0, 0);
+  window.scrollTo(0, keptScroll(e.id));
 }
 
 // ------------------------------------------------------------------ views: a tour
@@ -1248,7 +1260,7 @@ function renderTour(e, params) {
   document.addEventListener("keydown", keys);
   state.destroyView = () => document.removeEventListener("keydown", keys);
   go(i);
-  window.scrollTo(0, 0);
+  window.scrollTo(0, keptScroll(e.id));
 }
 
 // ------------------------------------------------------------------ chat: blocks and messages
@@ -1883,6 +1895,9 @@ function wireDrop() {
 }
 
 // ------------------------------------------------------------------ router, stream, boot
+function disposeView() {  // what the open view installed outside main (key handlers, the graph's loop)
+  if (state.destroyView) { try { state.destroyView(); } catch {} state.destroyView = null; }
+}
 async function route() {
   const hash = location.hash || "#/";
   const [path, qs] = hash.slice(1).split("?");
@@ -1891,7 +1906,7 @@ async function route() {
   $("#nav-toggle").setAttribute("aria-expanded", "false");
   hideHover(); $("#quote-bar").hidden = true; closePalette();
   state.routeToken = (state.routeToken || 0) + 1;
-  if (state.destroyView) { try { state.destroyView(); } catch {} state.destroyView = null; }
+  disposeView();
   main.classList.remove("bleed");
   if (!path.startsWith("/e/")) { state.current = null; updateComposers(); }
   const wasReading = reading();
