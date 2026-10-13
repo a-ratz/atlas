@@ -35,8 +35,9 @@ with both. Routine runs may use a smaller model for the user role.
 
 ## 3. Report
 
-The user role fills in [`report-template.md`](report-template.md) as `report.md` in the run folder,
-with the screenshots the scenario names in dark and light. The report goes into the pull request as
+The user role fills in [`report-template.md`](report-template.md) and returns it as its answer
+(subagents may not be allowed to write report files); the lead saves it as `report.md` in the run
+folder, next to the screenshots the scenario names in dark and light. The report goes into the pull request as
 a comment headed "Smoke run: <scenario>". Findings are sorted:
 
 - **bug** → an issue from the bug template, linked from the report; it blocks the merge when the

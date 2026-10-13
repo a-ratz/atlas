@@ -179,6 +179,7 @@ files:
   cabinet/people/jan-born.md: |
     ---
     name: Jan Born
+    depth: minimal
     aliases: [Jan Born]
     role: Sleep and memory researcher
     relation: co-author of two papers in this vault
@@ -199,6 +200,7 @@ files:
   cabinet/people/susanne-diekelmann.md: |
     ---
     name: Susanne Diekelmann
+    depth: minimal
     aliases: [Susanne Diekelmann, Diekelmann]
     role: Sleep and memory researcher
     relation: first author of the sleep review in this vault
@@ -219,6 +221,7 @@ files:
   cabinet/orgs/university-of-tuebingen.md: |
     ---
     name: University of Tübingen
+    depth: minimal
     aliases: [University of Tübingen, Universität Tübingen]
     kind: research
     relation: where the closed-loop study behind Nightlight's cue timing was done

@@ -165,6 +165,14 @@ A card's page lists the notes that mention them and the papers whose `authors:`
 name them, so "which insights about Anthropic do we have?" or "which papers by
 this author did we read?" is one click (or `atlas.py mentions "<name>"`).
 
+Cards grow from your research: when your agent distills a capture, it writes a
+minimal card for each person and organization the new insights rest on, with
+only what the capture says. **Expand cards** (`/expand-cards`, or the button on
+a card) completes them to a fixed profile (role, earlier roles, relevant works,
+public channels for a person; what it does, size, website for an organization),
+each fact with its source, within a budget of lookups per card that you set in
+`atlas.yaml`. What it cannot find stays marked as not found.
+
 Optional: with the first person card, your agent asks whether to fill new
 cards from LinkedIn. On yes, it checks that it can drive your browser and that
 you are logged in, then adds only professional details (role, employer, past
@@ -302,7 +310,7 @@ single-user, local-first and young.
 
 ## Status and roadmap
 
-Atlas 0.6.5 is the current release. Stable: the
+Atlas 0.7.0 is the current release. Stable: the
 engine and reader, the duplex chat with answer blocks, project memory with boot
 packets, the checks, tours, the installer with upgrade and restore.
 

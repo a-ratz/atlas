@@ -81,6 +81,7 @@ def prepare(args) -> None:
            "GIT_COMMITTER_NAME": "Smoke Test", "GIT_COMMITTER_EMAIL": "smoke@example.com"}
     uv = [shutil.which("uv") or "uv", "run", "--no-project", "--quiet"]
     atlas_dir = run / "Atlas"
+    env["ATLAS_VAULT"] = str(atlas_dir / "vault")  # set_vault() prefers it: never the developer's own vault
 
     first = ROOT
     if args.ref:  # the upgrade scenario installs an older Atlas first
@@ -156,7 +157,8 @@ You are the agent connected to a fresh Atlas install, the way a user's agent wou
 - Atlas folder: `{atlas}` (its `AGENTS.md` and `.agents/skills/` are your instructions; read them first)
 - Your agent id: `{agent}`. Use `--agent {agent}` with `wait`, `say`, `boot` and `commit`.
 - Atlas runs at {url}; it is already started.
-- Isolation: work only inside `{run}`. Run every command with `HOME="{home}"` and the git identity
+- Isolation: work only inside `{run}`. Run every command with `HOME="{home}"`, `ATLAS_VAULT="{vault}"`
+  (Atlas prefers it over every other vault) and the git identity
   `GIT_AUTHOR_NAME="Smoke Test" GIT_AUTHOR_EMAIL=smoke@example.com GIT_COMMITTER_NAME="Smoke Test"
   GIT_COMMITTER_EMAIL=smoke@example.com`, so nothing touches the real user's configuration.
   Do not install anything outside this folder.
@@ -179,7 +181,8 @@ code or the pull request's diff. Missing or confusing guidance on screen is a fi
 - Screenshots: each "screenshot" in the scenario, in dark and in light (switch with the theme button).
   Save them under `{run}/shots/`.
 - When you are done, write "smoke run over" in the chat.
-- Report: fill in `{template}` and save it as `{run}/report.md`. Sort every finding into bug,
+- Report: fill in `{template}` and return it as your final answer (some harnesses do not let a
+  subagent write report files; the lead saves it as `{run}/report.md`). Sort every finding into bug,
   papercut or idea; give each bug the steps to reproduce.
 
 ## The scenario
