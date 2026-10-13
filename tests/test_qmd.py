@@ -240,12 +240,31 @@ def test_qmd_never_sees_index_path(engine, vault, fake, monkeypatch):
     assert fake.envs[-1]["INDEX_PATH"] == "/elsewhere/qmd/index.sqlite"
 
 
-def test_smoke_runs_keep_qmd_inside_the_run(tmp_path):
-    # INDEX_PATH from the developer's shell sent the run's QMD database outside the run (#15, round 1)
+def smoke_run():
     spec = importlib.util.spec_from_file_location("smoke_run", ROOT / "ci" / "smoke" / "run.py")
     run = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(run)
+    return run
+
+
+def test_smoke_runs_keep_qmd_inside_the_run(tmp_path):
+    # INDEX_PATH from the developer's shell sent the run's QMD database outside the run (#15, round 1)
     env = {"HOME": str(tmp_path), "INDEX_PATH": "/elsewhere/qmd/index.sqlite"}
-    run.isolate_qmd(env)
+    smoke_run().isolate_qmd(env)
     assert "INDEX_PATH" not in env
     assert env["XDG_CACHE_HOME"].startswith(str(tmp_path)) and env["QMD_CONFIG_DIR"].startswith(str(tmp_path))
+
+
+def test_the_operator_gets_the_whole_isolation(tmp_path, monkeypatch):
+    # the brief named HOME and the git identity only; QMD's folders reached the operator's shell by luck
+    monkeypatch.setenv("INDEX_PATH", "/elsewhere/qmd/index.sqlite")
+    run = smoke_run()
+    env = {k: v for k, v in run.os.environ.items() if k != "INDEX_PATH"}
+    env.update(HOME=str(tmp_path / "home"), ATLAS_VAULT=str(tmp_path / "vault"))
+    run.isolate_qmd(env)
+    run.write_env(tmp_path, env)
+    sh = (tmp_path / "env.sh").read_text(encoding="utf-8")
+    for key in ("HOME", "ATLAS_VAULT", "XDG_CACHE_HOME", "QMD_CONFIG_DIR"):
+        assert f"export {key}=" in sh
+    assert "unset INDEX_PATH" in sh
+    assert "Remove-Item Env:INDEX_PATH" in (tmp_path / "env.ps1").read_text(encoding="utf-8")

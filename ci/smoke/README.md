@@ -18,7 +18,8 @@ uv run ci/smoke/run.py prepare upgrade --ref <last release or main>
 `prepare` creates a run folder with its own `HOME`, installs this checkout's skill with
 `npx skills add <checkout> -g -s atlas` (Claude Code and Codex), runs the installer, loads the demo
 if the scenario asks for it, starts Atlas in operator mode on a free port, and writes two briefs into
-the run folder: `operator.md` and `user.md`. It prints the run as JSON (folder, URL, port, version).
+the run folder: `operator.md` and `user.md`, plus `env.sh` / `env.ps1` with the run's isolation
+(the operator sources it before each command, since its shell is not the one `prepare` ran in). It prints the run as JSON (folder, URL, port, version).
 Nothing outside the run folder is touched; the developer's own Atlas and vault stay out of it.
 QMD gets its own index and settings in the run folder too, with the machine's models linked in;
 a scenario that needs a tool (`needs: [qmd]`) stops early when it is missing.
