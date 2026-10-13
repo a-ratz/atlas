@@ -10,8 +10,8 @@
 
 Serves the demo vault in operator mode, opens Home, the operator page, the projects, the
 constellation, Rediscover, every type's list and a sample of entities in a headless Chromium,
-once with a dark and once with a light colour scheme. Any console error or uncaught exception
-fails the run. A few checks pin behaviour that reviews found broken once.
+once with a dark and once with a light color scheme. Any console error or uncaught exception
+fails the run. A few checks pin behavior that reviews found broken once.
 
     uv run ci/browser.py              # needs: uv run --with playwright==1.55.0 playwright install chromium
 """
@@ -69,7 +69,7 @@ def main() -> None:
                 checks(page, srv.base, scheme)
                 ctx.close()
             browser.close()
-            print(f"{len(pages)} pages × 2 colour schemes opened")
+            print(f"{len(pages)} pages × 2 color schemes opened")
     for f in failures:
         print(f"FAIL {f}")
     if failures:
@@ -78,7 +78,7 @@ def main() -> None:
 
 
 def checks(page, base: str, scheme: str) -> None:
-    """Behaviour a review found broken once (#4); each check names its finding."""
+    """Behavior a review found broken once (#4); each check names its finding."""
     page.goto(f"{base}/#/t/question?status=open")
     page.wait_for_selector("#list", timeout=15000)
     page.wait_for_timeout(300)
