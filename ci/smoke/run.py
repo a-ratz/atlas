@@ -181,7 +181,8 @@ code or the pull request's diff. Missing or confusing guidance on screen is a fi
 - Screenshots: each "screenshot" in the scenario, in dark and in light (switch with the theme button).
   Save them under `{run}/shots/`.
 - When you are done, write "smoke run over" in the chat.
-- Report: fill in `{template}` and save it as `{run}/report.md`. Sort every finding into bug,
+- Report: fill in `{template}` and return it as your final answer (some harnesses do not let a
+  subagent write report files; the lead saves it as `{run}/report.md`). Sort every finding into bug,
   papercut or idea; give each bug the steps to reproduce.
 
 ## The scenario
