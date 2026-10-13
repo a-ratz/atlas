@@ -60,6 +60,19 @@ def tracked(*patterns: str) -> list[Path]:
     return [ROOT / p for p in out.split("\0") if p]
 
 
+def end(proc: subprocess.Popen) -> None:
+    """Stop a process started through `uv run`, and its Python child."""
+    if proc.poll() is None:
+        if os.name == "nt":  # uv does not pass terminate() on to its child on Windows: end the whole tree
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True)
+        else:
+            proc.terminate()
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+
+
 def atlas(vault: Path, *args: str, timeout: float = 120) -> subprocess.CompletedProcess:
     return subprocess.run([*UV, str(ENGINE), "--vault", str(vault), *args],
                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
@@ -96,15 +109,11 @@ class Server:
                 if self.proc.poll() is not None:
                     break
                 time.sleep(0.2)
-        self.proc.terminate()
+        end(self.proc)
         sys.exit(f"the engine did not start:\n{self.proc.stdout.read() if self.proc.stdout else ''}")
 
     def __exit__(self, *exc) -> None:
-        self.proc.terminate()
-        try:
-            self.proc.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            self.proc.kill()
+        end(self.proc)
 
     def get(self, path: str):
         req = urllib.request.Request(self.base + path, headers={"x-atlas": "1"})
@@ -179,7 +188,7 @@ def check_operator(args) -> None:
             try:
                 out, _ = wait.communicate(timeout=60)
             except subprocess.TimeoutExpired:
-                wait.kill()
+                end(wait)
                 fail("`wait` did not return after a chat message")
                 return
             if "ping from the gate" not in out:
