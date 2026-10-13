@@ -106,6 +106,52 @@ steps:
         Related:
         - [[spindles-lock-to-slow-oscillations]] — where spindles sit in the mechanism
         - [[new-words-join-the-lexicon-overnight]] — the effect this tries to explain
+      cabinet/people/dumay.md: |
+        ---
+        name: Dumay
+        aliases: [Dumay]
+        role: first author of the 2007 study on new words and sleep (Dumay & Gaskell 2007)
+        depth: minimal
+        ---
+
+        # Dumay
+
+        First author of the study the vocabulary insight rests on: new words compete with
+        known ones only after sleep.
+
+        ## Timeline
+
+        - Card created from [[sleep-and-vocabulary]]; named in [[new-words-join-the-lexicon-overnight]]. (Source: the capture)
+      cabinet/people/gaskell.md: |
+        ---
+        name: Gaskell
+        aliases: [Gaskell]
+        role: co-author of the 2007 study on new words and sleep (Dumay & Gaskell 2007)
+        depth: minimal
+        ---
+
+        # Gaskell
+
+        Co-author of the study the vocabulary insight rests on.
+
+        ## Timeline
+
+        - Card created from [[sleep-and-vocabulary]]; named in [[new-words-join-the-lexicon-overnight]]. (Source: the capture)
+      cabinet/people/tamminen.md: |
+        ---
+        name: Tamminen
+        aliases: [Tamminen]
+        role: first author of the 2010 study linking spindles to word integration (Tamminen et al. 2010)
+        depth: minimal
+        ---
+
+        # Tamminen
+
+        First author of the correlational study behind the spindle insight.
+
+        ## Timeline
+
+        - Card created from [[sleep-and-vocabulary]]; named in [[spindles-track-word-integration]]. (Source: the capture)
     edit:
       insights/sleep-and-memory-map.md:
         - ["- [[sleep-favours-expected-memories]]\n", "- [[sleep-favours-expected-memories]]\n- [[new-words-join-the-lexicon-overnight]]\n"]
@@ -127,5 +173,9 @@ steps:
 
       The spindle link stays **speculative**: one correlational study. Both sit in the Sleep and
       memory map now, and the capture moved to sources/.
+
+      Three minimal cards for the researchers the insights lean on: Dumay, Gaskell and Tamminen,
+      with only what the capture says. **Expand cards** would complete them from their own pages
+      and a web search, within a budget.
 
       That was the recording. On your own vault, this is one sentence to your agent.

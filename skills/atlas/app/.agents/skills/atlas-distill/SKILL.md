@@ -11,7 +11,7 @@ without dragging in unrelated context.
 
 `/distill all` (the arrow between Captures and Insights in Atlas): every
 capture in `captures/` that is not `kind: operational`, oldest first. Take them
-one at a time through steps 1 to 6, post a progress line per capture, and
+one at a time through steps 1 to 7, post a progress line per capture, and
 commit each capture on its own.
 
 ## 1. Read
@@ -131,7 +131,46 @@ Dormant questions are not lost: when a capture raises them again, they come
 back. The user moves questions with the buttons on their page: "Not interested"
 means `status: dropped`, "Later" means `status: dormant`.
 
-## 6. Close the loop
+## 6. Minimal cards for the actors
+
+The cabinet grows from what you distill. Give a card to each *actor* of this
+capture: a person or organization who wrote, said, built or measured something
+the new insights rest on, and everyone in the capture's `authors:` and `orgs:`
+(add those fields first if the capture names its authors but lacks them). A name
+that is only mentioned ("as Netflix does") gets no card.
+
+1. Look for an existing card first (`engine/atlas.py mentions "<name>"`, the
+   aliases in `cabinet/`). If one exists, add a timeline entry and the new links.
+2. Otherwise write a **minimal card**: only what the capture and the insights say.
+   No search, no lookup, nothing inferred: no guessed first name, employer, title
+   or email.
+
+   ```markdown
+   ---
+   name: <the name as the source writes it, e.g. "Dumay">
+   aliases: [<the same, plus other spellings the source uses>]
+   role: <one line on their role in this context: "first author of the 2007 study on sleep and new words">
+   depth: minimal
+   created_by: <your id>
+   updated_by: <your id>
+   updated: YYYY-MM-DD
+   ---
+
+   # <name>
+
+   <One or two sentences: what they did that this vault uses.>
+
+   ## Timeline
+
+   - YYYY-MM-DD · Card created from [[<capture file name without .md>]]; named in [[<insight>]]. (Source: the capture)
+   ```
+
+   People go to `cabinet/people/<name>.md`, organizations to
+   `cabinet/orgs/<name>.md` (with `kind:` instead of `role:`).
+3. At most **five new cards per capture**, the actors the insights lean on most.
+   List the others as candidates in your summary.
+
+## 7. Close the loop
 
 1. Move the capture to `vault/sources/` (keep its name) so `captures/` only
    holds what still waits. If it names its authors or organizations but has no
@@ -149,7 +188,9 @@ means `status: dropped`, "Later" means `status: dormant`.
    ````
 
    Name the questions you filed or raised in one line ("One open question
-   filed, one raised again"), or that you filed none.
+   filed, one raised again"), or that you filed none. Name the cards you
+   created; when there are minimal cards, offer "Expand cards" as a choice
+   (`/expand-cards`).
 
 4. Run `uv run --no-project engine/atlas.py check` and fix what it flags: a
    link that matches no note (usually a typo or a title you changed), a

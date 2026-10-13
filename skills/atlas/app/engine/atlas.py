@@ -329,6 +329,16 @@ class Index:
                 for key in ("moves", "checks", "count"):
                     if key not in spec and defaults.get(tid, {}).get(key):
                         spec[key] = defaults[tid][key]
+            for tid in ("person", "org"):  # cards copied before 0.7 learn depth (minimal/complete) and Expand
+                spec, default = self.types.get(tid), defaults.get(tid, {})
+                if not spec or not default:
+                    continue
+                spec.setdefault("status", default.get("status"))
+                spec["fields"] = [*spec.get("fields", []), *(f for f in default.get("fields", []) if f not in spec.get("fields", []))]
+                labels = [m.get("label") for m in spec.get("moves") or []]
+                spec["moves"] = [*(m for m in default.get("moves", []) if m.get("label") not in labels), *(spec.get("moves") or [])]
+            if self.commands is not None and not any(c.get("name") == "expand-cards" for c in self.commands):
+                self.commands = [*self.commands, *(c for c in default_reg.get("commands") or [] if c.get("name") == "expand-cards")]
             q = self.types.get("question")
             if q and [m.get("label") for m in q.get("moves") or []] == ["🔎 Research this"]:  # copied before 0.6.4
                 q["moves"] = [*q["moves"], *(m for m in defaults.get("question", {}).get("moves", [])
@@ -1970,6 +1980,10 @@ def suggestions(index: Index) -> list[str]:
                  (h["attribution"], "attribution problem(s)"), (h["questions"], "open question(s) past the cap")) if n]
         out.append(f"{h['total']} note(s) need a fix ({', '.join(parts)}): run `engine/atlas.py check` and fix them; "
                    "a wrong link is usually a typo or a renamed title")
+    minimal = [e for e in ents if e.type in ("person", "org") and str(e.status) == "minimal"]
+    if minimal:
+        out.append(f"{len(minimal)} cabinet card(s) are minimal: offer \"Expand cards\" (/expand-cards, skill "
+                   "atlas-cabinet), which completes them within the budget in atlas.yaml")
     qs = open_questions(index)
     if len(qs) >= QUESTION_CAP:
         out.append(f"{len(qs)} open questions, the cap is {QUESTION_CAP}: before filing more, answer one, merge two, "

@@ -1,6 +1,6 @@
 ---
 name: atlas-cabinet
-description: Create and update Cabinet cards for people and organizations in vault/cabinet/, and enrich them from LinkedIn when the user has switched that on. Use when a person or organization should get a card ("leg eine Akte an", "add a card for…"), when you learn something new about someone with a card, or when the user asks to look someone up ("check her LinkedIn", "enrich the card").
+description: Create and update Cabinet cards for people and organizations in vault/cabinet/, expand minimal cards to a fixed profile within a budget ("Expand cards", /expand-cards), and enrich them from LinkedIn when the user has switched that on. Use when a person or organization should get a card ("leg eine Akte an", "add a card for…"), when you learn something new about someone with a card, or when the user asks to look someone up ("check her LinkedIn", "enrich the card").
 ---
 
 # Cabinet cards
@@ -82,10 +82,45 @@ card, or when the user asks you to enrich one.
 5. **Report** what you added, and remind the user once per session that the
    person sees the profile visit.
 
+## 4. Expand cards
+
+Distill leaves **minimal** cards (`depth: minimal`): only what the vault says.
+"Expand cards" (`/expand-cards [name]`, the 🔎 Expand button on a card) completes
+them. Expand only when the user asks; distill itself never searches.
+
+**Complete is a fixed profile, not everything findable:**
+
+| Person | Organization |
+|---|---|
+| current role and organization | what it does, in one line |
+| up to 3 earlier roles, with years | headquarters region |
+| one line of expertise | size band (e.g. 50–200 people) |
+| up to 3 public works that matter to this vault, linked | website |
+| public professional channels: website, GitHub, X or Bluesky, LinkedIn URL | up to 3 products or works that matter to this vault |
+| | people who already have cards, linked |
+
+Every fact gets its source URL and the date you checked it. A field you cannot
+find is written as `not found (YYYY-MM-DD)`, never filled with a guess. A card
+is complete when every field is filled or marked not found: then set
+`depth: complete` and `checked: YYYY-MM-DD`.
+
+**Budget** (`cabinet.expand` in `vault/atlas.yaml`): at most `lookups_per_card`
+searches or page fetches per card (default 6), about three minutes, and at most
+`cards_per_run` cards per run (default 10), the most-linked minimal cards first.
+Look in this order: the vault, the entity's own site and profiles, a web search,
+then LinkedIn only if `cabinet.enrich: linkedin` is set (section 3). Stop a card
+when the profile is full or its budget is spent.
+
+**Report** in Atlas: which cards became complete, which fields stayed not found,
+and every profile you visited (LinkedIn shows the visit). A complete card is
+expanded again only when the user asks, or when its `checked` date is older
+than `stale_months`.
+
 ## Rules
 
 - Never connect, follow, message, react, endorse, or change a LinkedIn setting.
-- Never enrich a card the user did not create or ask for: no crawling of
-  colleagues, connections or "people also viewed".
+- Never expand or enrich a card unless the user asked for it (a button, a
+  command, a sentence). No crawling of colleagues, connections or "people also
+  viewed".
 - A card that is about the user stays as the user wrote it.
 - Professional details only; when in doubt, leave it out and ask.

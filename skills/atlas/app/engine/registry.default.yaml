@@ -28,6 +28,10 @@ cabinet:
   enrich: ask         # ask | linkedin | off; asked once with the first person card
   tool: ""            # the browser tool that passed the check
   checked: ""         # date of the last passing check
+  expand:             # "Expand cards" (atlas-cabinet): when a minimal card counts as complete, and the budget
+    lookups_per_card: 6   # searches and page fetches for one card
+    cards_per_run: 10     # cards one run expands, the most-linked first
+    stale_months: 12      # a complete card whose sources are older may be expanded again
 
 commands:
   - {name: learn, args: "<topic or question>", help: "Research it and land the result as a capture", send: "/learn {args}"}
@@ -36,6 +40,7 @@ commands:
   - {name: sketch, args: "<idea>", help: "Write down a product or project idea", send: "/sketch {args}"}
   - {name: project, args: "<name>", help: "Start working on a project: load its memory, rules and checkout", send: "/project {args}"}
   - {name: close, args: "", help: "Close the session: update threads, record decisions and lessons, commit", send: "/close"}
+  - {name: expand-cards, args: "[name]", help: "Complete the minimal cards in the cabinet (or one), within the budget", send: "/expand-cards {args}"}
   - {name: remember, args: "<something about you>", help: "Tell your agents something about you (goes to your profile)", send: "/remember {args}"}
   - {name: check, args: "", help: "Find and fix broken links, bad frontmatter and unconnected notes", send: "/check"}
   - {name: next, args: "", help: "What is worth doing next in this vault?", send: "/next"}
@@ -225,10 +230,14 @@ types:
     plural: People
     section: Cabinet
     globs: ["cabinet/people/*.md"]
-    fields: [role, org, relation, email, phone, updated]
+    fields: [role, org, relation, email, phone, depth, checked, updated]
+    status: depth           # minimal: only what the vault says; complete: the profile filled (atlas-cabinet)
     date: updated
     recall: true
+    checks:
+      allowed: {depth: [minimal, complete]}
     moves:
+      - {label: "🔎 Expand", send: "Expand this card to the cabinet profile, within the budget (atlas-cabinet, Expand cards)"}
       - {label: "🔄 Update", send: "Update this card from recent notes and sessions; show me the new timeline entries before you write them"}
 
   - id: org
@@ -236,10 +245,14 @@ types:
     plural: Organizations
     section: Cabinet
     globs: ["cabinet/orgs/*.md"]
-    fields: [kind, relation, website, updated]
+    fields: [kind, relation, website, depth, checked, updated]
+    status: depth
     date: updated
     recall: true
+    checks:
+      allowed: {depth: [minimal, complete]}
     moves:
+      - {label: "🔎 Expand", send: "Expand this card to the cabinet profile, within the budget (atlas-cabinet, Expand cards)"}
       - {label: "🔄 Update", send: "Update this card from recent notes and sessions; show me the new timeline entries before you write them"}
       - {label: "🧭 What's next?", send: "What is next with this organization? Check its projects and timeline"}
 

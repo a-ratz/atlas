@@ -236,6 +236,7 @@ def record(scene: dict, work: Path) -> dict:
             if "write" in step or "move" in step:
                 paths = []
                 for rel, body in (step.get("write") or {}).items():
+                    (rec.vault / rel).parent.mkdir(parents=True, exist_ok=True)  # a scene may start a folder
                     (rec.vault / rel).write_text(body, encoding="utf-8")
                     paths.append(rec.vault / rel)
                 for rel, swaps in (step.get("edit") or {}).items():

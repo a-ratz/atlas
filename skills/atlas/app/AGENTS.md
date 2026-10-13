@@ -139,6 +139,11 @@ The current state in a few sentences. Rewrite it when something changes.
   `off`) says whether new cards are filled with professional details from
   LinkedIn. The `atlas-cabinet` skill asks once, checks the browser tool and the
   login, and lists what may and may not go on a card.
+- **Depth:** distill creates **minimal** cards for the actors of a capture: only
+  what the vault says, no lookups (`depth: minimal`). "Expand cards"
+  (`/expand-cards`, the 🔎 Expand button) completes them to a fixed profile
+  within a budget (`cabinet.expand` in `atlas.yaml`) and sets `depth: complete`.
+  The `atlas-cabinet` skill has the profile and the budget.
 - **State versus timeline:** the text under the heading is rewritten; the
   timeline only grows, every entry with a date and a source.
 - **In chat:** when a message names a card, `wait` adds a line
@@ -163,7 +168,7 @@ The current state in a few sentences. Rewrite it when something changes.
 | agrees to distill, or captures are waiting | `.agents/skills/atlas-distill/SKILL.md` |
 | has five or more insights without a map, or asks for a map | `.agents/skills/atlas-map/SKILL.md` |
 | says "I have an idea…" | `.agents/skills/atlas-sketch/SKILL.md` |
-| wants a card for a person or organization, or asks to look someone up | `.agents/skills/atlas-cabinet/SKILL.md` |
+| wants a card for a person or organization, asks to look someone up, or to expand cards | `.agents/skills/atlas-cabinet/SKILL.md` |
 | names a project to work on, "new project", closes a session | `.agents/skills/atlas-project/SKILL.md` |
 | wants the demo notes gone ("clean the demo", "start fresh") | `.agents/skills/atlas-clean-demo/SKILL.md`; to load them: `engine/atlas.py demo` |
 
@@ -178,6 +183,7 @@ The current state in a few sentences. Rewrite it when something changes.
 | `/sketch <idea>` | atlas-sketch |
 | `/project <name>` | atlas-project: start |
 | `/close` | atlas-project: close (also outside a project: commit what you wrote, say what is next) |
+| `/expand-cards [name]` | atlas-cabinet, section 4: complete the minimal cards (or the one named) within the budget |
 | `/remember <fact>` | add it to `vault/you/profile.md` as `- <fact> (told by the user, YYYY-MM-DD)`; the user's own words beat anything an agent inferred |
 | `/check` | run `engine/atlas.py check`, fix what it reports, commit |
 | `/next` | run `engine/atlas.py next` and offer the suggestions as choices |
