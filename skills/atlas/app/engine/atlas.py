@@ -1821,6 +1821,8 @@ def cmd_say(args) -> None:
     record = {"ts": now_iso(), "role": "agent", "text": text}
     if args.progress:  # a short status line while you work; the user still sees "agent is working"
         record = {**record, "kind": "progress", "text": " ".join(text.split())[:300]}
+    if args.title:  # what you are doing now; Atlas shows it above the conversation
+        record["title"] = " ".join(args.title.split())[:80]
     if args.open:
         record["open"] = args.open
     agent = agent_id(args.agent)
@@ -2497,6 +2499,7 @@ def main() -> None:
     y.add_argument("--open", help="vault path Atlas should open for the user")
     y.add_argument("--agent", help="your id (the file name in agents/): the chat shows who answered")
     y.add_argument("--progress", action="store_true", help="a short status line while you work, not an answer")
+    y.add_argument("--title", help='what you are doing now, e.g. "Researching loop engineering"; shown above the conversation')
     rc = sub.add_parser("recall", parents=[common], help="print the cabinet cards a text names (stdin or a Claude Code prompt hook)")
     rc.add_argument("text", nargs="*")
     mn = sub.add_parser("mentions", parents=[common], help="which notes a person or organization wrote or appears in")

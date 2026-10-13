@@ -701,6 +701,13 @@ iframe.bhtml { width: 100%; height: 240px; border: 1px solid var(--line); border
 .op-conv { flex: 1 1 440px; min-width: 0; height: 100%; display: flex; flex-direction: column; border-right: 1px solid var(--line-2); }
 .op-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 20px; border-bottom: 1px solid var(--line-2); }
 .op-bar .meta { margin-left: auto; font: 11.5px var(--mono); color: var(--faint); }
+.op-title { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 0; font: 500 13.5px var(--sans); color: var(--text-2); }
+.op-title:empty { display: none; }
+.op-title .t { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.op-title.live { color: var(--text); }
+.op-title.live .t::after { content: "…"; display: inline-block; width: 0; overflow: hidden; vertical-align: bottom; animation: opDots 1.5s steps(4, end) infinite; }
+@keyframes opDots { to { width: 1.1em; } }
+@media (prefers-reduced-motion: reduce) { .op-title.live .t::after { animation: none; width: auto; } }
 .op-conv .chat-log { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 20px 24px 10px; display: flex; flex-direction: column; gap: 18px; }
 .op-conv .composer { padding: 12px 24px 20px; }
 .op-wb { flex: 1.25 1 480px; min-width: 0; height: 100%; display: flex; flex-direction: column; background: var(--bg-2); }

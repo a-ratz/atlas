@@ -88,6 +88,11 @@ When a message arrives:
    ```bash
    uv run --no-project engine/atlas.py say --agent <id> --progress "Found 9 sources, reading the 5 primary ones…"
    ```
+
+   With the first progress line, also say what you are doing in a few words:
+   `--title "Researching loop engineering"`. Atlas shows it above the
+   conversation while you work and keeps it there afterwards. Change it when
+   the phase changes ("Distilling 3 captures").
 3. Answer in Atlas:
 
    ```bash

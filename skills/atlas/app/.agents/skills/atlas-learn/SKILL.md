@@ -25,7 +25,8 @@ state it in the capture.
 ## 3. Research
 
 Research takes minutes. If Atlas runs, post a progress line at each real step
-so the user is not left with "agent is working…" (`engine/atlas.py say --agent <id> --progress "…"`):
+so the user is not left with "agent is working…" (`engine/atlas.py say --agent <id> --progress "…"`;
+give the first one `--title "Researching <topic>"`):
 the scope you picked, how many sources you found, which ones you are reading,
 that you are writing the capture.
 

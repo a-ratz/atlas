@@ -95,7 +95,9 @@ followed by a `CABINET` line for each person or organization it names (see Cabin
 means the user pressed a "Your move" button on that page (Distill, Next research
 avenues, …); the text says what they want. `via command` means they typed a
 `/command` from the chat's list (table below). When the work takes more than a
-minute, post short progress lines with `say --agent <id> --progress "…"` as you go. After
+minute, post short progress lines with `say --agent <id> --progress "…"` as you go, and
+give the first one a title (`--title "Researching loop engineering"`): Atlas shows it above the
+conversation. After
 answering, run `uv run --no-project engine/atlas.py next` and offer the useful
 suggestions as choices. Then listen again (mode A or B).
 
@@ -190,6 +192,7 @@ uv run --no-project engine/atlas.py serve [--operator] [--port 8765] [--vault DI
 uv run --no-project engine/atlas.py wait --agent <id> [--timeout SECONDS]
 uv run --no-project engine/atlas.py say --agent <id> "text" [--open <vault path>]   # "-" reads stdin
 uv run --no-project engine/atlas.py say --agent <id> --progress "Reading 6 sources…"  # status line while you work
+uv run --no-project engine/atlas.py say --agent <id> --progress "…" --title "Researching X"  # what you are doing, shown above the conversation
 uv run --no-project engine/atlas.py next      # counts + suggested next steps (JSON)
 uv run --no-project engine/atlas.py check     # notes with broken links, bad frontmatter or no connection (exit 1)
 uv run --no-project engine/atlas.py boot [<project>] --agent <id> [--checkout DIR]   # your context for a project
