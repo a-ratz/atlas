@@ -181,16 +181,18 @@ your own words, and offer one that fits their vault:
 - **Projects:** threads, decisions and lessons that every agent shares (`/project`).
 - **Tours** of what changed (`/tour`), **search**, and **reminders** (below).
 
-## Reminders
+## Reminders and the user's own notes
 
-"Remember to look into X", "remind me to …": that is a task for later, not a
-fact about the user. Write it as a note in `vault/you/notes/`, named
-`<YYYY-MM-DD-HHMMSS>-remind-<slug>.md`:
+"Remember to look into X", "remind me to …" is a task for later; "note that
+cue volume should ramp up" is a thought the user wants kept. Neither needs a
+source, and neither is a capture (captures hold research to distill). Write
+it as a note in `vault/you/notes/`, named
+`<YYYY-MM-DD-HHMMSS>-<remind | note>-<slug>.md`:
 
 ```markdown
 ---
 from: user
-action: remind
+action: remind            # remind | note
 created: <ISO time>
 status: new
 due: <YYYY-MM-DD, only if the user gave a day>
@@ -200,8 +202,9 @@ due: <YYYY-MM-DD, only if the user gave a day>
 ```
 
 Commit it and say where it is: Home lists it under "Needs you" until it is
-done. A fact about the user ("I prefer short answers") goes to
-`vault/you/profile.md` (`/remember`); a goal to `vault/you/goals.md`.
+done (a note: until the user or you mark it `seen`). A fact about the user
+("I prefer short answers") goes to `vault/you/profile.md` (`/remember`); a
+goal to `vault/you/goals.md`.
 
 ## The user's notes
 

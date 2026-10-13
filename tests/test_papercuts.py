@@ -87,3 +87,15 @@ def test_facts_name_where_their_wiki_links_point(engine, vault):
     assert view["fact_links"] == {"Replay helps memory": {"id": "insights/Replay helps memory.md",
                                                           "title": "Replay helps memory"}}
     assert re.search(r"raised_count", json.dumps(view["facts"]))  # the reader moves it behind the status
+
+
+@pytest.mark.parametrize("written", ["vault/captures/a-note.md", "captures/a-note.md", "ABS"])
+def test_say_opens_the_note_however_the_path_was_written(engine, vault, monkeypatch, written):
+    # `say --open vault/captures/x.md` from the Atlas folder linked to a note that does not exist (#17)
+    monkeypatch.chdir(vault.parent)
+    (vault / "captures").mkdir(exist_ok=True)
+    (vault / "captures" / "a-note.md").write_text("# A note\n", encoding="utf-8")
+    path = str(vault / "captures" / "a-note.md") if written == "ABS" else written
+    engine.cmd_say(Namespace(text="Here it is.", progress=False, title=None, open=path, agent=None))
+    last = engine.read_jsonl(engine.OUTBOX)[-1]
+    assert last["open"] == "captures/a-note.md"

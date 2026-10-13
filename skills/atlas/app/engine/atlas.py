@@ -1926,6 +1926,18 @@ def cmd_mentions(args) -> None:
             print(f"  {x['type']:9} {x['title']}  ({x['id']})")
 
 
+def note_path(path: str) -> str:
+    """A note path as Atlas names it, relative to the vault, however the agent wrote it: from the Atlas
+    folder (`vault/captures/x.md`), from the vault (`captures/x.md`) or absolute."""
+    p = Path(path)
+    for cand in ([p] if p.is_absolute() else [Path.cwd() / p, VAULT / p]):
+        try:
+            return cand.resolve().relative_to(VAULT.resolve()).as_posix()
+        except ValueError:
+            continue
+    return path.replace("\\", "/")
+
+
 def cmd_say(args) -> None:
     text = args.text if args.text != "-" else sys.stdin.read()
     record = {"ts": now_iso(), "role": "agent", "text": text}
@@ -1934,7 +1946,7 @@ def cmd_say(args) -> None:
     if args.title:  # what you are doing now; Atlas shows it above the conversation
         record["title"] = " ".join(args.title.split())[:80]
     if args.open:
-        record["open"] = args.open
+        record["open"] = note_path(args.open)
     agent = agent_id(args.agent)
     if agent:
         record["agent"] = agent
