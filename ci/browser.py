@@ -43,6 +43,9 @@ def routes(srv: Server) -> list[str]:
 
 
 def main() -> None:
+    for stream in (sys.stdout, sys.stderr):  # a Windows console or pipe would refuse "→" and "×" as cp1252
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     with tempfile.TemporaryDirectory() as tmp:
         vault = demo_vault(Path(tmp))
         with Server(vault, operator=True) as srv, sync_playwright() as pw:
