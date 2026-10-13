@@ -14,7 +14,7 @@ vault/               the user's knowledge. Plain Markdown files are the truth.
   insights/          atomic claims, one per file; maps are insights/<topic>-map.md
   sources/           processed captures and source notes (provenance)
   research/          optional longer research runs: research/<topic>/<date>/*.md
-  questions/         open questions and contradictions worth tracking
+  questions/         open questions that would change a claim: at most 7 open (atlas-distill, step 5)
   sketches/  specs/  ideas: rough (sketch) and worked out (spec)
   projects/<group>/  projects in groups (private is the default); _group.md holds the group's rules
     <slug>/          project.md + threads/ decisions/ lessons/: one memory, shared by every agent

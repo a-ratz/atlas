@@ -247,7 +247,8 @@ function renderNav() {
   const notes = count("insight") + count("map") + count("sketch") + count("spec");
   const typeLink = (t) => {
     const fresh = Math.max(0, t.count - (seen[t.id] ?? 0));
-    return `<a class="nav-link${t.count ? "" : " zero"}" data-t="${esc(t.id)}" href="#/t/${enc(t.id)}"><span style="width:12px;display:inline-flex;justify-content:center">${g(t.id)}</span><span class="lbl">${esc(t.plural)}</span>${fresh ? `<span class="new-count" title="${fresh} new since you last looked">+${fresh}</span>` : ""}<span class="count">${t.count}</span></a>`;
+    const only = (s) => s && !s.includes(",") ? `?status=${enc(s)}` : "";  // a link opens what its number counts
+    return `<a class="nav-link${t.count ? "" : " zero"}" data-t="${esc(t.id)}" href="#/t/${enc(t.id)}${only(t.count_status)}"><span style="width:12px;display:inline-flex;justify-content:center">${g(t.id)}</span><span class="lbl">${esc(t.plural)}</span>${fresh ? `<span class="new-count" title="${fresh} new since you last looked">+${fresh}</span>` : ""}<span class="count">${t.count}</span></a>${t.aside ? `<a class="nav-aside" href="#/t/${enc(t.id)}${only(t.aside_status)}">+${t.aside} ${esc(t.aside_label || "aside")}</a>` : ""}`;
   };
   let html = `<a class="nav-link primary" href="#/">${navIcon("home")}<span class="lbl">Home</span></a>
     <a class="nav-link primary" href="#/chat">${navIcon("chat")}<span class="lbl">Operator</span></a>
@@ -322,7 +323,7 @@ function confirmBox(title, text, ok = "OK") {
 function markNav() {
   const h = location.hash || "#/";
   const base = h.split("?")[0];
-  $$(".nav-link").forEach((a) => a.classList.toggle("active", a.getAttribute("href") === base));
+  $$(".nav-link").forEach((a) => a.classList.toggle("active", (a.getAttribute("href") || "").split("?")[0] === base));
   const tab = base.startsWith("#/chat") ? "chat" : base.startsWith("#/projects") || (state.current?.type && PROJECT_TYPES.has(state.current.type)) ? "projects" : base.startsWith("#/graph") ? "graph" : base === "#/" ? "home" : "";
   $$(".tabbar a").forEach((a) => a.classList.toggle("on", a.dataset.tab === tab));
 }
@@ -666,7 +667,9 @@ async function viewHome() {
         <div id="feed-box">${feedHtml(feedSlice(rows, days, cap), lastSeen)}</div>
         ${feedSlice(rows, days, cap).length < rows.length ? `<button class="btn ghost" id="feed-more" style="margin-top:8px">Earlier days</button>` : ""}
     </section>
-    ${recent.length ? `<section class="h-recent"><div class="sec-h"><h2>Fresh ideas and research</h2><a class="more" href="#/rediscover">Rediscover →</a></div><div class="grid">${recent.map((e) => card(e)).join("")}</div></section>` : ""}</div>`;
+    ${data.question || recent.length ? `<div class="h-recent">${data.question ? `<section class="h-question">
+      <div class="sec-h"><h2>What we don't know yet</h2><span class="sub">one open question a day</span><a class="more" href="#/t/question?status=open">All open questions →</a></div>
+      <div class="grid">${card(data.question)}</div></section>` : ""}${recent.length ? `<section${data.question ? ' class="home-sec"' : ""}><div class="sec-h"><h2>Fresh ideas and research</h2><a class="more" href="#/rediscover">Rediscover →</a></div><div class="grid">${recent.map((e) => card(e)).join("")}</div></section>` : ""}</div>` : ""}</div>`;
   wireNeeds(needs, data);
   $("#mark-seen").onclick = () => { store.set("atlas.lastSeen", new Date().toISOString()); toast("Marked as seen"); viewHome(); };
   const more = $("#feed-more");
@@ -696,7 +699,7 @@ async function viewList(type, params) {
   markTypeSeen(type);
   if (data.groups) return renderFrames(t, data.groups);
   const items = remember(data.items);
-  const facetKeys = ["status", "group", "project", "by", "category"].filter((k) => new Set(items.map((e) => facetVal(e, k)).filter(Boolean)).size > 1);
+  const facetKeys = ["status", "group", "project", "by", "category"].filter((k) => params.get(k) || new Set(items.map((e) => facetVal(e, k)).filter(Boolean)).size > 1);  // a filter from the link shows, so it can be cleared
   const active = {};
   for (const k of facetKeys) if (params.get(k)) active[k] = params.get(k);
   const due = params.get("due") === "1";
@@ -708,6 +711,7 @@ async function viewList(type, params) {
     $("#facets").innerHTML = facetKeys.map((k) => {
       const counts = {};
       for (const e of items) { const v = facetVal(e, k); if (v) counts[v] = (counts[v] || 0) + 1; }
+      if (active[k] && !(active[k] in counts)) counts[active[k]] = 0;  // a filter from a link stays visible, so it can be removed
       return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 14)
         .map(([v, c]) => `<button class="facet${active[k] === v ? " on" : ""}" data-k="${k}" data-v="${esc(v)}" aria-pressed="${active[k] === v}">${esc(v)}<span class="n">${c}</span></button>`).join("");
     }).join("") + (due ? `<button class="facet on" id="due-off">revisit due ✕</button>` : "");

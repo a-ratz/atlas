@@ -11,7 +11,7 @@ without dragging in unrelated context.
 
 `/distill all` (the arrow between Captures and Insights in Atlas): every
 capture in `captures/` that is not `kind: operational`, oldest first. Take them
-one at a time through steps 1 to 5, post a progress line per capture, and
+one at a time through steps 1 to 6, post a progress line per capture, and
 commit each capture on its own.
 
 ## 1. Read
@@ -81,7 +81,57 @@ Quality bar:
 - Cite paper versions (`2609.16247v2`) and set `revisit_after` for preprints
   (about three months out).
 
-## 5. Close the loop
+## 5. File the open questions that matter
+
+A capture ends with `## Open questions`. Most of them stay where they are: in the
+source, after step 6 moves it. A question gets its own file only if it passes
+all three tests:
+
+- the new insights do not answer it;
+- you can name the evidence that would answer it (a measurement, a source, an
+  experiment);
+- the answer would change or qualify a specific insight. That insight goes into
+  `affects:`.
+
+Research directions ("compare loop architectures on a task") are never
+questions. A large research session should yield a handful, not dozens.
+
+Before filing, look through `questions/` for one that already covers it:
+
+- **open** or **dormant**: do not file a second one. Raise its `raised_count` by
+  one and append `- also raised in [[<capture>]] (YYYY-MM-DD)`. A dormant one
+  becomes `open` again.
+- **dropped**: the user said they are not interested. Leave it.
+- **answered**: file the new question only if it asks something the answer did
+  not cover.
+
+`vault/questions/<question as a short sentence>.md`:
+
+```markdown
+---
+status: open
+raised: YYYY-MM-DD
+raised_count: 1
+affects: "[[<insight title>]]"
+source: <capture file name without .md>
+---
+
+# <The question, as a sentence ending in "?">
+
+Why it matters: what would change in [[<insight title>]] if the answer went
+either way. What would answer it.
+
+- raised in [[<capture file name without .md>]] (YYYY-MM-DD)
+```
+
+**At most 7 open questions.** `engine/atlas.py check` fails past seven. Before
+adding the eighth, answer one, merge two that ask the same thing, or set the
+coldest (lowest `raised_count`, then oldest `raised`) to `status: dormant`.
+Dormant questions are not lost: when a capture raises them again, they come
+back. The user moves questions with the buttons on their page: "Not interested"
+means `status: dropped`, "Later" means `status: dormant`.
+
+## 6. Close the loop
 
 1. Move the capture to `vault/sources/` (keep its name) so `captures/` only
    holds what still waits. If it names its authors or organizations but has no
@@ -97,6 +147,9 @@ Quality bar:
    - insights/<title 2>.md
    ```
    ````
+
+   Name the questions you filed or raised in one line ("One open question
+   filed, one raised again"), or that you filed none.
 
 4. Run `uv run --no-project engine/atlas.py check` and fix what it flags: a
    link that matches no note (usually a typo or a title you changed), a

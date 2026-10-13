@@ -118,11 +118,18 @@ types:
     plural: Open questions
     section: Knowledge
     globs: ["questions/*.md"]
-    fields: [status, raised]
+    fields: [status, raised, raised_count, affects]
     status: status
     date: raised
+    count: {only: [open], aside: [dormant], aside_label: resting}  # the sidebar counts open ones
+    checks:
+      require: [status, raised]
+      allowed: {status: [open, answered, dormant, dropped]}
+      resolve: [affects, source]
     moves:
       - {label: "🔎 Research this", send: "Research this open question"}
+      - {label: "🙅 Not interested", send: "Set this open question to dropped: I am not interested, and do not file it again"}
+      - {label: "⏸ Later", send: "Set this open question to dormant: not now"}
 
   # ---------------------------------------------------------------- Ideas
   - id: sketch

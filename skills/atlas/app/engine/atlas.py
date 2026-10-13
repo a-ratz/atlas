@@ -326,9 +326,13 @@ class Index:
             default_reg = yaml.safe_load((APP / "registry.default.yaml").read_text()) or {}
             defaults = {t["id"]: t for t in default_reg.get("types", [])}
             for tid, spec in self.types.items():
-                for key in ("moves", "checks"):
+                for key in ("moves", "checks", "count"):
                     if key not in spec and defaults.get(tid, {}).get(key):
                         spec[key] = defaults[tid][key]
+            q = self.types.get("question")
+            if q and [m.get("label") for m in q.get("moves") or []] == ["🔎 Research this"]:  # copied before 0.6.4
+                q["moves"] = [*q["moves"], *(m for m in defaults.get("question", {}).get("moves", [])
+                                            if m.get("label") != "🔎 Research this")]  # its own send text stays
             if self.commands is None:
                 self.commands = default_reg.get("commands")
             if "tour" not in self.types and "tour" in defaults:  # tours came after this registry was copied
@@ -457,9 +461,10 @@ class Index:
             e.unresolved = unresolved
             e.unresolved_fields = []
             for fld in (self.types[e.type].get("checks") or {}).get("resolve", []):  # frontmatter fields naming a note
-                val = e.meta.get(fld)
-                if isinstance(val, str) and val.strip() and not self.resolve(val.strip().strip("[]")):
-                    e.unresolved_fields.append(f"`{fld}: {val.strip()}` matches no note")
+                vals = e.meta.get(fld)
+                for val in vals if isinstance(vals, list) else [vals]:
+                    if isinstance(val, str) and val.strip() and not self.resolve(val.strip().strip("[]")):
+                        e.unresolved_fields.append(f"`{fld}: {val.strip()}` matches no note")
             for href, _ in MDLINK.findall(e.body):
                 hit = self.resolve_path(e.id, href)
                 if hit and hit != e.id and hit not in targets:
@@ -669,6 +674,31 @@ def rediscover(index: Index) -> dict:
         "insights_of_the_day": [e.card(index) for e in daily],
         "speculative_pick": [e.card(index) for e in rng.sample(speculative, min(3, len(speculative)))],
     }
+
+
+QUESTION_CAP = 7  # open questions a vault keeps; more reads like a backlog nobody works through
+
+
+def open_questions(index: Index) -> list[Entity]:
+    """Open questions, hottest first: raised most often, then most recently."""
+    qs = [e for e in index.entities.values() if e.type == "question" and str(e.status) == "open"]
+    return sorted(qs, key=lambda e: (_raised(e), e.date or ""), reverse=True)
+
+
+def _raised(e: Entity) -> int:
+    try:
+        return max(1, int(e.meta.get("raised_count") or 1))
+    except (TypeError, ValueError, OverflowError):  # OverflowError: `.inf` is valid YAML
+        return 1
+
+
+def question_of_the_day(index: Index) -> Entity | None:
+    """One open question for Home, from the three hottest, changing once a day."""
+    qs = open_questions(index)[:3]
+    if not qs:
+        return None
+    seed = int(hashlib.sha256(("q" + dt.date.today().isoformat()).encode()).hexdigest(), 16)
+    return random.Random(seed).choice(qs)
 
 
 def recent_of(index: Index, tid: str, n: int = 6) -> list[dict]:
@@ -1440,13 +1470,21 @@ def make_app(index: Index):
 
     async def meta(request):
         await run_in_threadpool(fresh)
-        counts, runs = {}, {}
+        counts, runs, aside = {}, {}, {}
         for e in index.entities.values():
+            rule = index.types.get(e.type, {}).get("count") or {}
+            if rule.get("aside") and str(e.status) in [str(s) for s in rule["aside"]]:
+                aside[e.type] = aside.get(e.type, 0) + 1
+            if rule.get("only") and str(e.status) not in [str(s) for s in rule["only"]]:
+                continue  # e.g. only open questions count; answered and dropped ones do not
             counts[e.type] = counts.get(e.type, 0) + 1
             runs.setdefault(e.type, set()).add(e.group)
         # a research run counts once however many documents it holds, the way its list shows it
-        types = [{**{k: v for k, v in t.items() if k not in ("globs", "exclude")},
-                  "count": len(runs.get(t["id"], ())) if t.get("group") == "frame" else counts.get(t["id"], 0)}
+        types = [{**{k: v for k, v in t.items() if k not in ("globs", "exclude", "count")},
+                  "count": len(runs.get(t["id"], ())) if t.get("group") == "frame" else counts.get(t["id"], 0),
+                  "aside": aside.get(t["id"], 0), "aside_label": (t.get("count") or {}).get("aside_label", ""),
+                  "count_status": ",".join(map(str, (t.get("count") or {}).get("only") or [])),
+                  "aside_status": ",".join(map(str, (t.get("count") or {}).get("aside") or []))}
                  for t in index.types.values()]
         ents = index.entities.values()
         projects = [{"id": e.id, "title": e.title, "group": e.group, "project": e.project, "status": e.status,
@@ -1467,7 +1505,9 @@ def make_app(index: Index):
         needs = {**needs_you(index), "fixes": [{**index.entities[n["id"]].card(index), "issues": n["issues"]} for n in h["notes"][:8]],
                  "fixes_total": h["total"]}
         needs["sigs"]["fixes"] = fingerprint(f"{n['id']}|{'|'.join(n['issues'])}" for n in h["notes"])
+        q = question_of_the_day(index)
         return JSONResponse({"feed": feed, "needs": needs, "rediscover": rediscover(index), "snoozed": snoozed(),
+                             "question": q.card(index) if q else None,
                              "tour": _plain(latest_tour(index)),
                              "metabolism": await run_in_threadpool(metabolism, index),
                              "recent": {t: recent_of(index, t) for t in ("sketch", "spec", "capture", "frame", "insight")}})
@@ -1863,12 +1903,17 @@ def health(index: Index) -> dict:
     checked = {tid for tid, spec in index.types.items() if "checks" in spec}  # types that declare checks (even `checks: {}`)
     agents = known_agents(index)
     notes, attribution = [], 0
+    qs = open_questions(index)
+    over = {e.id for e in qs[QUESTION_CAP:]}  # the coldest ones past the cap
     for e in sorted(ents, key=lambda e: e.id):
         issues = []
         if e.type in checked:
             issues += e.problems + e.unresolved_fields + [f"links to [[{u}]], which matches no note" for u in e.unresolved]
         if e in orphans:
             issues.append("no link to or from any other insight or map")
+        if e.id in over:
+            issues.append(f"one of {len(qs)} open questions, the cap is {QUESTION_CAP}: answer it, merge it into "
+                          "another, or set `status: dormant` (the coldest go first)")
         for key in ("created_by", "updated_by"):  # attribution is vault-wide, whatever the type
             who = e.meta.get(key)
             if who not in (None, "") and str(who) not in agents:
@@ -1882,7 +1927,7 @@ def health(index: Index) -> dict:
     ents = [e for e in ents if e.type in checked]
     return {"notes": notes, "total": len(notes), "frontmatter": sum(1 for e in ents if e.problems),
             "unresolved": sum(len(e.unresolved) + len(e.unresolved_fields) for e in ents), "orphans": len(orphans),
-            "attribution": attribution}
+            "attribution": attribution, "questions": len(over)}
 
 
 def known_agents(index: Index) -> set[str]:
@@ -1922,9 +1967,13 @@ def suggestions(index: Index) -> list[str]:
     if h["total"]:
         parts = [f"{n} {label}" for n, label in ((h["frontmatter"], "with frontmatter problems"),
                  (h["unresolved"], "unresolved link(s)"), (h["orphans"], "unconnected insight(s)"),
-                 (h["attribution"], "attribution problem(s)")) if n]
+                 (h["attribution"], "attribution problem(s)"), (h["questions"], "open question(s) past the cap")) if n]
         out.append(f"{h['total']} note(s) need a fix ({', '.join(parts)}): run `engine/atlas.py check` and fix them; "
                    "a wrong link is usually a typo or a renamed title")
+    qs = open_questions(index)
+    if len(qs) >= QUESTION_CAP:
+        out.append(f"{len(qs)} open questions, the cap is {QUESTION_CAP}: before filing more, answer one, merge two, "
+                   "or rest the coldest as `status: dormant` (skill atlas-distill, step 5)")
     if not content_count(index):
         out.append("The vault is empty: ask what the user is curious about and research it (skill atlas-learn)")
     return out

@@ -169,6 +169,8 @@ dialog.confirm h2 { margin: 0 0 8px; font: 400 26px/1.15 var(--serif); }
 dialog.confirm p { margin: 0 0 18px; color: var(--text-2); line-height: 1.55; }
 .confirm-acts { display: flex; justify-content: flex-end; gap: 8px; }
 .nav-link .count { font: 11px var(--mono); color: var(--faint); }
+.nav-aside { display: block; margin: -4px 0 2px 34px; font: 10.5px var(--mono); color: var(--faint); text-decoration: none; }
+.nav-aside:hover { color: var(--text-2); }
 .nav-link.zero { opacity: .55; }
 .nav-link .new-count, .nav-link .unread-count { font: 600 10.5px/1 var(--mono); padding: 3px 6px; border-radius: 99px; background: var(--acc); color: var(--on-acc); }
 .nav-sub { display: flex; flex-wrap: wrap; gap: 4px 10px; padding: 4px 10px 0 32px; font-size: 12px; color: var(--faint); }
