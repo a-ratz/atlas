@@ -53,12 +53,19 @@ description: One sentence about the project
 status: active            # active | paused | done
 repo: https://github.com/owner/repo   # if there is code
 aliases: []               # other names the user uses for it
+source: "[[<slug>-spec]]"  # the spec (or sketch) it came from, if any
 ---
 
 # <Project name>
 
-What it is, for whom, and why it exists. Link the sketch or spec it came from.
+What it is, for whom, and why it exists.
 ```
+
+**From a spec** ("Start a project" on a spec, `atlas-spec` step 7): `source:`
+names the spec. Write one thread for the spec's first slice, with `next:` its
+first step. If the spec asks build or adopt, write that as a decision with
+`status: proposed`. Then set the spec's `status: building`. Atlas shows the
+line project → spec → sketch in the project's margin.
 
 If there is a checkout on this machine, record it with `map-path`, not by
 hand. A new group is just a new folder with a `_group.md`.

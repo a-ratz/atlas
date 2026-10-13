@@ -80,7 +80,7 @@ When a message arrives:
    `[via command]` is a `/command` the user picked from the chat's list; AGENTS.md
    maps each one to its workflow.
 2. Do the work. Use the workflow skills (`atlas-learn`, `atlas-distill`,
-   `atlas-map`, `atlas-sketch`, `atlas-project`, `atlas-cabinet`). Atlas re-reads the vault within ~10 seconds,
+   `atlas-map`, `atlas-sketch`, `atlas-spec`, `atlas-project`, `atlas-cabinet`). Atlas re-reads the vault within ~10 seconds,
    so new files show up by themselves. If it takes more than a minute, keep
    the user posted with short progress lines (one per real step, not a
    heartbeat). They show as quiet status lines and do not end your turn:

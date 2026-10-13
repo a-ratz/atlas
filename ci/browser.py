@@ -91,6 +91,10 @@ def checks(page, base: str, scheme: str) -> None:
     page.wait_for_selector(".op-bar", timeout=15000)
     if not page.query_selector("#op-title"):
         failures.append(f"[{scheme}] the operator bar has no title slot (#1)")
+    page.goto(f"{base}/#/e/{urllib.parse.quote('projects/private/nightlight/project.md', safe='')}")
+    page.wait_for_selector(".side-col", timeout=15000)
+    if not (page.query_selector(".side-col .chain a[href*='specs']") and page.query_selector(".side-col .chain a[href*='sketches']")):
+        failures.append(f"[{scheme}] the project page does not show the spec and sketch it came from (#16)")
 
 
 if __name__ == "__main__":

@@ -37,7 +37,8 @@ commands:
   - {name: learn, args: "<topic or question>", help: "Research it and land the result as a capture", send: "/learn {args}"}
   - {name: distill, args: "[capture | all]", help: "Turn a capture into insights (the open one, the oldest, or all)", send: "/distill {args}"}
   - {name: map, args: "[theme]", help: "Build or update a map over insights that belong together", send: "/map {args}"}
-  - {name: sketch, args: "<idea>", help: "Write down a product or project idea", send: "/sketch {args}"}
+  - {name: sketch, args: "<idea> | ideas for <goal>", help: "Write down an idea, or ask for ideas from what the vault knows", send: "/sketch {args}"}
+  - {name: spec, args: "[sketch]", help: "Turn a sketch into a spec grounded in the vault", send: "/spec {args}"}
   - {name: project, args: "<name>", help: "Start working on a project: load its memory, rules and checkout", send: "/project {args}"}
   - {name: close, args: "", help: "Close the session: update threads, record decisions and lessons, commit", send: "/close"}
   - {name: expand-cards, args: "[name]", help: "Complete the minimal cards in the cabinet (or one), within the budget", send: "/expand-cards {args}"}
@@ -142,12 +143,18 @@ types:
     plural: Sketches
     section: Ideas
     globs: ["sketches/*.md"]
-    fields: [status, date]
+    fields: [status, date, origin, spec]
     status: status
     date: date
+    checks:
+      require: [description, status]
+      description_max: 150
+      allowed: {status: [sketch, specified, parked, superseded]}
+      resolve: [spec]
     moves:
       - {label: "🔎 Research prior art", send: "Research prior art for this idea"}
       - {label: "⚔️ Find the weak spots", send: "What are the weakest assumptions in this idea, and how could we test them cheaply?"}
+      - {label: "🧩 Turn into a spec", send: "Turn this sketch into a spec"}
 
   - id: spec
     label: Spec
@@ -157,8 +164,14 @@ types:
     fields: [status, date, source_sketch]
     status: status
     date: date
+    checks:
+      require: [description, status, source_sketch]
+      description_max: 150
+      allowed: {status: [draft, building, parked, superseded]}
+      resolve: [source_sketch]
     moves:
       - {label: "⚔️ Review it", send: "Review this spec: what is unclear, missing or risky?"}
+      - {label: "🚀 Start a project", send: "Start a project from this spec"}
 
   # ---------------------------------------------------------------- Projects
   # projects/<group>/_group.md, projects/<group>/<slug>/project.md and its threads/, decisions/, lessons/
@@ -167,8 +180,10 @@ types:
     plural: Projects
     section: Projects
     globs: ["projects/*/*/project.md"]
-    fields: [status, repo, paths]
+    fields: [status, repo, paths, source]
     status: status
+    checks:
+      resolve: [source]
     moves:
       - {label: "🚀 Work on it", send: "/project {project}"}
       - {label: "🧭 What's next?", send: "What should happen next in this project?"}

@@ -8,7 +8,7 @@ Claude Code specifics:
 
 - The workflows are also available as skills (`.claude/skills` links to
   `.agents/skills`): `atlas-operator`, `atlas-learn`, `atlas-distill`,
-  `atlas-map`, `atlas-sketch`, `atlas-project`, `atlas-cabinet`.
+  `atlas-map`, `atlas-sketch`, `atlas-spec`, `atlas-project`, `atlas-cabinet`.
 - Use listening mode A: run `uv run --no-project engine/atlas.py wait --agent <id>`
   with `run_in_background: true`. The task notification wakes you when the user
   writes. Re-arm it before you end every turn.

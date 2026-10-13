@@ -255,12 +255,13 @@ Atlas ships the workflows as skills that every harness reads from
 | ask a question or name a topic | `atlas-learn`: research it, land a capture with sources |
 | agree to distill | `atlas-distill`: one claim per insight, every claim traced to its source |
 | have a cluster of insights | `atlas-map`: group them into a map |
-| say "I have an idea…" | `atlas-sketch` |
+| say "I have an idea…", or ask for ideas | `atlas-sketch`: write it down, or generate candidates from the vault and keep the survivors |
+| want a sketch worked out | `atlas-spec`: a spec grounded in your insights, with a first slice; then a project |
 | want a card for someone, or ask to look them up | `atlas-cabinet`: create and update cards, optionally from LinkedIn |
 | name a project, or close a session | `atlas-project`: load its memory, keep threads, decisions and lessons current |
 | want the demo gone | `atlas-clean-demo` |
 
-In the chat, `/` lists the commands (`/learn`, `/distill`, `/map`, `/sketch`,
+In the chat, `/` lists the commands (`/learn`, `/distill`, `/map`, `/sketch`, `/spec`,
 `/project`, `/close`, `/remember`, `/check`, `/next`, `/tour`); add your own in
 `vault/atlas.yaml`.
 

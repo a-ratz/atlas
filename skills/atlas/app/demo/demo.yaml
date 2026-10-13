@@ -885,6 +885,7 @@ files:
     description: A sleep app that replays learning cues during deep sleep.
     status: active
     repo: "https://example.org/ada/nightlight"
+    source: "[[nightlight-cue-mode]]"
     created_by: codex
     updated_by: codex
     ---
@@ -1002,6 +1003,7 @@ files:
     - Yoo et al. 2007 (sleep loss and encoding)
   sketches/nightlight.md: |
     ---
+    description: Replay a learning session's sound quietly during deep sleep, so the night strengthens what the day taught.
     status: specified
     date: {{day:-6}}
     spec: "[[nightlight-cue-mode]]"
@@ -1015,6 +1017,7 @@ files:
     during deep sleep the following night. Starts with language learners.
   sketches/review-before-bed.md: |
     ---
+    description: A five-minute evening retrieval quiz that tags what sleep should keep.
     status: sketch
     date: {{day:-2}}
     created_by: claude
@@ -1079,6 +1082,7 @@ files:
     Neuron. Clicks timed to the up-phase of slow oscillations enhanced the oscillations and improved overnight retention of word pairs; out-of-phase clicks did not.
   specs/nightlight-cue-mode.md: |
     ---
+    description: Cues only in NREM sleep, detected by an EEG headband, with the volume capped and ramped up from silence.
     status: draft
     date: {{day:-3}}
     source_sketch: "[[nightlight]]"

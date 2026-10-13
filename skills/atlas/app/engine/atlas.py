@@ -346,6 +346,23 @@ class Index:
             old_commands = {"learn", "distill", "map", "sketch", "project", "close", "remember", "check", "next", "tour"}
             if self.commands is not None and {c.get("name") for c in self.commands} == old_commands:
                 self.commands = [*self.commands, *(c for c in default_reg.get("commands") or [] if c.get("name") == "expand-cards")]
+            ideas_07 = {  # what 0.7 shipped for ideas and projects: only that exact shape learns the spec step
+                "sketch": (["status", "date"], ["🔎 Research prior art", "⚔️ Find the weak spots"], ["origin", "spec"]),
+                "spec": (None, ["⚔️ Review it"], []),
+                "project": (["status", "repo", "paths"], None, ["source"]),
+            }
+            for tid, (old_fields, old_moves, new_fields) in ideas_07.items():
+                spec, default = self.types.get(tid), defaults.get(tid, {})
+                if not spec or not default:
+                    continue
+                if old_fields and spec.get("fields") == old_fields:
+                    spec["fields"] = [*old_fields, *new_fields]
+                if old_moves and [m.get("label") for m in spec.get("moves") or []] == old_moves:
+                    spec["moves"] = [*spec["moves"], *default.get("moves", [])[len(old_moves):]]
+            if self.commands is not None and {c.get("name") for c in self.commands} == old_commands | {"expand-cards"}:
+                at = next(i for i, c in enumerate(self.commands) if c.get("name") == "sketch") + 1
+                self.commands = [*self.commands[:at], *(c for c in default_reg.get("commands") or [] if c.get("name") == "spec"),
+                                 *self.commands[at:]]
             q = self.types.get("question")
             if q and [m.get("label") for m in q.get("moves") or []] == ["🔎 Research this"]:  # copied before 0.6.4
                 q["moves"] = [*q["moves"], *(m for m in defaults.get("question", {}).get("moves", [])

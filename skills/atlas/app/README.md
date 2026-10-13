@@ -66,7 +66,7 @@ something new arrived since you last looked.
 engine/        the web app (Python; `uv run --no-project engine/atlas.py --help`)
 vault/         your knowledge (Markdown) and atlas.yaml, which says which folder is what
 .agents/skills the agent workflows: atlas-operator, atlas-learn, atlas-distill, atlas-map,
-               atlas-sketch, atlas-project, atlas-cabinet (.claude/skills links here)
+               atlas-sketch, atlas-spec, atlas-project, atlas-cabinet (.claude/skills links here)
 AGENTS.md      instructions for any agent harness (CLAUDE.md imports it)
 .atlas-install.json  the factory version of every app file, for `upgrade` and `restore`
 ```
