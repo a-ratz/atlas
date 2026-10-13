@@ -1,0 +1,38 @@
+name: Feature
+description: A new feature or an extension
+labels: ["type:feature", "status:ready-for-refinement"]
+
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What should be built? A short, clear description of the result. A feature may take as long as it takes; split it into tasks (its sub-issues).
+      placeholder: Describe the feature and what it is good for.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance criteria
+      description: When is the issue done?
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: technical_notes
+    attributes:
+      label: Technical notes
+      description: Relevant technical details, APIs, data models, dependencies.
+      placeholder: |
+        - Affected components:
+        - Relevant endpoints:
+        - Dependencies:
+        - Additional context:
+    validations:
+      required: false

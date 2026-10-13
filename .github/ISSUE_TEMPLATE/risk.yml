@@ -1,0 +1,72 @@
+name: Risk
+description: Record a project risk
+labels: ["risk"]
+
+body:
+  - type: textarea
+    id: risk_description
+    attributes:
+      label: Risk
+      description: Which risk was identified?
+      placeholder: A short description of the risk.
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: What would the risk do to the project, its schedule, quality or operation?
+      placeholder: A description of the possible impact.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: probability
+    attributes:
+      label: Probability
+      description: How likely is the risk to occur?
+      options:
+        - Low
+        - Medium
+        - High
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How critical would the risk be if it occurred?
+      options:
+        - Low
+        - Medium
+        - High
+        - Critical
+    validations:
+      required: true
+
+  - type: textarea
+    id: mitigation
+    attributes:
+      label: Mitigation
+      description: Which measures can reduce or avoid the risk?
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: risk_status
+    attributes:
+      label: Status
+      description: The current status of the risk
+      options:
+        - Open
+        - Monitoring
+        - Mitigation in progress
+        - Occurred
+        - Closed
+    validations:
+      required: true
