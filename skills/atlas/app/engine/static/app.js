@@ -247,7 +247,8 @@ function renderNav() {
   const notes = count("insight") + count("map") + count("sketch") + count("spec");
   const typeLink = (t) => {
     const fresh = Math.max(0, t.count - (seen[t.id] ?? 0));
-    return `<a class="nav-link${t.count ? "" : " zero"}" data-t="${esc(t.id)}" href="#/t/${enc(t.id)}"><span style="width:12px;display:inline-flex;justify-content:center">${g(t.id)}</span><span class="lbl">${esc(t.plural)}</span>${fresh ? `<span class="new-count" title="${fresh} new since you last looked">+${fresh}</span>` : ""}<span class="count">${t.count}</span></a>${t.aside ? `<a class="nav-aside" href="#/t/${enc(t.id)}">+${t.aside} ${esc(t.aside_label || "aside")}</a>` : ""}`;
+    const only = (s) => s && !s.includes(",") ? `?status=${enc(s)}` : "";  // a link opens what its number counts
+    return `<a class="nav-link${t.count ? "" : " zero"}" data-t="${esc(t.id)}" href="#/t/${enc(t.id)}${only(t.count_status)}"><span style="width:12px;display:inline-flex;justify-content:center">${g(t.id)}</span><span class="lbl">${esc(t.plural)}</span>${fresh ? `<span class="new-count" title="${fresh} new since you last looked">+${fresh}</span>` : ""}<span class="count">${t.count}</span></a>${t.aside ? `<a class="nav-aside" href="#/t/${enc(t.id)}${only(t.aside_status)}">+${t.aside} ${esc(t.aside_label || "aside")}</a>` : ""}`;
   };
   let html = `<a class="nav-link primary" href="#/">${navIcon("home")}<span class="lbl">Home</span></a>
     <a class="nav-link primary" href="#/chat">${navIcon("chat")}<span class="lbl">Operator</span></a>
@@ -667,7 +668,7 @@ async function viewHome() {
         ${feedSlice(rows, days, cap).length < rows.length ? `<button class="btn ghost" id="feed-more" style="margin-top:8px">Earlier days</button>` : ""}
     </section>
     ${data.question || recent.length ? `<div class="h-recent">${data.question ? `<section class="h-question">
-      <div class="sec-h"><h2>What we don't know yet</h2><span class="sub">one open question a day</span><a class="more" href="#/t/question">All open questions →</a></div>
+      <div class="sec-h"><h2>What we don't know yet</h2><span class="sub">one open question a day</span><a class="more" href="#/t/question?status=open">All open questions →</a></div>
       <div class="grid">${card(data.question)}</div></section>` : ""}${recent.length ? `<section${data.question ? ' class="home-sec"' : ""}><div class="sec-h"><h2>Fresh ideas and research</h2><a class="more" href="#/rediscover">Rediscover →</a></div><div class="grid">${recent.map((e) => card(e)).join("")}</div></section>` : ""}</div>` : ""}</div>`;
   wireNeeds(needs, data);
   $("#mark-seen").onclick = () => { store.set("atlas.lastSeen", new Date().toISOString()); toast("Marked as seen"); viewHome(); };
@@ -698,7 +699,7 @@ async function viewList(type, params) {
   markTypeSeen(type);
   if (data.groups) return renderFrames(t, data.groups);
   const items = remember(data.items);
-  const facetKeys = ["status", "group", "project", "by", "category"].filter((k) => new Set(items.map((e) => facetVal(e, k)).filter(Boolean)).size > 1);
+  const facetKeys = ["status", "group", "project", "by", "category"].filter((k) => params.get(k) || new Set(items.map((e) => facetVal(e, k)).filter(Boolean)).size > 1);  // a filter from the link shows, so it can be cleared
   const active = {};
   for (const k of facetKeys) if (params.get(k)) active[k] = params.get(k);
   const due = params.get("due") === "1";

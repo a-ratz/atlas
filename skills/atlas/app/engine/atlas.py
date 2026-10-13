@@ -330,8 +330,9 @@ class Index:
                     if key not in spec and defaults.get(tid, {}).get(key):
                         spec[key] = defaults[tid][key]
             q = self.types.get("question")
-            if q and [m.get("label") for m in q.get("moves") or []] == ["🔎 Research this"]:  # the 0.6.3 default
-                q["moves"] = defaults.get("question", {}).get("moves", q["moves"])
+            if q and [m.get("label") for m in q.get("moves") or []] == ["🔎 Research this"]:  # copied before 0.6.4
+                q["moves"] = [*q["moves"], *(m for m in defaults.get("question", {}).get("moves", [])
+                                            if m.get("label") != "🔎 Research this")]  # its own send text stays
             if self.commands is None:
                 self.commands = default_reg.get("commands")
             if "tour" not in self.types and "tour" in defaults:  # tours came after this registry was copied
@@ -687,7 +688,7 @@ def open_questions(index: Index) -> list[Entity]:
 def _raised(e: Entity) -> int:
     try:
         return max(1, int(e.meta.get("raised_count") or 1))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):  # OverflowError: `.inf` is valid YAML
         return 1
 
 
@@ -1481,7 +1482,9 @@ def make_app(index: Index):
         # a research run counts once however many documents it holds, the way its list shows it
         types = [{**{k: v for k, v in t.items() if k not in ("globs", "exclude", "count")},
                   "count": len(runs.get(t["id"], ())) if t.get("group") == "frame" else counts.get(t["id"], 0),
-                  "aside": aside.get(t["id"], 0), "aside_label": (t.get("count") or {}).get("aside_label", "")}
+                  "aside": aside.get(t["id"], 0), "aside_label": (t.get("count") or {}).get("aside_label", ""),
+                  "count_status": ",".join(map(str, (t.get("count") or {}).get("only") or [])),
+                  "aside_status": ",".join(map(str, (t.get("count") or {}).get("aside") or []))}
                  for t in index.types.values()]
         ents = index.entities.values()
         projects = [{"id": e.id, "title": e.title, "group": e.group, "project": e.project, "status": e.status,
