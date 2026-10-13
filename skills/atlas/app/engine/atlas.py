@@ -369,6 +369,7 @@ class Index:
         self.by_stem: dict[str, str] = {}
         self.backlinks: dict[str, list[str]] = {}
         self.touched: dict[str, str] = {}
+        self.moved: dict[str, str] = {}  # old path -> new path, for notes seen leaving one and arriving at the other
         self.version = 0
         self.built_at = ""
         self._cache: dict[str, tuple[float, Entity]] = {}
@@ -451,12 +452,34 @@ class Index:
                     print(f"atlas: skipped {rel}: {exc}", file=sys.stderr)
             if not changed:
                 return False
+            self._track_moves(entities)
             self.entities = entities
             self._link()
             self.touched = git_last_touched()
             self.version += 1
             self.built_at = now_iso()
             return True
+
+    def _track_moves(self, entities: dict) -> None:
+        """A move is a note that left one path and arrived at another with the same file name in the same scan
+        (a capture distilled into sources/). A note that only vanished is no move, even if its name lives on."""
+        new = [n for n in entities if n not in self.entities]
+        for old in self.entities.keys() - entities.keys():
+            same = [n for n in new if Path(n).name == Path(old).name]
+            if len(same) > 1:  # two project.md moved at once: the project folder decides
+                same = [n for n in same if Path(n).parent.name == Path(old).parent.name]
+            if len(same) == 1:
+                self.moved[old] = same[0]
+        for rel in entities.keys() & self.moved.keys():  # a path in use again is no longer a move
+            del self.moved[rel]
+
+    def moved_to(self, rel: str) -> str | None:
+        """Where a note that moved (maybe more than once) lives now."""
+        seen = set()
+        while rel in self.moved and rel not in seen:
+            seen.add(rel)
+            rel = self.moved[rel]
+        return rel if seen and rel in self.entities else None
 
     def _link(self) -> None:
         rank = {t: i for i, t in enumerate(self.order)}
@@ -908,6 +931,7 @@ def entity_view(index: Index, eid: str) -> dict | None:
         "members": [e.card(index) for e in members],
         "group_note": group_note.card(index) if group_note else None,
         "modified": dt.datetime.fromtimestamp(ent.mtime).astimezone().isoformat(timespec="seconds") if ent.mtime else None,
+        "rev": ent.mtime,  # the index's own precision: an open page compares it to know its note changed
         "scale": [str(v) for v in allowed.get(spec.get("status") or "", [])],  # e.g. speculative → working → proven
         "provenance": [e.card(index) for e in provenance(index, ent)],
         "map_nav": map_nav(index, ent, maps),
@@ -1544,8 +1568,12 @@ def make_app(index: Index):
 
     async def entity(request):
         await run_in_threadpool(fresh)
-        view = await run_in_threadpool(entity_view, index, request.query_params.get("id", ""))
-        return JSONResponse(view) if view else JSONResponse({"error": "not found"}, status_code=404)
+        eid = request.query_params.get("id", "")
+        view = await run_in_threadpool(entity_view, index, eid)
+        if view:
+            return JSONResponse(view)
+        moved = index.moved_to(eid)  # a note the agent moved (a capture to sources/): the open page follows it
+        return JSONResponse({"error": "not found", **({"moved_to": moved} if moved else {})}, status_code=404)
 
     async def graph(request):
         await run_in_threadpool(fresh)

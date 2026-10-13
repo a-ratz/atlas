@@ -69,6 +69,7 @@ adds or changes a feature adds it to a scenario or writes a new one.
 | [research-to-questions](scenarios/research-to-questions.md) | research → capture → distill → insights, open questions, cards |
 | [upgrade](scenarios/upgrade.md) | the last release with content, upgraded to this checkout |
 | [search-by-meaning](scenarios/search-by-meaning.md) | QMD turned on, a paraphrase found, a new note findable, then off |
+| [open-page-follows](scenarios/open-page-follows.md) | an open page follows the agent: a distill moves the capture, "Later" changes a question |
 
 ## Budget
 
