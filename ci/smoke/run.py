@@ -73,6 +73,8 @@ def prepare(args) -> None:
     home.mkdir()
     env = {**os.environ, "HOME": str(home), "USERPROFILE": str(home), "XDG_CONFIG_HOME": str(home / ".config"),
            "APPDATA": str(home / "AppData" / "Roaming"), "LOCALAPPDATA": str(home / "AppData" / "Local"),
+           # agent CLIs install into these when set; the real ones must never be touched
+           "CLAUDE_CONFIG_DIR": str(home / ".claude"), "CODEX_HOME": str(home / ".codex"),
            "DO_NOT_TRACK": "1", "DISABLE_TELEMETRY": "1",
            # a user's machine has a git identity; the isolated HOME does not, and the install's first commit needs one
            "GIT_AUTHOR_NAME": "Smoke Test", "GIT_AUTHOR_EMAIL": "smoke@example.com",
@@ -103,6 +105,7 @@ def prepare(args) -> None:
                                "serve", "--operator", "--port", str(port)], env=env, stdout=log, stderr=subprocess.STDOUT,
                               start_new_session=True)
     url = f"http://127.0.0.1:{port}"
+    (run / "run.json").write_text(json.dumps({"run": str(run), "url": url, "pid": server.pid}), encoding="utf-8")
     for _ in range(300):
         try:
             urllib.request.urlopen(url + "/api/meta", timeout=2).read()
@@ -110,7 +113,8 @@ def prepare(args) -> None:
         except OSError:
             time.sleep(0.2)
     else:
-        sys.exit(f"the engine did not start; see {run / 'server.log'}")
+        end(server.pid)
+        sys.exit(f"the engine did not start; see {run / 'server.log'} (the run folder stays for a look: {run})")
 
     agent = args.id
     facts = {"run": str(run), "home": str(home), "atlas": str(atlas_dir), "vault": str(atlas_dir / "vault"),
@@ -125,16 +129,21 @@ def prepare(args) -> None:
     print(json.dumps(facts, indent=1))
 
 
+def end(pid: int) -> None:
+    """End the server and the Python process `uv run` started for it."""
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/T", "/F", "/PID", str(pid)], capture_output=True)
+    else:
+        try:
+            os.killpg(pid, signal.SIGTERM)  # the server runs in its own session: end the group
+        except (ProcessLookupError, PermissionError):
+            pass
+
+
 def stop(args) -> None:
     run = Path(args.run)
     facts = json.loads((run / "run.json").read_text(encoding="utf-8"))
-    if os.name == "nt":  # end uv and the Python process it started
-        subprocess.run(["taskkill", "/T", "/F", "/PID", str(facts["pid"])], capture_output=True)
-    else:
-        try:
-            os.killpg(facts["pid"], signal.SIGTERM)  # the server runs in its own session: end the group
-        except (ProcessLookupError, PermissionError):
-            pass
+    end(facts["pid"])
     if args.clean:
         shutil.rmtree(run, ignore_errors=True)
     print(f"stopped {facts['url']}{' and removed ' + str(run) if args.clean else ''}")
@@ -147,12 +156,12 @@ You are the agent connected to a fresh Atlas install, the way a user's agent wou
 - Atlas folder: `{atlas}` (its `AGENTS.md` and `.agents/skills/` are your instructions; read them first)
 - Your agent id: `{agent}`. Use `--agent {agent}` with `wait`, `say`, `boot` and `commit`.
 - Atlas runs at {url}; it is already started.
-- Isolation: work only inside `{run}`. Run every command with `HOME={home}` and the git identity
+- Isolation: work only inside `{run}`. Run every command with `HOME="{home}"` and the git identity
   `GIT_AUTHOR_NAME="Smoke Test" GIT_AUTHOR_EMAIL=smoke@example.com GIT_COMMITTER_NAME="Smoke Test"
   GIT_COMMITTER_EMAIL=smoke@example.com`, so nothing touches the real user's configuration.
   Do not install anything outside this folder.
 
-Loop: `uv run --no-project engine/atlas.py --vault {vault} wait --agent {agent}` (from `{atlas}`), do
+Loop: `uv run --no-project engine/atlas.py --vault "{vault}" wait --agent {agent}` (from `{atlas}`), do
 what the message asks with the skills, answer with `say`, and wait again. Stop after {timebox} minutes
 or when a message says "smoke run over". Keep a short log of what you did in `{run}/operator-log.md`:
 each request, the skill you used, what you wrote, anything that went wrong or was unclear in the
