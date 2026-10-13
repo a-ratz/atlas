@@ -64,7 +64,7 @@ def ensure_state() -> None:
     STATE.mkdir(parents=True, exist_ok=True)
     ignore = STATE / ".gitignore"
     if not ignore.exists():  # chat logs never get committed with the vault
-        ignore.write_text("*\n")
+        ignore.write_text("*\n", encoding="utf-8")
 
 
 def set_vault(path: str | Path | None) -> None:
@@ -209,10 +209,10 @@ TAG_FIELDS = ("people", "orgs")
 def registry_types() -> dict[str, dict]:
     """The registry's types, plus default types a vault registry copied before they existed."""
     import yaml
-    reg = yaml.safe_load(REGISTRY.read_text()) or {}
+    reg = yaml.safe_load(REGISTRY.read_text(encoding="utf-8")) or {}
     types = {t["id"]: t for t in reg.get("types", [])}
     if REGISTRY != APP / "registry.default.yaml":
-        for t in (yaml.safe_load((APP / "registry.default.yaml").read_text()) or {}).get("types", []):
+        for t in (yaml.safe_load((APP / "registry.default.yaml").read_text(encoding="utf-8")) or {}).get("types", []):
             if t["id"] in ("tour", "person", "org") and t["id"] not in types:
                 types[t["id"]] = t
     return cabinet_renamed(types)
@@ -319,11 +319,11 @@ def mentions(index: "Index", card: "Entity") -> dict:
 class Index:
     def __init__(self) -> None:
         import yaml
-        reg = yaml.safe_load(REGISTRY.read_text()) or {}
+        reg = yaml.safe_load(REGISTRY.read_text(encoding="utf-8")) or {}
         self.types = {t["id"]: t for t in reg.get("types", [])}
         self.commands = reg.get("commands")
         if REGISTRY != APP / "registry.default.yaml":  # a vault registry without moves/checks/commands gets the defaults
-            default_reg = yaml.safe_load((APP / "registry.default.yaml").read_text()) or {}
+            default_reg = yaml.safe_load((APP / "registry.default.yaml").read_text(encoding="utf-8")) or {}
             defaults = {t["id"]: t for t in default_reg.get("types", [])}
             for tid, spec in self.types.items():
                 for key in ("moves", "checks", "count"):
@@ -490,7 +490,7 @@ class Index:
 
 def git(*args: str) -> str:
     try:
-        return subprocess.run(["git", "-C", str(VAULT), *args], capture_output=True, text=True).stdout
+        return subprocess.run(["git", "-C", str(VAULT), *args], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
     except OSError:  # no git installed: Atlas still works, just without history
         return ""
 
@@ -1137,7 +1137,7 @@ def qmd_collections() -> dict[str, Path]:
     import yaml
     cfg = Path(os.environ.get("QMD_CONFIG_DIR", Path.home() / ".config" / "qmd")) / "index.yml"
     try:
-        data = yaml.safe_load(cfg.read_text()) or {}
+        data = yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}
     except OSError:
         return {}
     return {name: Path(c["path"]) for name, c in (data.get("collections") or {}).items() if "path" in c}
@@ -1156,7 +1156,7 @@ def deep_search(index: Index, q: str) -> list[dict]:
         args = ["qmd", "query", q, "--format", "json", "-n", "15"]
         for name in cols_here:
             args += ["-c", name]
-        proc = subprocess.run(args, capture_output=True, text=True, timeout=180)
+        proc = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180)
     except subprocess.TimeoutExpired:
         return []
     try:
@@ -1205,7 +1205,7 @@ _SNOOZE_LOCK = threading.Lock()
 
 def snoozed() -> dict:
     try:
-        data = json.loads(SNOOZE.read_text())
+        data = json.loads(SNOOZE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
     if not isinstance(data, dict):
@@ -1223,7 +1223,7 @@ def set_snooze(key: str, value: dict | None) -> dict:
             data[key] = value
         ensure_state()
         tmp = SNOOZE.with_suffix(".tmp")
-        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1))
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
         os.replace(tmp, SNOOZE)
         return data
 
@@ -1362,7 +1362,7 @@ def append_jsonl(path: Path, record: dict) -> None:
 
 def session() -> dict:
     try:
-        return json.loads(SESSION.read_text())
+        return json.loads(SESSION.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
 
@@ -1393,7 +1393,7 @@ def agents_state(inbox: list[dict] | None = None, out: list[dict] | None = None)
         if age > 2 * 86400:
             continue
         try:
-            info = json.loads((PRESENCE / f"{aid}.json").read_text())
+            info = json.loads((PRESENCE / f"{aid}.json").read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             info = {}
         mine = [m for m in inbox if not m.get("to") or m.get("to") == aid]
@@ -1748,7 +1748,7 @@ def cmd_serve(args) -> None:
                  f"Check `curl -s localhost:{args.port}/api/meta` (vault_path) or pass --port.")
     ensure_state()
     mode = "operator" if args.operator else "standalone"
-    SESSION.write_text(json.dumps({"mode": mode, "started": now_iso(), "port": args.port, "pid": os.getpid()}))
+    SESSION.write_text(json.dumps({"mode": mode, "started": now_iso(), "port": args.port, "pid": os.getpid()}), encoding="utf-8")
     if args.operator and not CURSOR.exists():
         write_cursor(len(read_jsonl(INBOX)))  # first operator run: older history counts as read
     t0 = time.time()
@@ -1761,7 +1761,7 @@ def cmd_serve(args) -> None:
 
 def read_cursor(path: Path | None = None) -> int:
     try:
-        return int((path or CURSOR).read_text().strip())
+        return int((path or CURSOR).read_text(encoding="utf-8").strip())
     except (OSError, ValueError):
         return len(read_jsonl(INBOX))  # unreadable cursor: never replay old history
 
@@ -1769,7 +1769,7 @@ def read_cursor(path: Path | None = None) -> int:
 def write_cursor(n: int, path: Path | None = None) -> None:
     path = path or CURSOR
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(str(n))
+    tmp.write_text(str(n), encoding="utf-8")
     os.replace(tmp, path)  # atomic: a concurrent reader never sees an empty file
 
 
@@ -1781,7 +1781,7 @@ def cmd_wait(args) -> None:
     side by side: each gets the messages addressed to it and those addressed to nobody."""
     ensure_state()
     agent = agent_id(args.agent)
-    lock = open(STATE / (f"wait-{agent}.lock" if agent else "wait.lock"), "w")
+    lock = open(STATE / (f"wait-{agent}.lock" if agent else "wait.lock"), "w", encoding="utf-8")
     try:
         try:
             import fcntl
@@ -2016,7 +2016,7 @@ def _norm_remote(url: str) -> str:
 
 def _git_out(*args: str, cwd: str | Path | None = None) -> str | None:
     try:
-        r = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, timeout=10)
+        r = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10)
     except (OSError, subprocess.TimeoutExpired):
         return None
     return r.stdout.strip() if r.returncode == 0 else None
@@ -2236,7 +2236,8 @@ def cmd_boot(args) -> None:
         ensure_state()
         PRESENCE.mkdir(parents=True, exist_ok=True)
         (PRESENCE / f"{agent}.json").write_text(json.dumps({"project": project.project if project else None,
-                                                            "group": project.group if project else None, "booted": now_iso()}))
+                                                            "group": project.group if project else None, "booted": now_iso()}),
+                                                encoding="utf-8")
     print(text)
 
 
@@ -2306,7 +2307,7 @@ def stamp(path: Path, agent: str, new_file: bool) -> str | None:
 
 def _lock(name: str):
     ensure_state()
-    handle = open(STATE / name, "w")
+    handle = open(STATE / name, "w", encoding="utf-8")
     deadline = time.time() + 30
     while True:
         try:
@@ -2328,7 +2329,7 @@ def cmd_commit(args) -> None:
     index = Index()
     agent = args.agent.strip().lower()
     paths = [Path(p) if Path(p).is_absolute() else (Path.cwd() / p) for p in args.paths]
-    paths = [p.resolve() if p.exists() else Path(os.path.normpath(p)) for p in paths]
+    paths = [p.resolve() for p in paths]  # follows links before "..", and resolves a moved file through its folder (/var → /private/var)
     own_file = VAULT / "agents" / f"{agent}.md"
     if agent not in known_agents(index) and not (own_file.exists() and own_file.resolve() in paths):
         sys.exit(f"unknown agent `{agent}`: write agents/{agent}.md first (and commit it in the same call)")
@@ -2374,7 +2375,7 @@ def cmd_commit(args) -> None:
         print("nothing to commit")
         return
     r = subprocess.run(["git", "commit", "-q", "-m", args.message, "-m", f"Atlas-Agent: {agent}"], cwd=top,
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
     lock.close()
     if r.returncode:
         sys.exit(r.stderr.strip() or r.stdout.strip())
@@ -2404,7 +2405,7 @@ def _demo_commit(message: str, agent: str | None, paths: list[str], when: dt.dat
     env = {**os.environ, "GIT_AUTHOR_DATE": when.isoformat(), "GIT_COMMITTER_DATE": when.isoformat()}
     body = message + "\n\nAtlas-Demo: true" + (f"\nAtlas-Agent: {agent}" if agent else "")
     for cmd in (["add", "-A", "--", *paths], ["commit", "-q", "-m", body, "--", *paths]):
-        done = subprocess.run(["git", "-C", str(VAULT), *cmd], capture_output=True, text=True, env=env)
+        done = subprocess.run(["git", "-C", str(VAULT), *cmd], capture_output=True, text=True, encoding="utf-8", errors="replace", env=env)
         if done.returncode:
             print(f"(git {cmd[0]} failed: {(done.stderr or done.stdout).strip()[:200]}; the files are written, commit them yourself)")
             return False
@@ -2420,7 +2421,7 @@ def cmd_demo(args) -> None:
     if args.remove:
         if not manifest.exists():
             sys.exit(f"no demo in this vault ({DEMO_MANIFEST} is missing)")
-        files = (json.loads(manifest.read_text()) or {}).get("files", {})
+        files = (json.loads(manifest.read_text(encoding="utf-8")) or {}).get("files", {})
         removed, kept = [], []
         for rel, digest in files.items():
             path = VAULT / rel
@@ -2531,6 +2532,9 @@ def cmd_expose(args) -> None:
 
 
 def main() -> None:
+    for stream in (sys.stdin, sys.stdout, sys.stderr):  # Windows pipes default to cp1252: an emoji or umlaut would break
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--vault", dest="vault_sub", help="vault directory (default: ./vault next to engine/, or $ATLAS_VAULT)")
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])

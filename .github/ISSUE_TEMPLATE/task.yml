@@ -7,7 +7,7 @@ body:
     id: task_description
     attributes:
       label: Task
-      description: What should be done? Every task belongs to a feature: attach it to its feature as a sub-issue.
+      description: "What should be done? Every task belongs to a feature: attach it to its feature as a sub-issue."
       placeholder: A short description of the task.
     validations:
       required: true

@@ -112,7 +112,7 @@ def write_manifest(home: Path, manifest: dict) -> None:
 
 
 def git(home: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", *args], cwd=home, capture_output=True, text=True)
+    return subprocess.run(["git", *args], cwd=home, capture_output=True, text=True, encoding="utf-8", errors="replace")
 
 
 def link_claude_skills(home: Path) -> str:
@@ -307,6 +307,9 @@ def restore(what: str, dry: bool) -> None:
 
 
 def main() -> None:
+    for stream in (sys.stdin, sys.stdout, sys.stderr):  # Windows pipes default to cp1252: an emoji or umlaut would break
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("status")
