@@ -16,8 +16,8 @@ note becomes findable without anyone running an index by hand.
 2. When the agent is done, open the search and look for a paraphrase of a demo note, not its words
    (for the sleep demo: "being woken by sounds at night").
 3. Ask the agent: "What do we know about waking people gently?"
-4. Ask the agent to capture a thought: "Note that cue volume should ramp up from silence." Wait a minute,
-   then search for it by meaning ("start the sound quietly").
+4. Tell the agent an idea: "I have an idea: a cue that ramps up from silence." Wait a minute after it
+   is written down, then search for it by meaning ("start the sound quietly").
 5. Ask the agent to turn search by meaning off, then search again with words from a note's title.
 
 ## Must be observable
@@ -26,7 +26,7 @@ note becomes findable without anyone running an index by hand.
   (cabinet, projects, ideas, insights, sources) in an index of the vault's own.
 - Atlas' search finds the demo note for the paraphrase, each note once.
 - The agent's answer in step 3 cites notes it found by meaning, by their titles.
-- The new note is findable by meaning within about a minute, with no command from the user.
+- The new sketch is findable by meaning within about a minute, with no command from the user.
 - After "off", search still works by words, and the agent says what stayed on the machine.
 
 ## Screenshots
