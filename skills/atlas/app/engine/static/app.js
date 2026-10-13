@@ -1494,7 +1494,7 @@ async function loadChat() {
   updateUnread(data.messages);
   const empty = `<div class="msg system">${state.operator.mode === "operator" ? "Say hi. Your agent is on the other end." : "Write a thought. It is kept as a note for your agent."}</div>`;
   if (state.chatOpen) renderLog($("#chat-log"), data.messages, empty);
-  if (onChatPage()) { renderLog($("#page-log"), data.messages, chatWelcome()); renderFilter(); renderTabs(); }
+  if (onChatPage()) { renderLog($("#page-log"), data.messages, chatWelcome()); renderFilter(); renderTabs(); renderOpTitle(); }
   refreshShift();
   const opener = [...data.messages].reverse().find((m) => m.role === "agent" && m.open);
   if (opener && lastOpen !== null && opener.ts !== lastOpen) {
@@ -1601,6 +1601,22 @@ async function sendText(text, via = null, context = null) {
 }
 
 // ------------------------------------------------------------------ views: operator (conversation + workbench)
+// The bar above the conversation names what the agent is doing (`say --title`). While it works on a
+// request it has not titled yet, the request stands in; when it is idle, the last title stays.
+function renderOpTitle() {
+  const el = $("#op-title");
+  if (!el) return;
+  const msgs = state.chatMessages, lastUser = msgs.filter((m) => m.role === "user").at(-1)?.ts || "";
+  const titled = msgs.filter((m) => m.role === "agent" && m.title).at(-1);
+  const busy = liveAgents().find((a) => a.state === "working");
+  const current = titled && (!busy || titled.ts >= lastUser);  // >=: timestamps have one-second resolution
+  let text = current ? titled.title : "";
+  if (current && titled.agent && named().length > 1) text = `${agentName(titled.agent)}: ${text}`;
+  if (!text && busy) text = busy.task ? `Working on: ${busy.task.text}` : "Working";
+  el.innerHTML = text ? `${busy ? '<span class="pulse"></span>' : ""}<span class="t">${esc(text)}</span>` : "";
+  el.title = text;
+  el.classList.toggle("live", !!busy);
+}
 function renderFilter() {
   const box = $("#op-filter");
   if (!box) return;
@@ -1651,7 +1667,7 @@ async function viewChat() {
   main.classList.add("bleed");
   main.innerHTML = `<div class="op">
     <section class="op-conv" aria-label="Conversation">
-      <div class="op-bar"><div class="seg" role="group" aria-label="Show messages from" id="op-filter" hidden></div><span class="meta">duplex · inbox ↔ outbox</span></div>
+      <div class="op-bar"><span class="op-title" id="op-title" aria-live="polite"></span><div class="seg" role="group" aria-label="Show messages from" id="op-filter" hidden></div><span class="meta">duplex · inbox ↔ outbox</span></div>
       <div class="chat-log" id="page-log"></div>
       ${composer("page", "Write to your agent…  type / for commands · Enter sends, Shift+Enter for a new line")}
     </section>
