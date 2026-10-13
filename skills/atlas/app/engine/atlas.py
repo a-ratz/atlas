@@ -2329,7 +2329,7 @@ def cmd_commit(args) -> None:
     index = Index()
     agent = args.agent.strip().lower()
     paths = [Path(p) if Path(p).is_absolute() else (Path.cwd() / p) for p in args.paths]
-    paths = [Path(os.path.normpath(p)).resolve() for p in paths]  # resolves links in existing folders, e.g. /var → /private/var
+    paths = [p.resolve() for p in paths]  # follows links before "..", and resolves a moved file through its folder (/var → /private/var)
     own_file = VAULT / "agents" / f"{agent}.md"
     if agent not in known_agents(index) and not (own_file.exists() and own_file.resolve() in paths):
         sys.exit(f"unknown agent `{agent}`: write agents/{agent}.md first (and commit it in the same call)")
@@ -2532,7 +2532,7 @@ def cmd_expose(args) -> None:
 
 
 def main() -> None:
-    for stream in (sys.stdout, sys.stderr):  # Windows pipes default to cp1252: an emoji or umlaut would stop the command
+    for stream in (sys.stdin, sys.stdout, sys.stderr):  # Windows pipes default to cp1252: an emoji or umlaut would break
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors="replace")
     common = argparse.ArgumentParser(add_help=False)

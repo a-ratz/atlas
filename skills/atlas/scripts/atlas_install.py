@@ -307,7 +307,7 @@ def restore(what: str, dry: bool) -> None:
 
 
 def main() -> None:
-    for stream in (sys.stdout, sys.stderr):  # Windows pipes default to cp1252: an emoji or umlaut would stop the command
+    for stream in (sys.stdin, sys.stdout, sys.stderr):  # Windows pipes default to cp1252: an emoji or umlaut would break
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)

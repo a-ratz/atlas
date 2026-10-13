@@ -67,3 +67,35 @@ def test_the_pr_check_fails_when_it_cannot_compare_with_the_base():
     spec.loader.exec_module(gate)
     gate.check_pr(Namespace(base="no-such-base-ref"))
     assert any("cannot compare" in f for f in gate.failures)
+
+
+@pytest.mark.skipif(not shutil.which("git"), reason="needs git")
+def test_commit_follows_a_link_before_going_up_a_folder(vault):
+    # normpath() before resolve() turned aliases/current/../note.md into aliases/note.md (#8, review round 2)
+    git = lambda *a: subprocess.run(["git", "-C", str(vault), *a], capture_output=True, text=True, check=True)
+    git("init", "-q")
+    git("config", "user.name", "gate")
+    git("config", "user.email", "gate@example.com")
+    (vault / "agents" / "gate.md").write_text("# Gate\n", encoding="utf-8")
+    (vault / "insights" / "subdir").mkdir(parents=True)
+    (vault / "aliases").mkdir()
+    try:
+        os.symlink(vault / "insights" / "subdir", vault / "aliases" / "current", target_is_directory=True)
+    except OSError:
+        pytest.skip("this system does not allow symlinks")
+    (vault / "insights" / "Linked note.md").write_text("# Linked note\n", encoding="utf-8")
+    git("add", "agents")
+    git("commit", "-q", "-m", "start")
+    r = engine(vault, "commit", "--agent", "gate", "-m", "the linked note",
+               str(vault / "aliases" / "current" / ".." / "Linked note.md"))
+    assert r.returncode == 0, r.stdout + r.stderr
+    committed = git("show", "--name-only", "--format=", "HEAD").stdout.split("\n")
+    assert "insights/Linked note.md" in committed
+
+
+def test_say_reads_utf8_from_a_cp1252_pipe(vault):
+    # the engine read stdin as cp1252 while callers send UTF-8: "Grüße" arrived as "GrÃ¼ÃŸe" (#8, review round 2)
+    r = engine(vault, "say", "-", input="Grüße — ein Test ✓", env={**os.environ, "PYTHONIOENCODING": "cp1252"})
+    assert r.returncode == 0, r.stderr
+    outbox = (vault / ".atlas" / "outbox.jsonl").read_text(encoding="utf-8")
+    assert "Grüße — ein Test ✓" in outbox
