@@ -99,6 +99,11 @@ options:
 ```
 ````
 
+If the research answered a file in `questions/` (the user pressed "Research
+this" on it, or the capture settles it), set its `status: answered` and add
+`- answered in [[<capture file name without .md>]] (YYYY-MM-DD)`. A question
+the research only narrowed stays open; update its text.
+
 Commit what you wrote: `engine/atlas.py commit --agent <id> -m "learn: <slug>" <paths>`.
 
 Do not distill in the same step unless the user asked for it; the capture is the

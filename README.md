@@ -226,7 +226,7 @@ vault/
   insights/   one claim per file; maps are insights/<topic>-map.md
   sources/    processed sources (provenance)
   research/   longer research runs
-  questions/  open questions and contradictions
+  questions/  open questions that would change a claim (at most 7 open)
   sketches/   specs/      ideas, rough and worked out
   projects/<group>/<project>/   project.md, threads/, decisions/, lessons/
   tours/      guided walks through what changed
@@ -302,7 +302,7 @@ single-user, local-first and young.
 
 ## Status and roadmap
 
-Atlas 0.6.3 is the current release. Stable: the
+Atlas 0.6.4 is the current release. Stable: the
 engine and reader, the duplex chat with answer blocks, project memory with boot
 packets, the checks, tours, the installer with upgrade and restore.
 
