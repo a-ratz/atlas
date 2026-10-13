@@ -2388,14 +2388,16 @@ def cmd_commit(args) -> None:
         return
     r = subprocess.run(["git", "commit", "-q", "-m", args.message, "-m", f"Atlas-Agent: {agent}"], cwd=top,
                        capture_output=True, text=True, encoding="utf-8", errors="replace")
+    # this commit's files, read before another agent's commit can move HEAD; -z: names as they are, unquoted
+    committed = [] if r.returncode else \
+        (_git_out("diff-tree", "-z", "--root", "--no-commit-id", "--name-only", "-r", "HEAD", cwd=top) or "").split("\0")
     lock.close()
     if r.returncode:
         sys.exit(r.stderr.strip() or r.stdout.strip())
     print(f"committed {_git_out('rev-parse', '--short', 'HEAD', cwd=top)} as {agent}: {len(rel_top)} path(s)")
     for n in notes:
         print(f"note: {n}")
-    committed = (_git_out("diff-tree", "--root", "--no-commit-id", "--name-only", "-r", "HEAD", cwd=top) or "").splitlines()
-    refresh = qmd_refresh_after_commit([os.path.relpath(Path(top) / f, VAULT).replace("\\", "/") for f in committed])
+    refresh = qmd_refresh_after_commit([os.path.relpath(Path(top) / f, VAULT).replace("\\", "/") for f in committed if f])
     if refresh:
         print(refresh)
 
@@ -2430,8 +2432,9 @@ def qmd(*args: str, index: str | None = None, timeout: float = 1800) -> subproce
     exe = qmd_bin()
     if not exe:
         return subprocess.CompletedProcess(["qmd", *args], 127, "", "qmd is not installed")
+    env = {k: v for k, v in os.environ.items() if k != "INDEX_PATH"}  # it would beat --index: one database for all
     return subprocess.run([exe, *(["--index", index] if index else []), *args], capture_output=True, text=True,
-                          encoding="utf-8", errors="replace", timeout=timeout, stdin=subprocess.DEVNULL)
+                          encoding="utf-8", errors="replace", timeout=timeout, stdin=subprocess.DEVNULL, env=env)
 
 
 def qmd_config_dir() -> Path:  # where QMD keeps <index>.yml, the way QMD finds it
@@ -2510,11 +2513,13 @@ def qmd_plan() -> tuple[str, list[dict]]:
 
 
 def qmd_index() -> str | None:
-    """The vault's QMD index when it is set up and on."""
+    """The vault's QMD index when it is set up, on, and still this vault's (a copied vault keeps the setting,
+    not the index: then nothing is searched or refreshed until `qmd setup` gives it one of its own)."""
     if qmd_state() != "on" or not qmd_bin():
         return None
     name = str(qmd_settings().get("index") or "atlas")
-    return name if qmd_collections(name) else None
+    cols = qmd_collections(name)
+    return name if cols and all(c["path"].resolve() == VAULT.resolve() for c in cols.values()) else None
 
 
 def qmd_areas_for(paths: list[str]) -> list[str]:

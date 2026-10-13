@@ -18,6 +18,7 @@ class FakeQmd:
 
     def __init__(self, engine, monkeypatch, conf: Path):
         self.calls: list[list[str]] = []
+        self.envs: list[dict] = []
         self.fail: set[str] = set()
         self.during: dict[str, callable] = {}
         self.hits: list[dict] = []
@@ -30,6 +31,7 @@ class FakeQmd:
             if args[0] != "/opt/qmd/bin/qmd.cmd":
                 return real(args, **kw)
             self.calls.append(args)
+            self.envs.append(kw.get("env") or {})
             rest = args[3:] if args[1] == "--index" else args[1:]
             if rest[0] in self.during:
                 self.during.pop(rest[0])()
@@ -165,24 +167,75 @@ def test_deep_search_reads_the_vaults_index(engine, vault, fake):
     assert fake.calls[-1][1:3] == ["--index", "atlas"]
 
 
-def test_a_folder_commit_refreshes_its_area(engine, vault, monkeypatch):
-    # `commit vault/insights` passed "insights" without a slash, and no refresh started (#15, review round 1)
+@pytest.fixture
+def repo(engine, vault, monkeypatch):
+    """The vault as a git repository with an agent that may commit; returns the paths each refresh got."""
     started = []
     monkeypatch.setattr(engine, "qmd_refresh_after_commit", lambda paths: started.append(paths))
-    git = lambda *a: subprocess.run(["git", "-C", str(vault), *a], check=True, capture_output=True)
-    git("init", "-q")
-    git("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "--allow-empty", "-m", "start")
+    for k, v in (("NAME", "t"), ("EMAIL", "t@example.com")):
+        monkeypatch.setenv(f"GIT_AUTHOR_{k}", v)
+        monkeypatch.setenv(f"GIT_COMMITTER_{k}", v)
+    subprocess.run(["git", "-C", str(vault), "init", "-q"], check=True)
+    subprocess.run(["git", "-C", str(vault), "commit", "-q", "--allow-empty", "-m", "start"], check=True)
     (vault / "agents").mkdir(exist_ok=True)
     (vault / "agents" / "tester.md").write_text("---\nname: Tester\n---\n\n# Tester\n", encoding="utf-8")
-    (vault / "insights" / "A new claim.md").write_text("---\ndescription: d\n---\n\n# A new claim\n", encoding="utf-8")
-    monkeypatch.setenv("GIT_AUTHOR_NAME", "t")
-    monkeypatch.setenv("GIT_AUTHOR_EMAIL", "t@example.com")
-    monkeypatch.setenv("GIT_COMMITTER_NAME", "t")
-    monkeypatch.setenv("GIT_COMMITTER_EMAIL", "t@example.com")
+    return started
+
+
+def commit(engine, vault, *paths):
     engine.cmd_commit(Namespace(agent="tester", message="m",
-                                paths=[str(vault / "insights"), str(vault / "agents" / "tester.md")]))
-    assert "insights/A new claim.md" in started[0]
-    assert engine.qmd_areas_for(started[0]) == ["insights"]
+                                paths=[str(vault / p) for p in paths] + [str(vault / "agents" / "tester.md")]))
+
+
+def test_a_folder_commit_refreshes_its_area(engine, vault, repo):
+    # `commit vault/insights` passed "insights" without a slash, and no refresh started (#15, review round 1)
+    (vault / "insights" / "A new claim.md").write_text("---\ndescription: d\n---\n\n# A new claim\n", encoding="utf-8")
+    commit(engine, vault, "insights")
+    assert "insights/A new claim.md" in repo[0]
+    assert engine.qmd_areas_for(repo[0]) == ["insights"]
+
+
+def test_a_note_with_umlauts_refreshes_its_area(engine, vault, repo):
+    # git quoted "Grüße" as "insights/Gr\303\274\303\237e.md", which matched no area (#15, review round 2)
+    (vault / "insights" / "Grüße 🌙.md").write_text("---\ndescription: d\n---\n\n# Grüße\n", encoding="utf-8")
+    commit(engine, vault, "insights/Grüße 🌙.md")
+    assert "insights/Grüße 🌙.md" in repo[0]
+
+
+def test_the_refresh_reads_its_own_commit_not_a_later_one(engine, vault, repo, monkeypatch):
+    # another agent's commit right after the lock let go hid this commit's insight from the refresh (#15, round 2)
+    real_lock = engine._lock
+
+    def lock_then_race(name):
+        held = real_lock(name)
+        close = held.close
+
+        def close_and_commit():
+            close()
+            (vault / "you").mkdir(exist_ok=True)
+            (vault / "you" / "goals.md").write_text("# Goals\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(vault), "add", "you/goals.md"], check=True)
+            subprocess.run(["git", "-C", str(vault), "commit", "-q", "-m", "other agent"], check=True)
+        return type("Held", (), {"close": staticmethod(close_and_commit)})()
+    monkeypatch.setattr(engine, "_lock", lock_then_race)
+    (vault / "insights" / "A raced claim.md").write_text("---\ndescription: d\n---\n\n# A raced claim\n", encoding="utf-8")
+    commit(engine, vault, "insights/A raced claim.md")
+    assert "insights/A raced claim.md" in repo[0]
+
+
+def test_an_index_of_another_vault_is_not_this_ones(engine, vault, fake):
+    # a copied vault keeps `qmd.index` and would search and refresh the original's index (#15, review round 2)
+    fake.add("atlas", "atlas-insights", Path("/somewhere/else/vault"))
+    engine.qmd_set(enabled="on", index="atlas")
+    assert engine.qmd_index() is None
+    assert engine.qmd_refresh_after_commit(["insights/x.md"]) is None
+
+
+def test_qmd_never_sees_index_path(engine, vault, fake, monkeypatch):
+    # INDEX_PATH beats --index in QMD: every vault would share one database (#15, review round 2)
+    monkeypatch.setenv("INDEX_PATH", "/elsewhere/qmd/index.sqlite")
+    engine.qmd("status", index="atlas")
+    assert fake.envs[-1] and "INDEX_PATH" not in fake.envs[-1]
 
 
 def test_smoke_runs_keep_qmd_inside_the_run(tmp_path):
