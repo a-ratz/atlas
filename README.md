@@ -310,7 +310,7 @@ single-user, local-first and young.
 
 ## Status and roadmap
 
-Atlas 0.7.1 is the current release. Stable: the
+Atlas 0.7.2 is the current release. Stable: the
 engine and reader, the duplex chat with answer blocks, project memory with boot
 packets, the checks, tours, the installer with upgrade and restore.
 
