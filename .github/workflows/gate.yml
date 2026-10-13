@@ -1,0 +1,85 @@
+# The pull request gate (ci/gate.py, ci/browser.py, tests/). Each check protects a claim Atlas makes,
+# can fail, and costs seconds. Ubuntu runs everything; macOS and Windows run what does not need a browser.
+name: Gate
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]  # edited: adding screenshots to the description re-runs it
+  push:
+    branches: [main]
+permissions:
+  contents: read
+  pull-requests: read
+concurrency:
+  group: gate-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  # the branch a pull request goes into; on main, the commit before the push
+  BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+jobs:
+  gate:
+    name: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Static, docs and hygiene
+        run: uv run ci/gate.py static docs hygiene
+      - name: Pyflakes
+        run: uvx ruff check --select F --exclude "**/vendor/**" .
+      - name: Tests
+        run: uv run ci/gate.py tests
+      - name: Demo site (the engine answers every page of the demo vault)
+        run: uv run site/build.py --out "$RUNNER_TEMP/site"
+      - name: Operator, upgrade and installer
+        run: uv run ci/gate.py operator upgrade installer --base "$BASE"
+      - name: Release and screenshots
+        if: github.event_name == 'pull_request'
+        run: uv run ci/gate.py pr --base "$BASE"
+      - name: Browser smoke
+        run: |
+          uv run --no-project --with playwright==1.55.0 playwright install --with-deps chromium
+          uv run ci/browser.py
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Codex review (advisory)
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(gh pr view "${{ github.event.number }}" --repo "${{ github.repository }}" --json comments \
+                --jq '[.comments[].body | select(test("Local Codex review"))] | length')
+          [ "$n" -gt 0 ] || echo "::warning::No \"Local Codex review\" comment yet: the workflow asks for review rounds before the merge."
+
+  platforms:
+    name: platforms (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Static and docs
+        run: uv run ci/gate.py static docs
+      - name: Demo site
+        run: uv run site/build.py --out "$RUNNER_TEMP/site"
+      - name: Operator, upgrade and installer
+        run: uv run ci/gate.py operator upgrade installer --base "$BASE"
