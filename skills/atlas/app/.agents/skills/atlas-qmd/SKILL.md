@@ -9,23 +9,25 @@ description: Search the vault by meaning with QMD and keep its collections set u
 Atlas finds notes by what they mean, not only by the words they share. It runs
 on the user's machine; nothing leaves it.
 
-`uv run --no-project engine/atlas.py qmd status` says whether QMD is installed
-and on for this vault, and which collections exist. The prefix is `qmd.prefix`
-in `vault/atlas.yaml` (`atlas` unless another vault on this machine took it).
+The vault has a QMD index of its own, so Atlas never touches the user's other
+QMD collections. Its name is `qmd.index` in `vault/atlas.yaml` (`atlas` unless
+another vault on this machine took it); every `qmd` command for the vault
+carries `--index <name>`. `uv run --no-project engine/atlas.py qmd status` says
+whether QMD is installed and on, the index, and which collections exist.
 
 ## Which collection answers what
 
 | Question | Collection |
 |---|---|
-| What does the vault already know about X? (`atlas-learn`, step 1) | `<prefix>-insights`, `<prefix>-sources` |
-| Is this claim already in the vault? (`atlas-distill`, duplicates) | `<prefix>-insights` |
-| Who is this person or organization? (`atlas-cabinet`) | `<prefix>-cabinet` |
-| Do we have this idea already? (`atlas-sketch`) | `<prefix>-ideas` |
-| What did we decide or learn on a project? (`atlas-project`) | `<prefix>-projects` |
+| What does the vault already know about X? (`atlas-learn`, step 1) | `atlas-insights`, `atlas-sources` |
+| Is this claim already in the vault? (`atlas-distill`, duplicates) | `atlas-insights` |
+| Who is this person or organization? (`atlas-cabinet`) | `atlas-cabinet` |
+| Do we have this idea already? (`atlas-sketch`) | `atlas-ideas` |
+| What did we decide or learn on a project? (`atlas-project`) | `atlas-projects` |
 
 ```bash
-qmd query $'intent: <what you are looking for>\nlex: <exact words or a name>\nvec: <the question in plain words>' \
-  -c <prefix>-insights -n 10 --format json
+qmd --index <name> query $'intent: <what you are looking for>\nlex: <exact words or a name>\nvec: <the question in plain words>' \
+  -c atlas-insights -n 10 --format json
 ```
 
 Combine `lex:` (exact words) and `vec:` (meaning). Open each hit before you cite
@@ -34,10 +36,10 @@ syntax: `qmd skill show`.
 
 ## Fresh without asking
 
-`engine/atlas.py commit` refreshes the collections a commit touched in the
-background, one run at a time (log: `vault/.atlas/qmd-sync.log`). Run
-`engine/atlas.py qmd sync [cabinet projects ideas insights sources]` by hand
-only after editing files without committing.
+`engine/atlas.py commit` refreshes the index in the background when the commit
+touched one of the five areas, one run at a time (log:
+`vault/.atlas/qmd-sync.log`). Run `engine/atlas.py qmd sync` by hand only after
+editing files without committing; it says when QMD failed.
 
 ## When QMD is off or missing
 
@@ -48,11 +50,11 @@ Search with `grep -ril "<words>" vault/<folder>` or, while Atlas runs,
 
 - **On:** if `qmd --version` fails, ask first (it needs Node.js or Bun, and its
   first run downloads about 2 GB of models), then `npm install -g @tobilu/qmd`.
-  Then `engine/atlas.py qmd setup`: it creates the five collections with a
-  context line each and embeds them.
-- **An older collection over the whole vault** doubles every result:
-  `engine/atlas.py qmd setup --replace-old` removes it.
-- **Off:** `engine/atlas.py qmd off` (the collections stay in QMD).
+  Then `engine/atlas.py qmd setup`: it creates the index with the five
+  collections, a context line each, and embeds them. When embedding fails, it
+  says why and leaves search by meaning off.
+- **Off:** `engine/atlas.py qmd off`. Deep search falls back to instant
+  search; the index stays on the machine.
 - **Repair:** `qmd status` lists what is missing; `qmd setup` again adds it.
 
-Never remove or change a QMD collection that does not belong to this vault.
+Never remove or change a QMD collection outside the vault's index.

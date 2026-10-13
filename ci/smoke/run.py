@@ -71,6 +71,7 @@ def isolate_qmd(env: dict) -> None:
     (about 2 GB that would otherwise download again). Without models QMD downloads them on first use."""
     home = Path(env["HOME"])
     env["XDG_CACHE_HOME"], env["QMD_CONFIG_DIR"] = str(home / ".cache"), str(home / ".config" / "qmd")
+    env.pop("INDEX_PATH", None)  # it would point QMD's database outside the run
     models = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "qmd" / "models"
     if models.is_dir():
         (home / ".cache" / "qmd").mkdir(parents=True, exist_ok=True)

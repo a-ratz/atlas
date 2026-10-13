@@ -1150,49 +1150,36 @@ def fast_search(index: Index, q: str, tid: str | None, limit: int = 60) -> list[
     return [e.card(index) for _, _, e in scored[:limit]]
 
 
-def qmd_collections() -> dict[str, Path]:
-    import yaml
-    cfg = Path(os.environ.get("QMD_CONFIG_DIR", Path.home() / ".config" / "qmd")) / "index.yml"
-    try:
-        data = yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}
-    except OSError:
-        return {}
-    return {name: Path(c["path"]) for name, c in (data.get("collections") or {}).items() if "path" in c}
-
-
 def deep_search(index: Index, q: str) -> list[dict]:
-    if not shutil.which("qmd"):
-        return []
+    """QMD's hits in the vault's own index; before `qmd setup`, in collections of QMD's default index that a
+    user pointed at the vault by hand (how Atlas searched before 0.8). Off means off."""
     q = q.strip().lstrip("-").strip()
-    if not q:
+    if not q or qmd_state() == "off" or not qmd_bin():
         return []
-    cols_here = [name for name, path in qmd_collections().items() if path.resolve() == VAULT or VAULT in path.resolve().parents]
-    if not cols_here:
+    name = qmd_index()
+    cols = qmd_collections(name) if name else {n: c for n, c in qmd_collections().items()
+                                                if c["path"].resolve() == VAULT or VAULT in c["path"].resolve().parents}
+    if not cols:
         return []  # this vault is not indexed in QMD; the caller falls back to instant search
     try:
-        args = ["qmd", "query", q, "--format", "json", "-n", "15"]
-        for name in cols_here:
-            args += ["-c", name]
-        proc = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180)
-    except subprocess.TimeoutExpired:
+        r = qmd("query", q, "--format", "json", "-n", "15", *[a for n in cols for a in ("-c", n)], index=name,
+                timeout=180)
+        hits = json.loads(r.stdout or "[]")
+    except (subprocess.TimeoutExpired, json.JSONDecodeError):
         return []
-    try:
-        hits = json.loads(proc.stdout or "[]")
-    except json.JSONDecodeError:
-        return []
-    cols, out, seen = qmd_collections(), [], set()
+    out, seen = [], set()
     for h in hits:
-        m = re.match(r"qmd://([^/]+)/(.+)$", h.get("file", ""))
+        m = re.match(r"qmd://([^/]+)/([^?]+)", h.get("file", ""))  # a named index adds ?index=<name>
         if not m or m.group(1) not in cols:
             continue
         try:
-            rel = (cols[m.group(1)] / m.group(2)).resolve().relative_to(VAULT.resolve()).as_posix()
+            rel = (cols[m.group(1)]["path"] / m.group(2)).resolve().relative_to(VAULT.resolve()).as_posix()
         except ValueError:
             rel = None
-        e = index.entities.get(rel) if rel else None
-        if rel and rel in seen:  # an older whole-vault collection and an area collection can both hold a note
+        if rel and rel in seen:  # two collections a user made by hand can both hold a note
             continue
         seen.add(rel)
+        e = index.entities.get(rel) if rel else None
         snippet = re.sub(r"^@@.*?\n", "", h.get("snippet", ""), flags=re.S).strip()[:300]
         if e:
             out.append({**e.card(index), "snippet": snippet, "score": h.get("score")})
@@ -1515,7 +1502,7 @@ def make_app(index: Index):
         return JSONResponse({"types": types, "version": index.version, "built_at": index.built_at,
                              "operator": operator_state(), "vault": VAULT.name, "vault_path": str(VAULT), "user": index.user,
                              "total": len(index.entities), "content": content_count(index),
-                             "qmd": bool(shutil.which("qmd")), "commands": index.commands, "drop": index.drop,
+                             "qmd": bool(qmd_bin()) and qmd_state() != "off", "commands": index.commands, "drop": index.drop,
                              "projects": projects, "agents": agents})
 
     async def home_data(request):
@@ -1571,9 +1558,10 @@ def make_app(index: Index):
         if request.query_params.get("mode") == "deep":
             if forbidden(request):  # the slow path only for Atlas itself
                 return JSONResponse({"error": "forbidden"}, status_code=403)
-            results = await run_in_threadpool(deep_search, index, q) if shutil.which("qmd") else []
+            results = await run_in_threadpool(deep_search, index, q)
             if not results:
-                note = ("Deep search needs QMD (github.com/tobi/qmd) and its collections for this vault: "
+                note = ("Search by meaning is off for this vault; showing instant results." if qmd_state() == "off" else
+                        "Deep search needs QMD (github.com/tobi/qmd) and its collections for this vault: "
                         "`engine/atlas.py qmd setup` (skill atlas-qmd); showing instant results.")
                 return JSONResponse({"mode": "fast", "note": note, "results": fast_search(index, q, tid)})
             return JSONResponse({"mode": "deep", "results": results})
@@ -2406,33 +2394,61 @@ def cmd_commit(args) -> None:
     print(f"committed {_git_out('rev-parse', '--short', 'HEAD', cwd=top)} as {agent}: {len(rel_top)} path(s)")
     for n in notes:
         print(f"note: {n}")
-    refresh = qmd_refresh_after_commit([os.path.relpath(p, VAULT).replace("\\", "/") for p in paths])
+    committed = (_git_out("diff-tree", "--root", "--no-commit-id", "--name-only", "-r", "HEAD", cwd=top) or "").splitlines()
+    refresh = qmd_refresh_after_commit([os.path.relpath(Path(top) / f, VAULT).replace("\\", "/") for f in committed])
     if refresh:
         print(refresh)
 
 
 # --------------------------------------------------------------------------- qmd: search by meaning
 #
-# QMD (github.com/tobi/qmd) indexes five areas of the vault as collections named <prefix>-<area>. Deep search
-# and the workflows (atlas-qmd skill) query them. `qmd setup` creates them; `atlas.py commit` refreshes the ones
-# a commit touched, in the background and one run at a time (`qmd sync`).
+# QMD (github.com/tobi/qmd) indexes five areas of the vault as collections atlas-<area>, in an index of the
+# vault's own (`qmd --index <name>`): a refresh re-reads only these collections, never the user's other ones
+# (or their update hooks), and names cannot collide with another vault's. Deep search and the workflows
+# (atlas-qmd skill) query it. `qmd setup` creates it; `atlas.py commit` refreshes it in the background when a
+# commit touched an area, one run at a time (`qmd sync`).
 
-QMD_AREAS = [  # area, root inside the vault, mask, the context line QMD keeps for the collection
+QMD_AREAS = [  # area, mask inside the vault, the context line QMD keeps for the collection
     # Every collection is rooted at the vault and narrowed by its mask, so an area that has no folder yet
     # (a fresh vault has no cabinet/) is still a valid collection that fills as notes arrive.
-    ("cabinet", ".", "cabinet/**/*.md", "People and organizations: one card each with role, relation and timeline"),
-    ("projects", ".", "projects/**/*.md", "Projects: project.md, threads, decisions and lessons per project"),
-    ("ideas", ".", "{sketches,specs}/**/*.md", "Ideas: rough sketches and worked-out specs"),
-    ("insights", ".", "insights/**/*.md", "Insights: one claim per note, the title is the claim; maps are *-map.md"),
-    ("sources", ".", "{sources,research}/**/*.md", "Sources and research runs: processed captures with their evidence"),
+    ("cabinet", "cabinet/**/*.md", "People and organizations: one card each with role, relation and timeline"),
+    ("projects", "projects/**/*.md", "Projects: project.md, threads, decisions and lessons per project"),
+    ("ideas", "{sketches,specs}/**/*.md", "Ideas: rough sketches and worked-out specs"),
+    ("insights", "insights/**/*.md", "Insights: one claim per note, the title is the claim; maps are *-map.md"),
+    ("sources", "{sources,research}/**/*.md", "Sources and research runs: processed captures with their evidence"),
 ]
 QMD_ROOTS = {"cabinet": ("cabinet/",), "projects": ("projects/",), "ideas": ("sketches/", "specs/"),
              "insights": ("insights/",), "sources": ("sources/", "research/")}
 
 
-def qmd(*args: str, timeout: float = 1800) -> subprocess.CompletedProcess:
-    return subprocess.run(["qmd", *args], capture_output=True, text=True, encoding="utf-8", errors="replace",
-                          timeout=timeout)
+def qmd_bin() -> str | None:
+    """The resolved launcher: on Windows npm installs `qmd.cmd`, which a bare `qmd` does not find."""
+    return shutil.which("qmd")
+
+
+def qmd(*args: str, index: str | None = None, timeout: float = 1800) -> subprocess.CompletedProcess:
+    exe = qmd_bin()
+    if not exe:
+        return subprocess.CompletedProcess(["qmd", *args], 127, "", "qmd is not installed")
+    return subprocess.run([exe, *(["--index", index] if index else []), *args], capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", timeout=timeout, stdin=subprocess.DEVNULL)
+
+
+def qmd_config_dir() -> Path:  # where QMD keeps <index>.yml, the way QMD finds it
+    if os.environ.get("QMD_CONFIG_DIR"):
+        return Path(os.environ["QMD_CONFIG_DIR"])
+    return Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "qmd"
+
+
+def qmd_collections(index: str = "index") -> dict[str, dict]:
+    """The collections of a QMD index (`index` is QMD's default one): name -> {path, pattern}."""
+    import yaml
+    try:
+        data = yaml.safe_load((qmd_config_dir() / f"{index}.yml").read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return {}
+    return {n: {"path": Path(c["path"]), "pattern": c.get("pattern", "**/*.md")}
+            for n, c in (data.get("collections") or {}).items() if isinstance(c, dict) and "path" in c}
 
 
 def qmd_settings() -> dict:
@@ -2453,7 +2469,12 @@ def qmd_state() -> str:
 
 def qmd_set(**values: str) -> None:
     """Set keys of the `qmd:` block in the vault's atlas.yaml; every other line stays as it is."""
-    lines = REGISTRY.read_text(encoding="utf-8").splitlines() if REGISTRY.exists() else []
+    global REGISTRY
+    own = VAULT / "atlas.yaml"
+    if REGISTRY != own:  # a vault on the app's default registry gets its own copy, not a change for every vault
+        shutil.copyfile(REGISTRY, own)
+        REGISTRY = own
+    lines = REGISTRY.read_text(encoding="utf-8").splitlines()
     if "qmd:" not in [ln.split("#")[0].strip() for ln in lines]:
         lines += ["", "qmd:                  # search by meaning (atlas-qmd)"]
     start = next(i for i, ln in enumerate(lines) if ln.split("#")[0].strip() == "qmd:")
@@ -2476,17 +2497,24 @@ def qmd_set(**values: str) -> None:
     REGISTRY.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def qmd_plan(existing: dict[str, Path]) -> list[dict]:
-    """The five collections for this vault. A prefix another vault already uses gets the vault's name added."""
-    want = str(qmd_settings().get("prefix") or "atlas")
-    plan = lambda prefix: [{"area": a, "name": f"{prefix}-{a}", "path": (VAULT / root).resolve(), "mask": mask,
-                            "context": ctx} for a, root, mask, ctx in QMD_AREAS]
+def qmd_plan() -> tuple[str, list[dict]]:
+    """This vault's index and its five collections. An index name another vault uses gets the vault's name added."""
+    want = str(qmd_settings().get("index") or "atlas")
+    cols = [{"area": a, "name": f"atlas-{a}", "path": VAULT.resolve(), "mask": mask, "context": ctx}
+            for a, mask, ctx in QMD_AREAS]
     for n in range(10):
-        prefix = want if n == 0 else f"{want}-{slug(VAULT.name, 24)}" + (f"-{n}" if n > 1 else "")
-        cols = plan(prefix)
-        if all(c["name"] not in existing or existing[c["name"]].resolve() == c["path"] for c in cols):
-            return cols
-    sys.exit("could not find a free collection prefix; set qmd.prefix in atlas.yaml")
+        name = want if n == 0 else f"{want}-{slug(VAULT.name, 24)}" + (f"-{n}" if n > 1 else "")
+        if all(c["path"].resolve() == VAULT.resolve() for c in qmd_collections(name).values()):
+            return name, cols
+    sys.exit("could not find a free QMD index name; set qmd.index in atlas.yaml")
+
+
+def qmd_index() -> str | None:
+    """The vault's QMD index when it is set up and on."""
+    if qmd_state() != "on" or not qmd_bin():
+        return None
+    name = str(qmd_settings().get("index") or "atlas")
+    return name if qmd_collections(name) else None
 
 
 def qmd_areas_for(paths: list[str]) -> list[str]:
@@ -2511,86 +2539,87 @@ def _try_lock(name: str):
         return None
 
 
-def qmd_sync(areas: list[str] | None) -> str:
-    """Re-index and embed the areas' collections; one run at a time, a busy run picks the request up."""
-    s = qmd_settings()
-    if qmd_state() != "on" or not shutil.which("qmd"):
-        return "qmd is off for this vault"
-    dirty = STATE / "qmd.dirty"
-    lock = _try_lock("qmd.lock")
-    if lock is None:
-        dirty.write_text(",".join(areas or [a for a, *_ in QMD_AREAS]), encoding="utf-8")
-        return "a sync is running; it picks this change up when it is done"
-    prefix = str(s.get("prefix") or "atlas")
-    try:
-        todo = set(areas or [a for a, *_ in QMD_AREAS])
-        for _ in range(3):  # a commit during the run marks the vault dirty: go round once more
-            dirty.unlink(missing_ok=True)
-            qmd("update")
-            for area in sorted(todo):
-                qmd("embed", "-c", f"{prefix}-{area}")
-            if not dirty.exists():
-                break
-            todo = set(filter(None, dirty.read_text(encoding="utf-8").split(",")))
-        return f"qmd: refreshed {', '.join(f'{prefix}-{a}' for a in sorted(todo))}"
-    finally:
-        lock.close()
+def qmd_sync() -> tuple[bool, str]:
+    """Re-read and embed the vault's index, one run at a time. A request while a run holds the lock leaves a
+    mark the run takes before it lets go, so no change waits for the next commit."""
+    index = qmd_index()
+    if not index:
+        return True, "qmd is off for this vault"
+    pending = STATE / "qmd.pending"
+    ensure_state()
+    pending.touch()
+    runs, errors = 0, []
+    while True:
+        lock = _try_lock("qmd.lock")
+        if lock is None:  # the holder finds the mark after it lets go, or a later run does
+            return True, "a sync is running; it picks this change up when it is done" if not runs else \
+                f"qmd: refreshed {index} ({runs} run(s)); a newer sync took over"
+        try:
+            while pending.exists():
+                pending.unlink(missing_ok=True)
+                runs += 1
+                for step in (["update"], ["embed"]):
+                    r = qmd(*step, index=index)
+                    if r.returncode:
+                        errors.append(f"qmd {step[0]} failed: {(r.stderr or r.stdout).strip()[-400:]}")
+                        break
+        finally:
+            lock.close()
+        if not pending.exists():
+            break
+    if errors:
+        return False, "\n".join(errors)
+    return True, f"qmd: refreshed {index} ({', '.join(f'atlas-{a}' for a, *_ in QMD_AREAS)})"
 
 
 def qmd_refresh_after_commit(paths: list[str]) -> str | None:
-    """Start `qmd sync` for the touched areas in the background, so the commit does not wait for embeddings."""
-    if qmd_state() != "on" or not shutil.which("qmd"):
-        return None
+    """Start `qmd sync` in the background when the commit touched an area, so the commit does not wait."""
     areas = qmd_areas_for(paths)
-    if not areas:
+    if not areas or not qmd_index():
         return None
     ensure_state()
     log = open(STATE / "qmd-sync.log", "a", encoding="utf-8")
     kw = {"creationflags": 0x00000008 | 0x00000200} if os.name == "nt" else {"start_new_session": True}
-    subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--vault", str(VAULT), "qmd", "sync", *areas],
+    subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--vault", str(VAULT), "qmd", "sync"],
                      stdout=log, stderr=log, stdin=subprocess.DEVNULL, **kw)
-    return f"qmd: refreshing {', '.join(areas)} in the background"
+    return f"qmd: refreshing {', '.join(areas)} in the background (log: .atlas/qmd-sync.log)"
 
 
 def cmd_qmd(args) -> None:
     if args.action == "off":
         qmd_set(enabled="off")
-        print("qmd is off for this vault: deep search uses instant search, the collections stay in QMD")
+        print("qmd is off for this vault: deep search uses instant search; the index stays on this machine "
+              "(`qmd --index <name> collection list` shows it)")
         return
     if args.action == "sync":
-        print(qmd_sync(args.areas or None))
+        ok, msg = qmd_sync()
+        print(msg)
+        if not ok:
+            sys.exit(1)
         return
-    have = shutil.which("qmd")
-    existing = qmd_collections()
-    cols = qmd_plan(existing)
-    old = [n for n, p in existing.items() if p.resolve() == VAULT.resolve() and n not in {c["name"] for c in cols}]
+    name, cols = qmd_plan()
+    existing = qmd_collections(name)
     if args.action == "status":
-        s = qmd_settings()
-        print(f"qmd: {'installed' if have else 'not installed'}; enabled: {qmd_state()}; prefix: "
-              f"{s.get('prefix', 'atlas')}")
+        print(f"qmd: {'installed' if qmd_bin() else 'not installed'}; enabled: {qmd_state()}; index: {name}")
         for c in cols:
             print(f"  {c['name']}: {'ok' if c['name'] in existing else 'missing'}  ({c['mask']} in {c['path']})")
-        for n in old:
-            print(f"  {n}: an older collection over the whole vault; `qmd setup --replace-old` removes it")
         return
-    if not have:  # setup
+    if not qmd_bin():  # setup
         sys.exit("qmd is not installed: `npm install -g @tobilu/qmd` (or bun), then run this again")
     for c in cols:
         if c["name"] not in existing:
-            r = qmd("collection", "add", str(c["path"]), "--name", c["name"], "--mask", c["mask"])
+            r = qmd("collection", "add", str(c["path"]), "--name", c["name"], "--mask", c["mask"], index=name)
             if r.returncode:
-                sys.exit(f"qmd collection add {c['name']} failed: {r.stderr.strip() or r.stdout.strip()}")
-            qmd("context", "add", f"qmd://{c['name']}", c["context"])
-        print(f"collection {c['name']}: {c['mask']} in {c['path']}")
-    for n in old:
-        if args.replace_old:
-            qmd("collection", "remove", n)
-            print(f"removed the older whole-vault collection {n}")
-        else:
-            print(f"note: {n} covers the whole vault and doubles the results; `qmd setup --replace-old` removes it")
-    qmd_set(enabled="on", prefix=cols[0]["name"].rsplit("-", 1)[0])
+                sys.exit(f"qmd collection add {c['name']} failed: {(r.stderr or r.stdout).strip()}")
+            qmd("context", "add", f"qmd://{c['name']}", c["context"], index=name)
+        print(f"collection {c['name']} in index {name}: {c['mask']} in {c['path']}")
+    qmd_set(enabled="on", index=name)
     print("embedding the collections now (the first run downloads QMD's models, about 2 GB) …")
-    print(qmd_sync(None))
+    ok, msg = qmd_sync()
+    print(msg)
+    if not ok:
+        qmd_set(enabled="off")
+        sys.exit("search by meaning stays off until `engine/atlas.py qmd setup` succeeds")
 
 
 # --------------------------------------------------------------------------- demo
@@ -2771,8 +2800,6 @@ def main() -> None:
     sub.add_parser("check", parents=[common])
     qp = sub.add_parser("qmd", parents=[common], help="search by meaning with QMD: setup, sync, status, off")
     qp.add_argument("action", choices=["setup", "sync", "status", "off"])
-    qp.add_argument("areas", nargs="*", help="sync: only these areas (cabinet, projects, ideas, insights, sources)")
-    qp.add_argument("--replace-old", action="store_true", help="setup: remove an older collection over the whole vault")
     bo = sub.add_parser("boot", parents=[common], help="the context an agent loads before working on a project")
     bo.add_argument("project", nargs="?", help="project slug, title or alias (omit for an overview)")
     bo.add_argument("--agent", required=True, help="your id: the file name in agents/ (claude, codex, ...)")

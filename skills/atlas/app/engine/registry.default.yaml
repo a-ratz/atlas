@@ -35,7 +35,7 @@ cabinet:
 
 qmd:                  # search by meaning (atlas-qmd); asked once at install
   enabled: ask        # ask | on | off
-  prefix: atlas       # collections <prefix>-cabinet, -projects, -ideas, -insights, -sources
+  index: atlas        # this vault's QMD index (qmd --index atlas): atlas-cabinet, -projects, -ideas, -insights, -sources
 
 commands:
   - {name: learn, args: "<topic or question>", help: "Research it and land the result as a capture", send: "/learn {args}"}

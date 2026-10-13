@@ -23,7 +23,7 @@ note becomes findable without anyone running an index by hand.
 ## Must be observable
 
 - The agent asks before it sets anything up and names what it creates: five collections
-  (cabinet, projects, ideas, insights, sources) under one prefix.
+  (cabinet, projects, ideas, insights, sources) in an index of the vault's own.
 - Atlas' search finds the demo note for the paraphrase, each note once.
 - The agent's answer in step 3 cites notes it found by meaning, by their titles.
 - The new note is findable by meaning within about a minute, with no command from the user.

@@ -1,23 +1,119 @@
-"""Search by meaning (#5): collections, prefix, settings, the refresh after a commit, deep search."""
+"""Search by meaning (#5): the vault's own QMD index, settings, the refresh after a commit, deep search."""
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
+from argparse import Namespace
 from pathlib import Path
 
+import pytest
 
-def test_the_five_collections_and_a_free_prefix(engine, vault):
-    cols = engine.qmd_plan({})
-    assert [c["name"] for c in cols] == ["atlas-cabinet", "atlas-projects", "atlas-ideas", "atlas-insights", "atlas-sources"]
-    assert all(c["path"] == vault.resolve() for c in cols)  # rooted at the vault: a missing folder is fine
-    taken = {"atlas-insights": Path("/somewhere/else/vault")}  # another vault on this machine uses "atlas"
-    assert engine.qmd_plan(taken)[0]["name"] == f"atlas-{engine.slug(vault.name, 24)}-cabinet"
+from conftest import ROOT
 
 
-def test_paths_map_to_areas(engine):
-    paths = ["insights/A claim.md", "sketches/idea.md", "research/run/brief.md", "cabinet/people/x.md", "you/goals.md"]
-    assert engine.qmd_areas_for(paths) == ["cabinet", "ideas", "insights", "sources"]
+class FakeQmd:
+    """Stands in for the qmd launcher: records every call, answers from `replies`, can run a side effect."""
+
+    def __init__(self, engine, monkeypatch, conf: Path):
+        self.calls: list[list[str]] = []
+        self.fail: set[str] = set()
+        self.during: dict[str, callable] = {}
+        self.hits: list[dict] = []
+        self.conf = conf
+        monkeypatch.setenv("QMD_CONFIG_DIR", str(conf))
+        monkeypatch.setattr(engine.shutil, "which", lambda name: "/opt/qmd/bin/qmd.cmd" if name == "qmd" else None)
+        real = subprocess.run
+
+        def run(args, **kw):
+            if args[0] != "/opt/qmd/bin/qmd.cmd":
+                return real(args, **kw)
+            self.calls.append(args)
+            rest = args[3:] if args[1] == "--index" else args[1:]
+            if rest[0] in self.during:
+                self.during.pop(rest[0])()
+            if rest[0] in self.fail:
+                return subprocess.CompletedProcess(args, 1, "", f"{rest[0]}: model download failed")
+            if rest[:2] == ["collection", "add"]:  # what QMD writes: <index>.yml with the collection
+                index = args[2] if args[1] == "--index" else "index"
+                self.add(index, rest[rest.index("--name") + 1], Path(rest[2]), rest[rest.index("--mask") + 1])
+            if rest[0] == "query":
+                return subprocess.CompletedProcess(args, 0, json.dumps(self.hits), "")
+            return subprocess.CompletedProcess(args, 0, "", "")
+
+        monkeypatch.setattr(engine.subprocess, "run", run)
+
+    def add(self, index: str, name: str, path: Path, pattern: str = "**/*.md") -> None:
+        import yaml
+        cfg = self.conf / f"{index}.yml"
+        data = yaml.safe_load(cfg.read_text(encoding="utf-8")) if cfg.exists() else {}
+        data.setdefault("collections", {})[name] = {"path": str(path), "pattern": pattern}
+        self.conf.mkdir(parents=True, exist_ok=True)
+        cfg.write_text(yaml.safe_dump(data), encoding="utf-8")
+
+
+@pytest.fixture
+def fake(engine, vault, monkeypatch, tmp_path):
+    return FakeQmd(engine, monkeypatch, tmp_path / "qmd-config")
+
+
+def test_setup_builds_the_vaults_own_index(engine, vault, fake):
+    engine.cmd_qmd(Namespace(action="setup"))
+    assert all(call[1:3] == ["--index", "atlas"] for call in fake.calls)  # never QMD's default index
+    names = {c[c.index("--name") + 1] for c in fake.calls if "add" in c and "collection" in c}
+    assert names == {"atlas-cabinet", "atlas-projects", "atlas-ideas", "atlas-insights", "atlas-sources"}
+    assert engine.qmd_settings() == {"enabled": True, "index": "atlas"}
+
+
+def test_a_second_vault_gets_an_index_of_its_own(engine, vault, fake):
+    fake.add("atlas", "atlas-insights", Path("/somewhere/else/vault"))  # another vault on this machine
+    name, _ = engine.qmd_plan()
+    assert name == f"atlas-{engine.slug(vault.name, 24)}"
+
+
+def test_qmd_runs_through_the_resolved_launcher(engine, vault, fake):
+    # a bare "qmd" does not find npm's qmd.cmd on Windows (#15, review round 1)
+    engine.qmd("status", index="atlas")
+    assert fake.calls[-1][0] == "/opt/qmd/bin/qmd.cmd"
+
+
+def test_a_sync_touches_only_the_vaults_index(engine, vault, fake):
+    # `qmd update` re-read every collection on the machine and ran their update hooks (#15, review round 1)
+    engine.cmd_qmd(Namespace(action="setup"))
+    fake.calls.clear()
+    assert engine.qmd_sync()[0]
+    assert [c[1:] for c in fake.calls] == [["--index", "atlas", "update"], ["--index", "atlas", "embed"]]
+
+
+def test_a_failed_embed_is_reported_and_setup_stays_off(engine, vault, fake):
+    # sync said "refreshed" and setup turned QMD on although embedding failed (#15, review round 1)
+    fake.fail.add("embed")
+    with pytest.raises(SystemExit):
+        engine.cmd_qmd(Namespace(action="setup"))
+    assert engine.qmd_state() == "off"
+    engine.qmd_set(enabled="on")
+    ok, msg = engine.qmd_sync()
+    assert not ok and "embed failed" in msg and "model download failed" in msg
+
+
+def test_a_change_during_a_sync_gets_its_own_run(engine, vault, fake):
+    # a busy sync overwrote the waiting areas, and a request in the last pass was dropped (#15, review round 1)
+    engine.cmd_qmd(Namespace(action="setup"))
+    fake.calls.clear()
+    fake.during["update"] = lambda: (vault / ".atlas" / "qmd.pending").touch()  # a commit lands mid-run
+    assert engine.qmd_sync()[0]
+    assert [c[3] for c in fake.calls] == ["update", "embed", "update", "embed"]
+
+
+def test_a_busy_sync_leaves_a_mark_for_the_running_one(engine, vault, fake):
+    engine.cmd_qmd(Namespace(action="setup"))
+    held = engine._try_lock("qmd.lock")
+    try:
+        assert "picks this change up" in engine.qmd_sync()[1]
+        assert (vault / ".atlas" / "qmd.pending").exists()
+    finally:
+        held.close()
 
 
 def test_on_and_off_whatever_yaml_makes_of_them(engine, vault):
@@ -28,46 +124,73 @@ def test_on_and_off_whatever_yaml_makes_of_them(engine, vault):
 
 def test_settings_keep_the_rest_of_atlas_yaml(engine, vault):
     before = (vault / "atlas.yaml").read_text(encoding="utf-8")
-    engine.qmd_set(enabled="on", prefix="atlas-two")
+    engine.qmd_set(enabled="on", index="atlas-two")
     after = (vault / "atlas.yaml").read_text(encoding="utf-8")
-    assert engine.qmd_settings() == {"enabled": True, "prefix": "atlas-two"}
+    assert engine.qmd_settings() == {"enabled": True, "index": "atlas-two"}
     assert len(after.splitlines()) == len(before.splitlines())
     assert "# ask | on | off" in after  # the comment stays
 
 
-def test_a_commit_starts_a_background_refresh_only_when_qmd_is_on(engine, vault, monkeypatch):
-    started = []
-    monkeypatch.setattr(engine.shutil, "which", lambda name: "/usr/bin/qmd" if name == "qmd" else None)
-    monkeypatch.setattr(engine.subprocess, "Popen", lambda args, **kw: started.append(args))
-    engine.qmd_set(enabled="off")
-    assert engine.qmd_refresh_after_commit(["insights/x.md"]) is None
-    engine.qmd_set(enabled="on")
-    assert engine.qmd_refresh_after_commit(["you/goals.md"]) is None  # nothing QMD indexes
-    assert "insights" in engine.qmd_refresh_after_commit(["insights/x.md", "insights/y.md"])
-    assert started and started[0][-3:] == ["qmd", "sync", "insights"]
-
-
-def test_a_busy_sync_hands_its_areas_to_the_running_one(engine, vault, monkeypatch):
-    monkeypatch.setattr(engine.shutil, "which", lambda name: "/usr/bin/qmd")
-    engine.qmd_set(enabled="on")
-    held = engine._try_lock("qmd.lock")
+def test_settings_land_in_the_vault_not_the_apps_default(engine, vault):
+    # a vault without atlas.yaml had `qmd off` written into the app's registry.default.yaml (#15, round 1)
+    (vault / "atlas.yaml").unlink()
+    engine.set_vault(vault)
+    default = (engine.APP / "registry.default.yaml").read_text(encoding="utf-8")
     try:
-        assert "picks this change up" in engine.qmd_sync(["cabinet"])
-        assert (vault / ".atlas" / "qmd.dirty").read_text(encoding="utf-8") == "cabinet"
+        engine.qmd_set(enabled="off")
+        assert (vault / "atlas.yaml").exists() and engine.qmd_state() == "off"
+        assert (engine.APP / "registry.default.yaml").read_text(encoding="utf-8") == default
     finally:
-        held.close()
+        (engine.APP / "registry.default.yaml").write_text(default, encoding="utf-8")
 
 
-def test_deep_search_shows_a_note_once(engine, vault, monkeypatch):
+def test_off_means_deep_search_does_not_call_qmd(engine, vault, fake):
+    # after `qmd off`, deep search kept returning QMD's results (#15, review round 1)
+    engine.cmd_qmd(Namespace(action="setup"))
+    engine.qmd_set(enabled="off")
+    fake.calls.clear()
+    assert engine.deep_search(engine.Index(), "animals that hide") == []
+    assert fake.calls == []
+
+
+def test_deep_search_reads_the_vaults_index(engine, vault, fake):
     note = vault / "insights" / "Octopuses hide in under a second.md"
-    note.write_text("---\ndescription: d\nconfidence: working\n---\n\n# Octopuses hide in under a second\n", encoding="utf-8")
-    old_and_new = {"atlas": vault, "atlas-insights": vault}  # an older whole-vault collection and an area one
-    monkeypatch.setattr(engine, "qmd_collections", lambda: old_and_new)
-    monkeypatch.setattr(engine.shutil, "which", lambda name: "/usr/bin/qmd")
-    hits = [{"file": f"qmd://{c}/insights/Octopuses hide in under a second.md", "score": s, "snippet": "x"}
-            for c, s in (("atlas", 0.9), ("atlas-insights", 0.8))]
-    real_run = subprocess.run
-    monkeypatch.setattr(engine.subprocess, "run", lambda args, **kw: subprocess.CompletedProcess(args, 0, json.dumps(hits), "")
-                        if args[:2] == ["qmd", "query"] else real_run(args, **kw))
+    note.write_text("---\ndescription: d\nconfidence: working\n---\n\n# Octopuses hide in under a second\n",
+                    encoding="utf-8")
+    engine.cmd_qmd(Namespace(action="setup"))
+    fake.hits = [{"file": "qmd://atlas-insights/insights/Octopuses hide in under a second.md?index=atlas",
+                  "score": 0.9, "snippet": "x"}]
     results = engine.deep_search(engine.Index(), "animals that hide")
     assert [r["id"] for r in results] == ["insights/Octopuses hide in under a second.md"]
+    assert fake.calls[-1][1:3] == ["--index", "atlas"]
+
+
+def test_a_folder_commit_refreshes_its_area(engine, vault, monkeypatch):
+    # `commit vault/insights` passed "insights" without a slash, and no refresh started (#15, review round 1)
+    started = []
+    monkeypatch.setattr(engine, "qmd_refresh_after_commit", lambda paths: started.append(paths))
+    git = lambda *a: subprocess.run(["git", "-C", str(vault), *a], check=True, capture_output=True)
+    git("init", "-q")
+    git("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "--allow-empty", "-m", "start")
+    (vault / "agents").mkdir(exist_ok=True)
+    (vault / "agents" / "tester.md").write_text("---\nname: Tester\n---\n\n# Tester\n", encoding="utf-8")
+    (vault / "insights" / "A new claim.md").write_text("---\ndescription: d\n---\n\n# A new claim\n", encoding="utf-8")
+    monkeypatch.setenv("GIT_AUTHOR_NAME", "t")
+    monkeypatch.setenv("GIT_AUTHOR_EMAIL", "t@example.com")
+    monkeypatch.setenv("GIT_COMMITTER_NAME", "t")
+    monkeypatch.setenv("GIT_COMMITTER_EMAIL", "t@example.com")
+    engine.cmd_commit(Namespace(agent="tester", message="m",
+                                paths=[str(vault / "insights"), str(vault / "agents" / "tester.md")]))
+    assert "insights/A new claim.md" in started[0]
+    assert engine.qmd_areas_for(started[0]) == ["insights"]
+
+
+def test_smoke_runs_keep_qmd_inside_the_run(tmp_path):
+    # INDEX_PATH from the developer's shell sent the run's QMD database outside the run (#15, round 1)
+    spec = importlib.util.spec_from_file_location("smoke_run", ROOT / "ci" / "smoke" / "run.py")
+    run = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(run)
+    env = {"HOME": str(tmp_path), "INDEX_PATH": "/elsewhere/qmd/index.sqlite"}
+    run.isolate_qmd(env)
+    assert "INDEX_PATH" not in env
+    assert env["XDG_CACHE_HOME"].startswith(str(tmp_path)) and env["QMD_CONFIG_DIR"].startswith(str(tmp_path))
