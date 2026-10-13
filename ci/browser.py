@@ -18,6 +18,7 @@ fails the run. A few checks pin behavior that reviews found broken once.
 
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import urllib.parse
@@ -148,6 +149,43 @@ def follows_changes(ctx, srv: Server, vault: Path) -> None:
             failures.append("re-rendering a tour left its old key handlers on the page (#14, review round 1)")
     except Exception:
         failures.append("an open tour did not re-render after the agent changed it (#13)")
+    page.close()
+    left_refresh(ctx, srv, vault, moved.relative_to(vault).as_posix())
+
+
+def left_refresh(ctx, srv: Server, vault: Path, rel: str) -> None:
+    """A refresh the reader leaves (Home while the note reloads) must not scroll the note when it is opened
+    again (#14, review round 2)."""
+    page = ctx.new_page()
+    url = f"{srv.base}/#/e/{urllib.parse.quote(rel, safe='')}"
+    page.goto(url)
+    page.wait_for_selector(".reader", timeout=15000)
+    page.evaluate("scrollTo(0, 600)")
+    held, seen = [], []
+    def hold_second(route):  # the refresh's first request answers; its re-render's request waits
+        seen.append(route)
+        held.append(route) if len(seen) == 2 else route.continue_()
+    page.route("**/api/entity?*", hold_second)
+    (vault / rel).write_text((vault / rel).read_text(encoding="utf-8") + "\n\nA third edit.\n", encoding="utf-8")
+    for _ in range(125):
+        if held:
+            break
+        page.wait_for_timeout(200)
+    else:
+        failures.append("the left-refresh check never saw the re-render's request")
+        page.close()
+        return
+    page.evaluate("location.hash = '#/'")
+    page.wait_for_timeout(500)
+    held[0].continue_()
+    page.wait_for_timeout(500)
+    page.unroute("**/api/entity?*")
+    page.evaluate(f"location.hash = {json.dumps('#/e/' + urllib.parse.quote(rel, safe=''))}")
+    page.wait_for_selector(".reader", timeout=15000)
+    page.wait_for_timeout(300)
+    if page.evaluate("scrollY") != 0:
+        failures.append(f"a note opened at {page.evaluate('scrollY')}, the position of a refresh the reader left "
+                        "(#14, review round 2)")
     page.close()
 
 if __name__ == "__main__":

@@ -1907,6 +1907,7 @@ async function route() {
   hideHover(); $("#quote-bar").hidden = true; closePalette();
   state.routeToken = (state.routeToken || 0) + 1;
   disposeView();
+  if (state.keepScroll && decodeURIComponent(path.slice(3)) !== state.keepScroll.id) state.keepScroll = null;  // the reader left a refresh
   main.classList.remove("bleed");
   if (!path.startsWith("/e/")) { state.current = null; updateComposers(); }
   const wasReading = reading();
