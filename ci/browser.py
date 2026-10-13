@@ -90,6 +90,7 @@ def checks(page, base: str, scheme: str) -> None:
         failures.append(f"[{scheme}] a status from the link shows no active chip (#4, round 2)")
     if not page.query_selector('.nav-link.active[data-t="question"]'):
         failures.append(f"[{scheme}] the sidebar does not mark a link with a query (#4, round 2)")
+    deep_after_nothing(page, base, scheme)
     page.goto(f"{base}/#/chat")
     page.wait_for_selector(".op-bar", timeout=15000)
     if not page.query_selector("#op-title"):
@@ -187,6 +188,26 @@ def left_refresh(ctx, srv: Server, vault: Path, rel: str) -> None:
         failures.append(f"a note opened at {page.evaluate('scrollY')}, the position of a refresh the reader left "
                         "(#14, review round 2)")
     page.close()
+
+
+def deep_after_nothing(page, base: str, scheme: str) -> None:
+    """With QMD on, an instant search that finds nothing goes on by meaning (smoke run on #15). The browser smoke
+    has no QMD: the meta and the deep answer are faked, the switch is the app's."""
+    def meta(route):
+        body = route.fetch().json()
+        route.fulfill(json={**body, "qmd": True})
+    page.route("**/api/meta", meta)
+    page.route("**/api/search?*mode=deep*", lambda r: r.fulfill(json={"mode": "deep", "results": []}))
+    page.goto(f"{base}/#/search?q=zzqxwv")
+    page.reload()  # a hash change keeps the document; the app reads the faked meta when it loads
+    try:
+        page.wait_for_function("location.hash.includes('mode=deep')", timeout=10000)
+    except Exception:
+        failures.append(f"[{scheme}] an empty instant search with QMD on does not go on by meaning (#15)")
+    page.unroute("**/api/meta")
+    page.unroute("**/api/search?*mode=deep*")
+    page.reload()  # the faked meta stays in the app until it loads again
+
 
 if __name__ == "__main__":
     main()

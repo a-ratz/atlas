@@ -1174,16 +1174,33 @@ def fast_search(index: Index, q: str, tid: str | None, limit: int = 60) -> list[
     return [e.card(index) for _, _, e in scored[:limit]]
 
 
-def deep_search(index: Index, q: str) -> list[dict]:
-    """QMD's hits in the vault's own index; before `qmd setup`, in collections of QMD's default index that a
-    user pointed at the vault by hand (how Atlas searched before 0.8). Off means off."""
-    q = q.strip().lstrip("-").strip()
-    if not q or qmd_state() == "off" or not qmd_bin():
-        return []
+def deep_collections() -> tuple[str | None, dict]:
+    """Where deep search looks: the vault's own index; before `qmd setup`, collections of QMD's default index
+    that a user pointed at the vault by hand (how Atlas searched before 0.8). Off means nowhere."""
+    if qmd_state() == "off" or not qmd_bin():
+        return None, {}
     name = qmd_index()
-    cols = qmd_collections(name) if name else {n: c for n, c in qmd_collections().items()
-                                                if c["path"].resolve() == VAULT or VAULT in c["path"].resolve().parents}
-    if not cols:
+    return name, qmd_collections(name) if name else {n: c for n, c in qmd_collections().items()
+                                                     if c["path"].resolve() == VAULT or VAULT in c["path"].resolve().parents}
+
+
+def snippet_text(snippet: str, ent: "Entity | None") -> str:
+    """QMD's snippet without its diff header and without frontmatter (a hit near the top of a note starts in
+    it); nothing left: the note's description."""
+    lines = re.sub(r"^@@.*?\n", "", snippet or "", flags=re.S).splitlines()
+    dashes = [i for i, line in enumerate(lines) if line.strip() == "---"]
+    if dashes:
+        cut = dashes[1] if lines[0].strip() == "---" and len(dashes) > 1 else dashes[0]
+        if all(re.match(r"^\s*([\w-]+:|- |---$|$)", line) for line in lines[:cut]):
+            lines = lines[cut + 1:]
+    return "\n".join(lines).strip()[:300] or (ent.description if ent else "")
+
+
+def deep_search(index: Index, q: str) -> list[dict]:
+    """QMD's hits for a query, each note once (see deep_collections for where it looks)."""
+    q = q.strip().lstrip("-").strip()
+    name, cols = deep_collections()
+    if not q or not cols:
         return []  # this vault is not indexed in QMD; the caller falls back to instant search
     try:
         r = qmd("query", q, "--format", "json", "-n", "15", *[a for n in cols for a in ("-c", n)], index=name,
@@ -1204,7 +1221,7 @@ def deep_search(index: Index, q: str) -> list[dict]:
             continue
         seen.add(rel)
         e = index.entities.get(rel) if rel else None
-        snippet = re.sub(r"^@@.*?\n", "", h.get("snippet", ""), flags=re.S).strip()[:300]
+        snippet = snippet_text(h.get("snippet", ""), e)
         if e:
             out.append({**e.card(index), "snippet": snippet, "score": h.get("score")})
         else:
@@ -1526,7 +1543,7 @@ def make_app(index: Index):
         return JSONResponse({"types": types, "version": index.version, "built_at": index.built_at,
                              "operator": operator_state(), "vault": VAULT.name, "vault_path": str(VAULT), "user": index.user,
                              "total": len(index.entities), "content": content_count(index),
-                             "qmd": bool(qmd_bin()) and qmd_state() != "off", "commands": index.commands, "drop": index.drop,
+                             "qmd": bool(deep_collections()[1]), "commands": index.commands, "drop": index.drop,
                              "projects": projects, "agents": agents})
 
     async def home_data(request):
@@ -2623,8 +2640,8 @@ def qmd_refresh_after_commit(paths: list[str]) -> str | None:
 def cmd_qmd(args) -> None:
     if args.action == "off":
         qmd_set(enabled="off")
-        print("qmd is off for this vault: deep search uses instant search; the index stays on this machine "
-              "(`qmd --index <name> collection list` shows it)")
+        print("qmd is off for this vault: deep search uses instant search. The index and QMD's models stay on "
+              "this machine (`qmd --index <name> collection list` shows the index; `qmd setup` turns it on again)")
         return
     if args.action == "sync":
         ok, msg = qmd_sync()

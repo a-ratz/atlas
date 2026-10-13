@@ -276,3 +276,21 @@ def test_the_operator_gets_the_whole_isolation(tmp_path, monkeypatch):
         assert f"export {key}=" in sh
     assert "unset INDEX_PATH" in sh
     assert "Remove-Item Env:INDEX_PATH" in (tmp_path / "env.ps1").read_text(encoding="utf-8")
+
+
+def test_snippets_leave_the_frontmatter_out(engine):
+    # deep search showed "created_by: codex updated_by: codex ---" as a note's snippet (#10, smoke run on #15)
+    e = type("E", (), {"description": "Two of five testers woke"})()
+    assert engine.snippet_text("@@ -1,4 @@\nevidence: woke\ncreated_by: codex\n---\n\n# Cue volume\nThe body", e) == "# Cue volume\nThe body"
+    assert engine.snippet_text("---\ndescription: d\ncategory: sleep\n---\n# Title", e) == "# Title"
+    assert engine.snippet_text("A body line\n---\nmore", e) == "A body line\n---\nmore"  # a rule in the body stays
+    assert engine.snippet_text("@@ -1,2 @@\n---\ndescription: d\n---\n", e) == "Two of five testers woke"
+
+
+def test_meta_offers_deep_search_only_where_it_can_answer(engine, vault, fake):
+    # with QMD installed but not set up, an empty instant search would jump to a deep search that cannot answer
+    assert engine.deep_collections() == (None, {})
+    engine.cmd_qmd(Namespace(action="setup"))
+    assert engine.deep_collections()[0] == "atlas"
+    engine.qmd_set(enabled="off")
+    assert engine.deep_collections() == (None, {})
