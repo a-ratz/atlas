@@ -18,6 +18,7 @@ fails the run. A few checks pin behavior that reviews found broken once.
 
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import urllib.parse
@@ -67,6 +68,8 @@ def main() -> None:
                     for e in errors:
                         failures.append(f"[{scheme}] {route}: {e}")
                 checks(page, srv.base, scheme)
+                if scheme == "light":  # the last pass: it edits and moves a demo note
+                    follows_changes(ctx, srv, vault)
                 ctx.close()
             browser.close()
             print(f"{len(pages)} pages × 2 color schemes opened")
@@ -107,6 +110,98 @@ def checks(page, base: str, scheme: str) -> None:
     if "[[" in row or "raised_count" in row or not page.query_selector(".meta-row a[href^='#/e/insights']"):
         failures.append(f"[{scheme}] the facts line shows {row!r} instead of a linked title (#10)")
 
+
+def follows_changes(ctx, srv: Server, vault: Path) -> None:
+    """An open page shows the agent's edit and follows a move, keeping its scroll position (#13, #14).
+    The index looks every 10 seconds."""
+    ctx.add_init_script("""window.__keydown = { on: 0, added: 0 };  // key handlers on document: a re-render leaves none behind
+      for (const [name, step] of [["addEventListener", 1], ["removeEventListener", -1]]) {
+        const real = document[name].bind(document);
+        document[name] = (type, fn, opts) => {
+          if (type === "keydown") { window.__keydown.on += step; if (step > 0) window.__keydown.added++; }
+          return real(type, fn, opts);
+        };
+      }""")
+    page = ctx.new_page()
+    item = srv.get("/api/list?type=capture")["items"][0]
+    page.goto(f"{srv.base}/#/e/{urllib.parse.quote(item['id'], safe='')}")
+    page.wait_for_selector(".reader", timeout=15000)
+    path = vault / item["id"]
+    filler = "".join(f"\n\nA paragraph the agent added, number {n}." for n in range(40))
+    path.write_text(path.read_text(encoding="utf-8") + filler + "\n\nAn edit the agent made while the page was open.\n",
+                    encoding="utf-8")
+    try:
+        page.wait_for_selector("text=An edit the agent made while the page was open.", timeout=25000)
+    except Exception:
+        failures.append("an open note did not show the agent's edit (#13)")
+        return
+    page.evaluate("scrollTo(0, 600)")
+    path.write_text(path.read_text(encoding="utf-8") + "\n\nA second edit.\n", encoding="utf-8")
+    try:
+        page.wait_for_selector("text=A second edit.", timeout=25000)
+        if abs(page.evaluate("scrollY") - 600) > 5:
+            failures.append(f"an edit scrolled the open note to {page.evaluate('scrollY')} instead of 600 (#13)")
+    except Exception:
+        failures.append("an open note did not show the agent's second edit (#13)")
+    moved = vault / "sources" / path.name
+    moved.parent.mkdir(exist_ok=True)
+    path.rename(moved)
+    try:
+        page.wait_for_function("decodeURIComponent(location.hash).startsWith('#/e/sources/')", timeout=25000)
+        page.wait_for_selector(".reader[data-src^='sources/']", timeout=15000)
+        if abs(page.evaluate("scrollY") - 600) > 5:
+            failures.append(f"following a move scrolled to {page.evaluate('scrollY')} instead of 600 (#14, round 1)")
+    except Exception:
+        failures.append("an open note the agent moved did not follow it to its new folder (#13)")
+    page.goto(f"{srv.base}/#/e/{urllib.parse.quote('tours/this-week.md', safe='')}")
+    page.wait_for_timeout(800)
+    before = page.evaluate("window.__keydown")
+    tour = vault / "tours" / "this-week.md"
+    tour.write_text(tour.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    try:
+        page.wait_for_function(f"window.__keydown.added > {before['added']}", timeout=25000)  # the tour re-rendered
+        if page.evaluate("window.__keydown.on") != before["on"]:
+            failures.append("re-rendering a tour left its old key handlers on the page (#14, review round 1)")
+    except Exception:
+        failures.append("an open tour did not re-render after the agent changed it (#13)")
+    page.close()
+    left_refresh(ctx, srv, vault, moved.relative_to(vault).as_posix())
+
+
+def left_refresh(ctx, srv: Server, vault: Path, rel: str) -> None:
+    """A refresh the reader leaves (Home while the note reloads) must not scroll the note when it is opened
+    again (#14, review round 2)."""
+    page = ctx.new_page()
+    url = f"{srv.base}/#/e/{urllib.parse.quote(rel, safe='')}"
+    page.goto(url)
+    page.wait_for_selector(".reader", timeout=15000)
+    page.evaluate("scrollTo(0, 600)")
+    held, seen = [], []
+    def hold_second(route):  # the refresh's first request answers; its re-render's request waits
+        seen.append(route)
+        held.append(route) if len(seen) == 2 else route.continue_()
+    page.route("**/api/entity?*", hold_second)
+    (vault / rel).write_text((vault / rel).read_text(encoding="utf-8") + "\n\nA third edit.\n", encoding="utf-8")
+    for _ in range(125):
+        if held:
+            break
+        page.wait_for_timeout(200)
+    else:
+        failures.append("the left-refresh check never saw the re-render's request")
+        page.close()
+        return
+    page.evaluate("location.hash = '#/'")
+    page.wait_for_timeout(500)
+    held[0].continue_()
+    page.wait_for_timeout(500)
+    page.unroute("**/api/entity?*")
+    page.evaluate(f"location.hash = {json.dumps('#/e/' + urllib.parse.quote(rel, safe=''))}")
+    page.wait_for_selector(".reader", timeout=15000)
+    page.wait_for_timeout(300)
+    if page.evaluate("scrollY") != 0:
+        failures.append(f"a note opened at {page.evaluate('scrollY')}, the position of a refresh the reader left "
+                        "(#14, review round 2)")
+    page.close()
 
 if __name__ == "__main__":
     main()

@@ -151,7 +151,10 @@
       case "/api/home": return reply({ ...recorded("home"), snoozed: { ...snoozed } });
       case "/api/projects": return reply(recorded("projects"));
       case "/api/list": return orMissing(recorded(`list:${q.get("type")}`));
-      case "/api/entity": return orMissing(recorded(`entity:${q.get("id")}`));
+      case "/api/entity": {  // a note that moved between two recorded states says where it went
+        const e = recorded(`entity:${q.get("id")}`);
+        return e ? reply(e) : reply(recorded(`moved:${q.get("id")}`) || { error: "not found" }, 404);
+      }
       case "/api/card": return orMissing(recorded(`card:${q.get("id")}`));
       case "/api/graph": return orMissing(recorded(`graph:${(q.get("types") || "insight,map").split(",").filter(Boolean).sort().join(",")}`));
       case "/api/search": return reply(search(q));
