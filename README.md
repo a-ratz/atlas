@@ -327,9 +327,6 @@ site/                            the live demo: build.py records the engine on t
   "update atlas" in your harness. Run the engine straight from the repo:
   `uv run --no-project skills/atlas/app/engine/atlas.py serve --vault <some vault>`.
 
-Contributors and agents start with [docs/design-notes.md](docs/design-notes.md):
-what was decided, why, and what the reviews found.
-
 ## License
 
 MIT, see [LICENSE](LICENSE).
