@@ -66,6 +66,20 @@ def install_skill(source: Path, env: dict) -> Path:
     return skill
 
 
+def isolate_qmd(env: dict) -> None:
+    """QMD keeps its index under the cache folder: the run gets its own, with the machine's models linked in
+    (about 2 GB that would otherwise download again). Without models QMD downloads them on first use."""
+    home = Path(env["HOME"])
+    env["XDG_CACHE_HOME"], env["QMD_CONFIG_DIR"] = str(home / ".cache"), str(home / ".config" / "qmd")
+    models = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "qmd" / "models"
+    if models.is_dir():
+        (home / ".cache" / "qmd").mkdir(parents=True, exist_ok=True)
+        try:
+            (home / ".cache" / "qmd" / "models").symlink_to(models, target_is_directory=True)
+        except OSError:  # Windows without developer mode: QMD downloads them into the run
+            pass
+
+
 def prepare(args) -> None:
     sc = scenario(args.scenario)
     run = Path(tempfile.mkdtemp(prefix=f"atlas-smoke-{sc['name']}-"))
@@ -79,6 +93,9 @@ def prepare(args) -> None:
            # a user's machine has a git identity; the isolated HOME does not, and the install's first commit needs one
            "GIT_AUTHOR_NAME": "Smoke Test", "GIT_AUTHOR_EMAIL": "smoke@example.com",
            "GIT_COMMITTER_NAME": "Smoke Test", "GIT_COMMITTER_EMAIL": "smoke@example.com"}
+    for tool in sc.get("needs", []):
+        shutil.which(tool) or sys.exit(f"the scenario `{sc['name']}` needs `{tool}` on PATH")
+    isolate_qmd(env)
     uv = [shutil.which("uv") or "uv", "run", "--no-project", "--quiet"]
     atlas_dir = run / "Atlas"
     env["ATLAS_VAULT"] = str(atlas_dir / "vault")  # set_vault() prefers it: never the developer's own vault

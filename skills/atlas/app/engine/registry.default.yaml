@@ -33,6 +33,10 @@ cabinet:
     cards_per_run: 10     # cards one run expands, the most-linked first
     stale_months: 12      # a complete card whose sources are older may be expanded again
 
+qmd:                  # search by meaning (atlas-qmd); asked once at install
+  enabled: ask        # ask | on | off
+  prefix: atlas       # collections <prefix>-cabinet, -projects, -ideas, -insights, -sources
+
 commands:
   - {name: learn, args: "<topic or question>", help: "Research it and land the result as a capture", send: "/learn {args}"}
   - {name: distill, args: "[capture | all]", help: "Turn a capture into insights (the open one, the oldest, or all)", send: "/distill {args}"}

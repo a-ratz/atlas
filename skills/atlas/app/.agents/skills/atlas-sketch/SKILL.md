@@ -17,7 +17,7 @@ put your thoughts in a separate section.
 
 ## 2. Check for duplicates
 
-Search `sketches/` and `specs/` for the same idea. If one exists, add the new
+Search `sketches/` and `specs/` for the same idea (with QMD on, `atlas-qmd` on the ideas collection catches the same idea in other words). If one exists, add the new
 angle to it (with today's date) instead of creating another file.
 
 ## 3. Write it

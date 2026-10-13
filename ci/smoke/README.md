@@ -20,6 +20,8 @@ uv run ci/smoke/run.py prepare upgrade --ref <last release or main>
 if the scenario asks for it, starts Atlas in operator mode on a free port, and writes two briefs into
 the run folder: `operator.md` and `user.md`. It prints the run as JSON (folder, URL, port, version).
 Nothing outside the run folder is touched; the developer's own Atlas and vault stay out of it.
+QMD gets its own index and settings in the run folder too, with the machine's models linked in;
+a scenario that needs a tool (`needs: [qmd]`) stops early when it is missing.
 
 ## 2. Run the two roles
 
@@ -65,6 +67,7 @@ adds or changes a feature adds it to a scenario or writes a new one.
 | [first-run](scenarios/first-run.md) | an empty Atlas, the first chat, a note |
 | [research-to-questions](scenarios/research-to-questions.md) | research → capture → distill → insights, open questions, cards |
 | [upgrade](scenarios/upgrade.md) | the last release with content, upgraded to this checkout |
+| [search-by-meaning](scenarios/search-by-meaning.md) | QMD turned on, a paraphrase found, a new note findable, then off |
 
 ## Budget
 

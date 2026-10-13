@@ -26,7 +26,7 @@ repository. Offer these options:
    - a folder: `atlas_install.py locate <dir>`;
    - a URL: `git clone <url> <dir>`, then `locate <dir>`.
 
-   In both cases, skip to step 5.
+   In both cases, skip to step 4.
 
 ## 2. Install
 
@@ -65,7 +65,39 @@ It never writes over an existing note. `atlas-clean-demo` (or
 `engine/atlas.py demo --remove`) takes the demo out again and keeps every demo
 note the user changed.
 
-## 4. A private GitHub backup? (optional)
+## 4. Search by meaning? (optional)
+
+Skip this step when `qmd:` in `vault/atlas.yaml` already says `enabled: on` or
+`enabled: off`.
+
+Atlas finds notes by their words out of the box. With
+[QMD](https://github.com/tobi/qmd), a local search engine, it also finds them by
+meaning ("notes about how animals hide" finds the one on octopus camouflage).
+Nothing leaves the machine. It works on macOS, Linux and Windows.
+
+Run `qmd --version`.
+
+- **QMD is installed:** ask "Turn on search by meaning for this vault?"
+- **QMD is missing:** ask "Install QMD for search by meaning? It is optional:
+  Atlas works without it. It needs Node.js or Bun, and its first run downloads
+  about 2 GB of models." On yes: `npm install -g @tobilu/qmd` (or
+  `bun install -g @tobilu/qmd`).
+
+On yes, set it up:
+
+```bash
+uv run --no-project <dir>/engine/atlas.py qmd setup
+```
+
+On no, remember the answer, so nobody asks again:
+
+```bash
+uv run --no-project <dir>/engine/atlas.py qmd off
+```
+
+The user can turn it on later ("turn on search by meaning", skill `atlas-qmd`).
+
+## 5. A private GitHub backup? (optional)
 
 Ask only if `gh auth status` succeeds. The question: "Back it up to a private
 GitHub repository?" The default answer is no.
@@ -80,7 +112,7 @@ gh repo create <name> --private --source <dir> --remote origin --push
 knowledge, so the repository is always private. With this backup, another
 machine can install Atlas there and pick option 4 with the repository URL.
 
-## 5. Start
+## 6. Start
 
 Hand over to the home. Follow `<dir>/.agents/skills/atlas-operator/SKILL.md`,
 which also has you write your own identity file in `vault/agents/`.
