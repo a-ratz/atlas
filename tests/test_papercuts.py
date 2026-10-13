@@ -1,0 +1,89 @@
+"""Papercuts the smoke runs found (#10)."""
+
+from __future__ import annotations
+
+import datetime as dt
+import json
+import os
+import re
+import subprocess
+import time
+from argparse import Namespace
+
+import pytest
+
+
+def start_session(engine, minutes_ago: float) -> None:
+    engine.ensure_state()
+    started = dt.datetime.now().astimezone() - dt.timedelta(minutes=minutes_ago)
+    engine.SESSION.write_text(json.dumps({"mode": "operator", "started": started.isoformat(timespec="seconds"),
+                                          "port": 8765}), encoding="utf-8")
+
+
+def test_an_agent_that_has_not_listened_yet_is_starting(engine, vault):
+    # the pill said "Agent offline" / "The agent session ended" right after `serve --operator` (#10)
+    start_session(engine, minutes_ago=1)
+    assert engine.operator_state()["state"] == "starting"
+
+
+def test_starting_does_not_last_forever(engine, vault):
+    start_session(engine, minutes_ago=20)
+    assert engine.operator_state()["state"] == "offline"
+
+
+def test_a_heartbeat_after_the_start_is_not_starting(engine, vault):
+    start_session(engine, minutes_ago=1)
+    engine.HEARTBEAT.touch()
+    os.utime(engine.HEARTBEAT, (time.time() - 30, time.time() - 30))  # listened, then went to work
+    assert engine.operator_state()["state"] != "starting"
+
+
+def test_status_names_the_url_and_whether_it_serves_this_vault(engine, vault, capsys):
+    # skills hard-coded localhost:8765 although Atlas can run on another port (#10)
+    start_session(engine, minutes_ago=1)
+    engine.cmd_status(Namespace())
+    out = json.loads(capsys.readouterr().out)
+    assert out["url"] == "http://localhost:8765" and out["running"] is False  # nothing listens in the test
+
+
+def test_a_commit_without_a_first_commit_says_what_to_do(engine, vault, monkeypatch):
+    # an install without a git identity left everything staged; commit said "unrelated changes are staged" (#10)
+    subprocess.run(["git", "-C", str(vault), "init", "-q"], check=True)
+    subprocess.run(["git", "-C", str(vault), "add", "-A"], check=True)
+    with pytest.raises(SystemExit) as stop:
+        engine.cmd_commit(Namespace(agent="user", message="m", paths=[str(vault / "you")]))
+    assert "no first commit yet" in str(stop.value) and "user.email" in str(stop.value)
+
+
+def test_dormant_is_the_one_word_for_a_resting_question(engine, vault):
+    # the sidebar said "resting", the chip and the files "dormant" (#10)
+    reg = vault / "atlas.yaml"
+    reg.write_text(reg.read_text(encoding="utf-8").replace("aside_label: dormant}", "aside_label: resting}"),
+                   encoding="utf-8")  # as a 0.6 vault wrote it
+    assert engine.aside_label(engine.Index().types["question"]) == "dormant"
+    assert engine.aside_label({"count": {"aside": ["parked"], "aside_label": "resting"}}) == "resting"  # someone's own
+
+
+def test_a_wiki_link_shows_the_notes_title(engine, vault):
+    # an insight's "Source: [[sleep-and-vocabulary]]" showed the file name (#10)
+    (vault / "sources").mkdir(exist_ok=True)
+    (vault / "sources" / "sleep-and-vocabulary.md").write_text(
+        "---\ntitle: Sleep *helps* new words_join\n---\n\nBody\n", encoding="utf-8")
+    index = engine.Index()
+    html = engine.render_md(index, "Source: [[sleep-and-vocabulary]], also [[sleep-and-vocabulary|the capture]]")
+    assert ">Sleep *helps* new words_join</a>" in html  # the title, its markdown characters kept as text
+    assert ">the capture</a>" in html
+
+
+def test_facts_name_where_their_wiki_links_point(engine, vault):
+    # `affects: [[…]]` showed its brackets in the facts line (#10)
+    (vault / "questions").mkdir(exist_ok=True)
+    (vault / "insights" / "Replay helps memory.md").write_text("---\ndescription: d\n---\n\n# Replay helps memory\n",
+                                                                encoding="utf-8")
+    (vault / "questions" / "Does replay work at home.md").write_text(
+        "---\nstatus: open\nraised: 2026-10-01\nraised_count: 2\naffects: ['[[Replay helps memory]]']\n---\n\n# Q\n",
+        encoding="utf-8")
+    view = engine.entity_view(engine.Index(), "questions/Does replay work at home.md")
+    assert view["fact_links"] == {"Replay helps memory": {"id": "insights/Replay helps memory.md",
+                                                          "title": "Replay helps memory"}}
+    assert re.search(r"raised_count", json.dumps(view["facts"]))  # the reader moves it behind the status

@@ -13,10 +13,11 @@ Run every command from the Atlas folder (the one with AGENTS.md and engine/).
 ## Start
 
 1. `uv --version`. If uv is missing, ask, then install it (see AGENTS.md).
-2. Is a server already running? `curl -s localhost:8765/api/meta`. Reuse it
-   only if it answers with `"mode": "operator"` **and** its `vault_path` is
-   this repo's `vault/` (another Atlas may own the port). If the port belongs
-   to a different vault, start this one on another port (`--port 8766`).
+2. Is a server already running? `uv run --no-project engine/atlas.py status`
+   prints this vault's last session: reuse it only if `running` is true and
+   `mode` is `"operator"` (`running` checks that the server at `url` serves
+   this vault; another Atlas may have the port since). If the port belongs to
+   a different vault, start this one on another port (`--port 8766`).
    Otherwise start fresh:
 
    ```bash
@@ -26,10 +27,13 @@ Run every command from the Atlas folder (the one with AGENTS.md and engine/).
    Keep it running after your command returns (Claude Code: background task;
    elsewhere `nohup uv run --no-project engine/atlas.py serve --operator > /tmp/atlas.log 2>&1 &`).
    The first start downloads packages; give it a minute.
-3. Tell the user: open **http://localhost:8765**. On a remote machine:
-   `ssh -L 8765:localhost:8765 <host>`. Over Tailscale, `engine/atlas.py expose`
+3. Tell the user to open the `url` that `serve` printed (or `status` prints;
+   `http://localhost:8765` unless you chose a port). On a remote machine:
+   `ssh -L <port>:localhost:<port> <host>`. Over Tailscale, `engine/atlas.py expose`
    prints a command that changes the user's Tailscale config: only with consent.
 4. If `vault/agents/<your id>.md` does not exist, write it (below).
+   If `engine/atlas.py commit` stops with "no first commit yet", the install
+   could not commit: show the user its message (git needs their name and email once).
 5. Listen (next section) and end your turn.
 
 ## Your identity file
@@ -162,6 +166,42 @@ An `atlas:note` card in the chat carries the "Your move" buttons of its type
 run the user can distill with one click; add a `choices` block only for
 options those buttons do not cover. The moves are defined per type in
 `vault/atlas.yaml` (`moves:`) and arrive as `USER [viewing: <path>] [via move]: …`.
+
+## What can you do?
+
+When the user asks what you can do (or seems new), answer with this list, in
+your own words, and offer one that fits their vault:
+
+- **Research** a question into a capture with sources (`/learn`, atlas-learn).
+- **Distill** a capture into insights, one claim each, linked (`/distill`).
+- **Open questions:** the few that would change a claim; research or park them.
+- **Cards** for the people and organizations in your material; expand them on request.
+- **Maps** that sum up a topic (`/map`).
+- **Ideas:** sketch one from what the vault knows, spec it, turn it into a project.
+- **Projects:** threads, decisions and lessons that every agent shares (`/project`).
+- **Tours** of what changed (`/tour`), **search**, and **reminders** (below).
+
+## Reminders
+
+"Remember to look into X", "remind me to …": that is a task for later, not a
+fact about the user. Write it as a note in `vault/you/notes/`, named
+`<YYYY-MM-DD-HHMMSS>-remind-<slug>.md`:
+
+```markdown
+---
+from: user
+action: remind
+created: <ISO time>
+status: new
+due: <YYYY-MM-DD, only if the user gave a day>
+---
+
+<the user's words>
+```
+
+Commit it and say where it is: Home lists it under "Needs you" until it is
+done. A fact about the user ("I prefer short answers") goes to
+`vault/you/profile.md` (`/remember`); a goal to `vault/you/goals.md`.
 
 ## The user's notes
 

@@ -168,7 +168,7 @@ const card = (e, extra = "") => {
 const chip = (e) => { remember([e]); return `<a class="chip" data-t="${esc(e.type)}" href="#/e/${enc(e.id)}" title="${esc(e.title)}">${g(e.type)}<span class="t">${esc(e.title)}</span></a>`; };
 
 // ------------------------------------------------------------------ agents and presence
-const ST_LABEL = { listening: "listening", working: "working", away: "busy", offline: "offline" };
+const ST_LABEL = { listening: "listening", working: "working", away: "busy", offline: "offline", starting: "starting" };
 const named = () => state.operator.agents || [];
 function legacyAgent() {  // an operator that runs `wait` without --agent: one unnamed agent
   const op = state.operator, msgs = state.chatMessages;
@@ -196,13 +196,14 @@ function renderPresence() {
     el.innerHTML = `<a class="ppill" href="#/chat" title="No agent attached: what you write is kept as a note">${avatar(null, "", "offline")}<span class="nm">Standalone</span></a>`;
   } else {
     const list = liveAgents();
-    el.innerHTML = list.length ? list.map((a) => `<a class="ppill" href="#/chat" title="${esc(agentName(a.id))}: ${esc(stateText(a))}">${avatar(a.id, "", a.state)}<span class="nm">${esc(agentName(a.id))}</span><span class="st ${a.state}">${esc(stateText(a))}</span></a>`).join("")
+    el.innerHTML = list.length ? list.map((a) => `<a class="ppill" href="#/chat" title="${a.state === "starting" ? "Atlas is ready; the agent has not connected yet. What you write waits for it" : `${esc(agentName(a.id))}: ${esc(stateText(a))}`}">${avatar(a.id, "", a.state)}<span class="nm">${esc(agentName(a.id))}</span><span class="st ${a.state}">${esc(stateText(a))}</span></a>`).join("")
       : `<a class="ppill" href="#/chat" title="The agent session ended; messages wait in the inbox">${avatar(null, "", "offline")}<span class="nm">Agent</span><span class="st">offline</span></a>`;
   }
   const sub = $("#chat-sub");
   if (sub) {
     const list = liveAgents();
     sub.textContent = state.operator.mode !== "operator" ? "No agent attached: messages are kept as notes."
+      : list.length === 1 && list[0].state === "starting" ? "Waiting for the agent to connect. Write already: it reads your message when it listens."
       : list.length ? list.map((a) => `${agentName(a.id)} ${stateText(a)}`).join(" · ") : "The agent session ended; messages wait.";
   }
 }
@@ -364,15 +365,14 @@ function prefill(text) {
     return;
   }
   openChat();
-  const i = $("#dock-input");
-  i.value = text; fit(i); i.focus(); i.setSelectionRange(text.length, text.length);
+  fillAndSelect($("#dock-input"), text);
 }
 // the composer grows with its text (a quoted passage must be readable before it is sent)
 const fit = (i) => { i.style.height = "auto"; i.style.height = `${Math.min(i.scrollHeight + 2, 200)}px`; };
 function applyPrefill() {
   const i = $("#page-input");
   if (!i || state.prefill == null) return;
-  i.value = state.prefill; state.prefill = null; fit(i); i.focus(); i.setSelectionRange(i.value.length, i.value.length);
+  fillAndSelect(i, state.prefill); state.prefill = null;
 }
 
 const ACT_LABEL = { star: "Kept", kill: "Let go", note: "Note" };
@@ -400,10 +400,20 @@ function viewEmpty() {
       <p>${op ? "Ask a question, name a topic, or drop an idea. Your agent researches it, and your knowledge starts to grow right here: captures first, then insights, maps and a constellation."
         : "No agent is attached yet. Open Claude Code or Codex in this folder and say <b>start atlas</b>. Until then, anything you write is kept as a note."}</p>
       ${composer("hero", "e.g. What is the state of research on sleep and memory?  (type / for commands)")}
-      <div class="chips">${["What is the state of research on…", "Explain the landscape of… tools", "I have an idea for…"].map((q) => `<button class="facet" data-fill="${esc(q)}">${esc(q)}</button>`).join("")}</div>
+      <div class="chips">${HERO_CHIPS.map(([label, fill]) => `<button class="facet" data-fill="${esc(fill)}">${esc(label)}</button>`).join("")}</div>
     </div>`;
   wireComposer("hero", () => null, () => { location.hash = "#/chat"; });
-  $$("[data-fill]").forEach((b) => b.onclick = () => { const i = $("#hero-input"); i.value = b.dataset.fill; i.focus(); });
+  $$("[data-fill]").forEach((b) => b.onclick = () => fillAndSelect($("#hero-input"), b.dataset.fill));
+}
+// A chip puts a whole question in the box; the ‹part› to make your own arrives selected, so typing replaces it.
+const HERO_CHIPS = [["What is the state of research on…", "What is the state of research on ‹sleep and memory›?"],
+  ["Explain the landscape of… tools", "Explain the landscape of ‹note-taking› tools"],
+  ["I have an idea for…", "I have an idea: ‹a timer that adapts to how focused I am›"]];
+function fillAndSelect(i, text) {
+  const m = /‹([^›]*)›/.exec(text);
+  i.value = text.replace(/[‹›]/g, ""); fit(i); i.focus();
+  const [from, to] = m ? [m.index, m.index + m[1].length] : [i.value.length, i.value.length];
+  i.setSelectionRange(from, to);
 }
 const greeting = () => { const h = new Date().getHours(); return h < 5 ? "Late night" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"; };
 
@@ -894,18 +904,25 @@ function fixBadge(e) {
 // Titles here are claims, often whole sentences: the longer the title, the smaller the serif.
 const titleClass = (t) => (t.length <= 48 ? "t-l" : t.length <= 90 ? "t-m" : t.length <= 150 ? "t-s" : "t-xs");
 
+const BEHIND_STATUS = ["raised_count"];  // bookkeeping: shown when you point at the status, not in the facts line
+// a fact's wiki links ([[…]]) as links to the notes they name; unknown ones as plain words
+const factValue = (e, text) => esc(text).replace(/\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g, (_, target, alias) => {
+  const hit = e.fact_links?.[target.replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&quot;/g, '"')];
+  return hit ? `<a href="#/e/${enc(hit.id)}">${alias || esc(hit.title)}</a>` : alias || target;  // alias and target are escaped already
+});
 function readerHead(e, { crumbs = true } = {}) {
   const t = typeOf(e.type);
   const nav = e.map_nav;
-  const facts = Object.entries(e.facts || {}).filter(([k]) => !["category", "description", "status", "revisit_after", "superseded_by", "source", "confidence", "date", "question"].includes(k))
-    .map(([k, v]) => `<span title="${esc(k)}">${esc(k)}: ${esc(Array.isArray(v) ? v.join(", ") : typeof v === "object" && v ? JSON.stringify(v) : v)}</span>`).join("");
+  const facts = Object.entries(e.facts || {}).filter(([k]) => !["category", "description", "status", "revisit_after", "superseded_by", "source", "confidence", "date", "question", ...BEHIND_STATUS].includes(k))
+    .map(([k, v]) => `<span title="${esc(k)}">${esc(k)}: ${factValue(e, Array.isArray(v) ? v.join(", ") : typeof v === "object" && v ? JSON.stringify(v) : String(v))}</span>`).join("");
+  const behind = BEHIND_STATUS.filter((k) => e.facts?.[k] != null).map((k) => `${k}: ${e.facts[k]}`).join(", ");
   const ep = epistemic(e);
   return `
     ${crumbs ? `<div class="crumbs"><a href="#/t/${enc(e.type)}">${esc(t?.plural || e.type)}</a>${e.group ? `<span aria-hidden="true">/</span><span>${esc(e.group)}</span>` : ""}${e.project ? `<span aria-hidden="true">/</span><a href="#/e/${enc(`projects/${e.group}/${e.project}/project.md`)}">${esc(e.project)}</a>` : ""}
       ${nav ? `<span class="nav"><span>in <a href="#/e/${enc(nav.map)}">${esc(nav.title)}</a></span>
         <a class="icon-btn" href="${nav.prev ? `#/e/${enc(nav.prev)}` : "#"}" aria-label="Previous in this map" ${nav.prev ? "" : 'aria-disabled="true" tabindex="-1"'}>${svg("left")}</a>${nav.pos} / ${nav.total}
         <a class="icon-btn" href="${nav.next ? `#/e/${enc(nav.next)}` : "#"}" aria-label="Next in this map" ${nav.next ? "" : 'aria-disabled="true" tabindex="-1"'}>${svg("right")}</a></span>` : ""}</div>` : ""}
-    <div class="meta-row" data-t="${esc(e.type)}"><span class="badge kind">${g(e.type)}${esc(typeLabel(e.type))}</span>${e.facts?.category ? `<span>${esc(e.facts.category)}</span>` : ""}${e.status ? `<span class="badge">${esc(e.status)}</span>` : ""}${byBadges(e)}${e.date ? `<span>${esc(e.date)}</span>` : ""}${facts}${fixBadge(e)}</div>
+    <div class="meta-row" data-t="${esc(e.type)}"><span class="badge kind">${g(e.type)}${esc(typeLabel(e.type))}</span>${e.facts?.category ? `<span>${esc(e.facts.category)}</span>` : ""}${e.status ? `<span class="badge"${behind ? ` title="${esc(behind)}"` : ""}>${esc(e.status)}</span>` : ""}${byBadges(e)}${e.date ? `<span>${esc(e.date)}</span>` : ""}${facts}${fixBadge(e)}</div>
     <h1 class="e-title ${titleClass(e.title)}">${esc(e.title)}</h1>
     ${e.meta?.description ? `<p class="e-desc">${esc(e.meta.description)}</p>` : ""}
     ${e.facts?.question ? `<div style="display:flex;flex-direction:column;gap:4px;padding-left:14px;border-left:2px solid var(--line)"><span class="kicker">Question</span><span style="font-size:15.5px">${esc(e.facts.question)}</span></div>` : ""}
@@ -1511,10 +1528,12 @@ async function loadChat() {
   if (opener) lastOpen = opener.ts; else if (lastOpen === null) lastOpen = "";
   return fresh;
 }
-const SUGGESTIONS = ["Research what's new in a topic I care about", "I have an idea…", "What do I already know about…?", "What should we do next?"];
+const SUGGESTIONS = [["Research what's new in a topic I care about", "Research what's new in ‹sleep and memory›"],
+  ["I have an idea…", "I have an idea: ‹a timer that adapts to how focused I am›"],
+  ["What do I already know about…?", "What do I already know about ‹sleep and memory›?"], ["What should we do next?", "What should we do next?"]];
 const chatWelcome = () => `<div class="chat-welcome empty-hero" style="margin:auto;text-align:center;align-items:center"><h1 style="font-size:40px">Ask your knowledge graph</h1>
   <p>${state.operator.mode === "operator" ? "Your agents answer here with notes you can unfold, charts, choices and live mockups. What they open lands in the workbench." : "No agent is attached. Open Claude Code or Codex in this folder and say “start atlas”; until then your messages are kept as notes."}</p>
-  <div class="chips" style="justify-content:center">${SUGGESTIONS.map((q) => `<button class="facet" data-prefill="${esc(q)}">${esc(q)}</button>`).join("")}</div>
+  <div class="chips" style="justify-content:center">${SUGGESTIONS.map(([label, fill]) => `<button class="facet" data-prefill="${esc(fill)}">${esc(label)}</button>`).join("")}</div>
   ${commandList().length ? `<p style="font-size:13px">Type <b>/</b> for commands: ${commandList().slice(0, 6).map((c) => `<code class="mono">/${esc(c.name)}</code>`).join(" ")}…</p>` : ""}</div>`;
 
 // ------------------------------------------------------------------ composer and commands
@@ -1671,7 +1690,7 @@ async function viewChat() {
   main.classList.add("bleed");
   main.innerHTML = `<div class="op">
     <section class="op-conv" aria-label="Conversation">
-      <div class="op-bar"><span class="op-title" id="op-title" aria-live="polite"></span><div class="seg" role="group" aria-label="Show messages from" id="op-filter" hidden></div><span class="meta">duplex · inbox ↔ outbox</span></div>
+      <div class="op-bar"><span class="op-title" id="op-title" aria-live="polite"></span><div class="seg" role="group" aria-label="Show messages from" id="op-filter" hidden></div></div>
       <div class="chat-log" id="page-log"></div>
       ${composer("page", "Write to your agent…  type / for commands · Enter sends, Shift+Enter for a new line")}
     </section>

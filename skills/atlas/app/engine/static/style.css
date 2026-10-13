@@ -121,7 +121,7 @@ svg.i.ok { stroke: var(--ok); stroke-width: 1.9; }
 .av .dot { position: absolute; right: -2px; bottom: -2px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--surface); background: var(--faint); }
 .av .dot.listening { background: var(--ok); }
 .av .dot.working { background: var(--acc); animation: atlasPulse 1.6s ease-in-out infinite; }
-.av .dot.away { background: var(--soft); }
+.av .dot.away, .av .dot.starting { background: var(--soft); }
 
 /* ------------------------------------------------------------------ shell */
 .topbar { position: sticky; top: 0; z-index: 20; height: 60px; display: flex; align-items: center; gap: 16px; padding: 0 18px;
@@ -139,7 +139,7 @@ kbd { font: 11px var(--mono); padding: 2px 6px; border: 1px solid var(--line-str
 .ppill { display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 0 12px 0 6px; border: 1px solid var(--line); border-radius: 99px; background: var(--surface); color: var(--text); font-size: 13px; cursor: pointer; }
 .ppill:hover { border-color: var(--line-strong); text-decoration: none; }
 .ppill .st { font: 11px var(--mono); color: var(--faint); }
-.ppill .st.working { color: var(--acc-ink); } .ppill .st.listening { color: var(--ok); } .ppill .st.away { color: var(--soft); }
+.ppill .st.working { color: var(--acc-ink); } .ppill .st.listening { color: var(--ok); } .ppill .st.away, .ppill .st.starting { color: var(--soft); }
 .icon-btn { position: relative; width: 40px; height: 40px; border-radius: 10px; border: 1px solid transparent; background: none; color: var(--soft); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .icon-btn:hover { background: var(--raised); color: var(--text); }
 .icon-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
@@ -327,7 +327,7 @@ body.undo-on .toast:not(.undo) { bottom: 82px; }
 .agent-card .ac-head { display: flex; align-items: center; gap: 10px; }
 .agent-card .ac-name { font-weight: 600; font-size: 15px; }
 .agent-card .ac-state { margin-left: auto; white-space: nowrap; display: inline-flex; align-items: center; gap: 7px; font: 11px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
-.agent-card .ac-state.working { color: var(--acc-ink); } .agent-card .ac-state.listening { color: var(--ok); } .agent-card .ac-state.away { color: var(--soft); }
+.agent-card .ac-state.working { color: var(--acc-ink); } .agent-card .ac-state.listening { color: var(--ok); } .agent-card .ac-state.away, .agent-card .ac-state.starting { color: var(--soft); }
 .agent-card .ac-state .d { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .agent-card .ac-task { font-size: 15.5px; line-height: 1.45; overflow-wrap: anywhere; }
 .agent-card .ac-last { font-size: 14px; line-height: 1.55; color: var(--soft); overflow-wrap: anywhere; }
@@ -702,7 +702,6 @@ iframe.bhtml { width: 100%; height: 240px; border: 1px solid var(--line); border
 .op { display: flex; flex-wrap: wrap; height: calc(100vh - 60px); }
 .op-conv { flex: 1 1 440px; min-width: 0; height: 100%; display: flex; flex-direction: column; border-right: 1px solid var(--line-2); }
 .op-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 20px; border-bottom: 1px solid var(--line-2); }
-.op-bar .meta { margin-left: auto; font: 11.5px var(--mono); color: var(--faint); }
 .op-title { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 0; font: 500 13.5px var(--sans); color: var(--text-2); }
 .op-title:empty { display: none; }
 .op-title .t { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }

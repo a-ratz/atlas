@@ -91,6 +91,21 @@ def checks(page, base: str, scheme: str) -> None:
     page.wait_for_selector(".op-bar", timeout=15000)
     if not page.query_selector("#op-title"):
         failures.append(f"[{scheme}] the operator bar has no title slot (#1)")
+    if "starting" not in page.inner_text("#presence"):  # the browser smoke serves without an agent
+        failures.append(f"[{scheme}] a session whose agent has not listened yet does not say starting (#10)")
+    chip = page.query_selector(".chat-welcome [data-prefill]")  # same helper as Home's chips on an empty vault
+    if not chip:
+        failures.append(f"[{scheme}] the empty chat shows no suggestion chips to check (#10)")
+        return
+    chip.click()
+    box = page.evaluate("(() => { const i = document.activeElement; return [i.value, i.value.slice(i.selectionStart, i.selectionEnd)]; })()")
+    if "…" in box[0] or not box[1]:
+        failures.append(f"[{scheme}] a Home chip put {box[0]!r} in the box, selecting {box[1]!r} (#10)")
+    page.goto(f"{base}/#/e/{urllib.parse.quote('questions/can-tmr-work-without-eeg.md', safe='')}")
+    page.wait_for_selector(".meta-row", timeout=15000)
+    row = page.inner_text(".meta-row")
+    if "[[" in row or "raised_count" in row or not page.query_selector(".meta-row a[href^='#/e/insights']"):
+        failures.append(f"[{scheme}] the facts line shows {row!r} instead of a linked title (#10)")
 
 
 if __name__ == "__main__":

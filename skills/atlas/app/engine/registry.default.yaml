@@ -126,7 +126,7 @@ types:
     fields: [status, raised, raised_count, affects]
     status: status
     date: raised
-    count: {only: [open], aside: [dormant], aside_label: resting}  # the sidebar counts open ones
+    count: {only: [open], aside: [dormant], aside_label: dormant}  # the sidebar counts open ones
     checks:
       require: [status, raised]
       allowed: {status: [open, answered, dormant, dropped]}

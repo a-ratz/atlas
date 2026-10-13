@@ -218,6 +218,12 @@ def registry_types() -> dict[str, dict]:
     return cabinet_renamed(types)
 
 
+def aside_label(t: dict) -> str:
+    """The word after the sidebar's "+N". 0.6 vaults wrote "resting" for questions whose files say "dormant"."""
+    label = (t.get("count") or {}).get("aside_label", "")
+    return "dormant" if label == "resting" and (t.get("count") or {}).get("aside") == ["dormant"] else label
+
+
 def cabinet_renamed(types: dict[str, dict]) -> dict[str, dict]:
     """A registry copied before 0.6.1 still says Brain and brain/: read both as the Cabinet."""
     for spec in types.values():
@@ -737,7 +743,8 @@ def render_md(index: Index, text: str, base: str = "") -> str:
     def wiki(m: re.Match) -> str:
         target, alias = m.group(1), m.group(2)
         hit = index.resolve(target)
-        label = (alias or target).replace("]", "\\]")
+        label = alias or (index.entities[hit].title if hit else target)  # a source's title, not its file name
+        label = re.sub(r"([\\\[\]*_`<])", r"\\\1", label)
         return f"[{label}](#/e/{quote(hit)})" if hit else f"[{label}](#/missing/{quote(target.strip())})"
 
     md = MarkdownIt("commonmark", {"html": False, "linkify": False}).enable(["table", "strikethrough"])
@@ -870,6 +877,17 @@ def render_agent_message(index: Index, text: str) -> list[dict]:
     return blocks
 
 
+def fact_links(index: Index, ent: Entity) -> dict:
+    """Where the wiki links in a note's facts point (`affects: [[…]]`), so the reader shows them as links."""
+    out = {}
+    for k in index.types[ent.type].get("fields", []):
+        for target, _ in WIKI.findall(json.dumps(_plain(ent.meta.get(k)), ensure_ascii=False)):
+            hit = index.resolve(target)
+            if hit:
+                out[target] = {"id": hit, "title": index.entities[hit].title}
+    return out
+
+
 def entity_view(index: Index, eid: str) -> dict | None:
     ent = index.entities.get(eid)
     if not ent:
@@ -903,6 +921,7 @@ def entity_view(index: Index, eid: str) -> dict | None:
         "maps": [e.card(index) for e in maps],
         "siblings": [e.card(index) for e in siblings],
         "neighbors": neighbors,
+        "fact_links": fact_links(index, ent),
         "path": ent.id,
         "issues": next((n["issues"] for n in health(index)["notes"] if n["id"] == eid), []),
         "members": [e.card(index) for e in members],
@@ -1441,6 +1460,12 @@ def operator_state() -> dict:
     progress = [r for r in out if r.get("kind") == "progress"]
     state = _presence(time.time() - beat, inbox[-1]["ts"] if inbox else "", answers[-1]["ts"] if answers else "",
                       progress[-1]["ts"] if progress else "")
+    try:
+        started = dt.datetime.fromisoformat(s.get("started", "")).timestamp()
+    except (TypeError, ValueError):
+        started = 0
+    if state == "offline" and beat < started and time.time() - started < 600:
+        state = "starting"  # Atlas started for an agent that has not listened yet; for ten minutes, not forever
     return {"mode": "operator", "state": state, "since": s.get("started"), "agents": agents_state(inbox, out)}
 
 
@@ -1499,7 +1524,7 @@ def make_app(index: Index):
         # a research run counts once however many documents it holds, the way its list shows it
         types = [{**{k: v for k, v in t.items() if k not in ("globs", "exclude", "count")},
                   "count": len(runs.get(t["id"], ())) if t.get("group") == "frame" else counts.get(t["id"], 0),
-                  "aside": aside.get(t["id"], 0), "aside_label": (t.get("count") or {}).get("aside_label", ""),
+                  "aside": aside.get(t["id"], 0), "aside_label": aside_label(t),
                   "count_status": ",".join(map(str, (t.get("count") or {}).get("only") or [])),
                   "aside_status": ",".join(map(str, (t.get("count") or {}).get("aside") or []))}
                  for t in index.types.values()]
@@ -2357,6 +2382,10 @@ def cmd_commit(args) -> None:
     top = _git_out("rev-parse", "--show-toplevel", cwd=VAULT)
     if top is None:
         sys.exit("the vault is not in a git repository")
+    if _git_out("rev-parse", "--verify", "-q", "HEAD", cwd=top) is None:  # the install could not commit
+        sys.exit("this Atlas has no first commit yet: git needs your name and email. Set them\n"
+                 '  git config --global user.name "Your Name"\n  git config --global user.email you@example.com\n'
+                 f'then commit the install: git -C "{top}" commit -m "atlas: install", and run this again.')
     for p in paths:
         try:
             p.relative_to(VAULT)
@@ -2539,8 +2568,21 @@ def cmd_tour(args) -> None:
 
 def cmd_status(args) -> None:
     s = session()
-    print(json.dumps({**s, "operator": operator_state(), "unread_for_agent":
+    url = f"http://localhost:{s['port']}" if s.get("port") else None
+    print(json.dumps({**s, "url": url, "running": serving(url), "operator": operator_state(), "unread_for_agent":
                       max(0, len(read_jsonl(INBOX)) - (read_cursor() if CURSOR.exists() else 0))}))
+
+
+def serving(url: str | None) -> bool:
+    """Whether the server at `url` answers for this vault (another Atlas may have the port since)."""
+    if not url:
+        return False
+    import urllib.request
+    try:
+        with urllib.request.urlopen(url + "/api/meta", timeout=2) as r:
+            return Path(json.loads(r.read()).get("vault_path", "")).resolve() == VAULT.resolve()
+    except (OSError, ValueError):
+        return False
 
 
 def cmd_expose(args) -> None:

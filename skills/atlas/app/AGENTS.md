@@ -72,7 +72,7 @@ Follow `.agents/skills/atlas-operator/SKILL.md`. In short:
    `uv run --no-project engine/atlas.py serve --operator`
    (Claude Code: run it as a background task. Other harnesses: `nohup … &` or
    your harness's background mode.)
-3. Tell the user to open **http://localhost:8765**.
+3. Tell the user to open the URL `serve` printed (`engine/atlas.py status` shows it again).
 4. Enter the listening loop for your harness (next section).
 
 ## Talking with the user through Atlas
