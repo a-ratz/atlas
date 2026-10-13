@@ -58,7 +58,7 @@ class Recorder:
     # ------------------------------------------------------------ engine and server
     def atlas(self, *args: str, stdin: str | None = None) -> str:
         r = subprocess.run([sys.executable, str(self.engine_py), *args, "--vault", str(self.vault)],
-                           input=stdin, capture_output=True, text=True, cwd=self.home)
+                           input=stdin, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=self.home)
         if r.returncode:
             sys.exit(f"atlas.py {args[0]} failed:\n{r.stdout}\n{r.stderr}")
         return r.stdout
@@ -181,7 +181,7 @@ def write_chat(path: Path, record: dict) -> None:
 def record(scene: dict, work: Path) -> dict:
     home = work / "atlas"
     shutil.copytree(APP, home)
-    git = lambda *a: subprocess.run(["git", "-C", str(home), *a], check=True, capture_output=True, text=True)
+    git = lambda *a: subprocess.run(["git", "-C", str(home), *a], check=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
     git("init", "-q")
     git("config", "user.name", scene["user"])
     git("config", "user.email", "demo@example.org")

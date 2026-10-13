@@ -2532,6 +2532,9 @@ def cmd_expose(args) -> None:
 
 
 def main() -> None:
+    for stream in (sys.stdout, sys.stderr):  # Windows pipes default to cp1252: an emoji or umlaut would stop the command
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--vault", dest="vault_sub", help="vault directory (default: ./vault next to engine/, or $ATLAS_VAULT)")
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])

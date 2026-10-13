@@ -56,13 +56,13 @@ def ok(msg: str) -> None:
 
 
 def tracked(*patterns: str) -> list[Path]:
-    out = subprocess.run(["git", "ls-files", "-z", *patterns], cwd=ROOT, capture_output=True, text=True, check=True).stdout
+    out = subprocess.run(["git", "ls-files", "-z", *patterns], cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", check=True).stdout
     return [ROOT / p for p in out.split("\0") if p]
 
 
 def atlas(vault: Path, *args: str, timeout: float = 120) -> subprocess.CompletedProcess:
     return subprocess.run([*UV, str(ENGINE), "--vault", str(vault), *args],
-                          capture_output=True, text=True, timeout=timeout)
+                          capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
 
 
 def demo_vault(tmp: Path) -> Path:
@@ -86,7 +86,7 @@ class Server:
             port = s.getsockname()[1]
         args = [*UV, str(ENGINE), "--vault", str(self.vault), "serve", "--port", str(port)]
         self.proc = subprocess.Popen(args + (["--operator"] if self.operator else []),
-                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
         self.base = f"http://127.0.0.1:{port}"
         for _ in range(300):  # the first run may resolve the engine's dependencies
             try:
@@ -158,7 +158,7 @@ def check_static(args) -> None:
                 continue
             copy = Path(tmp) / (js.stem + ".mjs")  # the app's scripts are ES modules
             shutil.copy(js, copy)
-            r = subprocess.run([node, "--check", str(copy)], capture_output=True, text=True)
+            r = subprocess.run([node, "--check", str(copy)], capture_output=True, text=True, encoding="utf-8", errors="replace")
             if r.returncode:
                 fail(f"{js.relative_to(ROOT)} does not parse:\n{r.stderr}")
     ok("JavaScript parses")
@@ -169,7 +169,7 @@ def check_operator(args) -> None:
         vault = demo_vault(Path(tmp))
         with Server(vault, operator=True) as srv:
             wait = subprocess.Popen([*UV, str(ENGINE), "--vault", str(vault), "wait", "--timeout", "90"],
-                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
             heartbeat = vault / ".atlas" / "heartbeat"
             for _ in range(100):  # `wait` beats once it listens
                 if heartbeat.exists() and time.time() - heartbeat.stat().st_mtime < 5:
@@ -198,7 +198,7 @@ def check_operator(args) -> None:
 
 def check_upgrade(args) -> None:
     rel = "skills/atlas/app/vault/atlas.yaml"
-    old = subprocess.run(["git", "show", f"{args.base}:{rel}"], cwd=ROOT, capture_output=True, text=True)
+    old = subprocess.run(["git", "show", f"{args.base}:{rel}"], cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if old.returncode:
         print(f"skip upgrade: {args.base} has no {rel}")
         return
@@ -229,7 +229,7 @@ def check_installer(args) -> None:
 
         def run(*cmd: str) -> str:
             r = subprocess.run([*UV, str(skill / "scripts" / "atlas_install.py"), *cmd],
-                               capture_output=True, text=True, env=env)
+                               capture_output=True, text=True, encoding="utf-8", errors="replace", env=env)
             if r.returncode:
                 fail(f"`atlas_install.py {' '.join(cmd)}` failed:\n{r.stdout}{r.stderr}")
             return r.stdout
@@ -256,7 +256,7 @@ def check_installer(args) -> None:
 
 
 def check_docs(args) -> None:
-    help_text = subprocess.run([*UV, str(ENGINE), "--help"], capture_output=True, text=True).stdout
+    help_text = subprocess.run([*UV, str(ENGINE), "--help"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
     m = re.search(r"\{([a-z,-]+)\}", help_text)
     commands = set(m.group(1).split(",")) if m else set()
     fence = re.compile(r"^(`{3,})(\w*)[^\n]*\n(.*?)^\1[ \t]*$", re.S | re.M)
@@ -310,14 +310,14 @@ def check_pr(args) -> None:
     m = re.search(r"Atlas (\S+) is the current release", readme)
     if not m or m.group(1) != version:
         fail(f"README says Atlas {m.group(1) if m else '?'} is the current release, VERSION says {version}")
-    diff = subprocess.run(["git", "diff", "--name-only", f"{args.base}...HEAD"], cwd=ROOT, capture_output=True, text=True)
+    diff = subprocess.run(["git", "diff", "--name-only", f"{args.base}...HEAD"], cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if diff.returncode:
         fail(f"cannot compare with `{args.base}` (fetch it, or pass --base): {diff.stderr.strip()}")
         return
     changed = diff.stdout.split()
     if any(p.startswith("skills/atlas/app/") for p in changed):
         old = subprocess.run(["git", "show", f"{args.base}:skills/atlas/app/VERSION"], cwd=ROOT,
-                             capture_output=True, text=True).stdout.strip()
+                             capture_output=True, text=True, encoding="utf-8", errors="replace").stdout.strip()
         as_tuple = lambda v: tuple(int(x) for x in re.findall(r"\d+", v))
         if old and as_tuple(version) <= as_tuple(old):
             fail(f"the app changed but VERSION stays {version} (base: {old}); raise it and the README line")

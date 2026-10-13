@@ -28,6 +28,14 @@ def test_every_text_file_and_git_output_names_its_encoding(vault):
         assert "EncodingWarning" not in r.stderr, f"`atlas.py {args[0]}`:\n{r.stderr}"
 
 
+def test_output_through_a_cp1252_pipe_keeps_its_emoji(vault):
+    # Windows encodes piped stdout as cp1252: `boot` printed "⚠" and crashed (#8, second Windows run)
+    assert engine(vault, "demo").returncode == 0
+    r = engine(vault, "boot", "nightlight", "--agent", "codex", env={**os.environ, "PYTHONIOENCODING": "cp1252"})
+    assert r.returncode == 0, r.stderr
+    assert "⚠" in r.stdout or "nightlight" in r.stdout.lower()
+
+
 @pytest.mark.skipif(not shutil.which("git"), reason="needs git")
 def test_commit_takes_a_moved_file_through_a_linked_folder(vault, tmp_path):
     # macOS keeps temp folders under /var, a link to /private/var: the moved file's old path was "outside the vault"
