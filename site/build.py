@@ -191,7 +191,7 @@ def record(scene: dict, work: Path) -> dict:
     if named == text:
         sys.exit("vault/atlas.yaml has no empty user name to fill in")
     reg.write_text(named, encoding="utf-8")
-    version = (APP / "VERSION").read_text().strip()
+    version = (APP / "VERSION").read_text(encoding="utf-8").strip()
     git("add", "-A")
     git("commit", "-q", "-m", f"atlas: install {version}")
 

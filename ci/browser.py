@@ -59,6 +59,8 @@ def main() -> None:
                     page.goto(f"{srv.base}/{route}")
                     page.wait_for_function("document.querySelector('#main, main')?.children.length > 0", timeout=15000)
                     page.wait_for_timeout(300)  # late renders: cards, graph, streamed chat
+                    if page.query_selector("text=Could not load this view"):  # the router's catch-all, no console error
+                        errors.append("the view failed to render: " + page.inner_text("#main, main")[:200])
                     for e in errors:
                         failures.append(f"[{scheme}] {route}: {e}")
                 checks(page, srv.base, scheme)

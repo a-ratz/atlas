@@ -222,8 +222,9 @@ def check_installer(args) -> None:
         tmp = Path(tmp)
         skill = tmp / "skill"  # a copy, so the pointer the installer writes never lands in this checkout
         shutil.copytree(SKILL, skill, ignore=shutil.ignore_patterns("config.json", ".atlas", "__pycache__"))
-        env = {**os.environ, "HOME": str(tmp / "user"), "USERPROFILE": str(tmp / "user"),
-               "XDG_CONFIG_HOME": str(tmp / "user" / ".config")}
+        user = tmp / "user"  # every place the installer may keep its pointer, so the real one is never touched
+        env = {**os.environ, "HOME": str(user), "USERPROFILE": str(user), "XDG_CONFIG_HOME": str(user / ".config"),
+               "APPDATA": str(user / "AppData" / "Roaming"), "LOCALAPPDATA": str(user / "AppData" / "Local")}
         home = tmp / "Atlas"
 
         def run(*cmd: str) -> str:
@@ -304,13 +305,16 @@ def check_tests(args) -> None:
 
 
 def check_pr(args) -> None:
-    version = (APP / "VERSION").read_text().strip()
+    version = (APP / "VERSION").read_text(encoding="utf-8").strip()
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     m = re.search(r"Atlas (\S+) is the current release", readme)
     if not m or m.group(1) != version:
         fail(f"README says Atlas {m.group(1) if m else '?'} is the current release, VERSION says {version}")
-    changed = subprocess.run(["git", "diff", "--name-only", f"{args.base}...HEAD"], cwd=ROOT,
-                             capture_output=True, text=True).stdout.split()
+    diff = subprocess.run(["git", "diff", "--name-only", f"{args.base}...HEAD"], cwd=ROOT, capture_output=True, text=True)
+    if diff.returncode:
+        fail(f"cannot compare with `{args.base}` (fetch it, or pass --base): {diff.stderr.strip()}")
+        return
+    changed = diff.stdout.split()
     if any(p.startswith("skills/atlas/app/") for p in changed):
         old = subprocess.run(["git", "show", f"{args.base}:skills/atlas/app/VERSION"], cwd=ROOT,
                              capture_output=True, text=True).stdout.strip()
@@ -320,7 +324,7 @@ def check_pr(args) -> None:
     ok(f"release: VERSION {version} and the README agree")
 
     event = os.environ.get("GITHUB_EVENT_PATH")
-    pr = json.loads(Path(event).read_text()).get("pull_request") if event and Path(event).exists() else None
+    pr = json.loads(Path(event).read_text(encoding="utf-8")).get("pull_request") if event and Path(event).exists() else None
     if pr is None:
         print("skip screenshots: not a pull request")
         return
