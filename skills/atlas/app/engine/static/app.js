@@ -323,7 +323,7 @@ function confirmBox(title, text, ok = "OK") {
 function markNav() {
   const h = location.hash || "#/";
   const base = h.split("?")[0];
-  $$(".nav-link").forEach((a) => a.classList.toggle("active", a.getAttribute("href") === base));
+  $$(".nav-link").forEach((a) => a.classList.toggle("active", (a.getAttribute("href") || "").split("?")[0] === base));
   const tab = base.startsWith("#/chat") ? "chat" : base.startsWith("#/projects") || (state.current?.type && PROJECT_TYPES.has(state.current.type)) ? "projects" : base.startsWith("#/graph") ? "graph" : base === "#/" ? "home" : "";
   $$(".tabbar a").forEach((a) => a.classList.toggle("on", a.dataset.tab === tab));
 }
@@ -711,6 +711,7 @@ async function viewList(type, params) {
     $("#facets").innerHTML = facetKeys.map((k) => {
       const counts = {};
       for (const e of items) { const v = facetVal(e, k); if (v) counts[v] = (counts[v] || 0) + 1; }
+      if (active[k] && !(active[k] in counts)) counts[active[k]] = 0;  // a filter from a link stays visible, so it can be removed
       return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 14)
         .map(([v, c]) => `<button class="facet${active[k] === v ? " on" : ""}" data-k="${k}" data-v="${esc(v)}" aria-pressed="${active[k] === v}">${esc(v)}<span class="n">${c}</span></button>`).join("");
     }).join("") + (due ? `<button class="facet on" id="due-off">revisit due ✕</button>` : "");
