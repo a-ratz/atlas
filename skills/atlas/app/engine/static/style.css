@@ -858,3 +858,5 @@ body.reading.chat-open .dock { position: fixed; right: 0; top: 60px; width: min(
 .men-group summary::-webkit-details-marker { display: none; }
 .men-group summary .mono { margin-left: auto; font-size: 11.5px; color: var(--faint); }
 .men-group .mini-list { margin: 0 0 10px 22px; }
+.moves-bar .sent-note { font-size: 13px; color: var(--soft); }
+.moves-bar .btn.chosen:disabled { opacity: 1; box-shadow: inset 0 0 0 1px var(--acc); }

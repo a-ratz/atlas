@@ -355,7 +355,32 @@ document.addEventListener("click", async (ev) => {
   if (ok && b.dataset.once !== undefined) { b.classList.add("chosen"); return; }
   b.disabled = false;
   if (ok && state.operator.mode === "operator") { toast(`Sent to ${agentName(currentTo())}`); if (!onChatPage()) openChat(); }
+  if (ok && b.dataset.via === "move" && b.closest(".moves-bar")) markSent(b);
 });
+
+// A move the user pressed stays visible on the page, its buttons off, until the note changes (the page
+// re-renders) or the agent is done without changing it: no second press on a note that is about to move.
+function markSent(b) {
+  const bar = b.closest(".moves-bar");
+  bar.classList.add("sent");
+  bar.querySelectorAll("button").forEach((x) => (x.disabled = true));
+  b.classList.add("chosen");
+  bar.insertAdjacentHTML("beforeend", `<span class="sent-note" role="status">Sent to ${esc(agentName(currentTo()))}. This page updates when the agent is done.</span>`);
+  state.sentMove = { at: Date.now(), sawWorking: false };
+}
+function releaseSent() {
+  const s = state.sentMove;
+  if (!s) return;
+  if (liveAgents().some((a) => a.state === "working")) { s.sawWorking = true; return; }
+  if (!s.sawWorking && Date.now() - s.at < 30000) return;  // not picked up yet
+  state.sentMove = null;
+  const bar = $(".moves-bar.sent");
+  if (!bar) return;
+  bar.classList.remove("sent");
+  bar.querySelectorAll("button").forEach((x) => (x.disabled = false));
+  bar.querySelector(".sent-note")?.remove();
+  bar.querySelector(".chosen")?.classList.remove("chosen");
+}
 
 function prefill(text) {
   const mobile = matchMedia("(max-width: 760px)").matches;
@@ -1967,7 +1992,7 @@ function connectStream() {
   });
   es.addEventListener("operator", (ev) => {
     state.operator = JSON.parse(ev.data);
-    renderPresence(); renderNav(); updateComposers(); refreshShift();
+    renderPresence(); renderNav(); updateComposers(); refreshShift(); releaseSent();
     if (state.chatOpen || onChatPage()) loadChat();
   });
   es.addEventListener("index", async () => {

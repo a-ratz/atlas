@@ -109,6 +109,15 @@ def checks(page, base: str, scheme: str) -> None:
     row = page.inner_text(".meta-row")
     if "[[" in row or "raised_count" in row or not page.query_selector(".meta-row a[href^='#/e/insights']"):
         failures.append(f"[{scheme}] the facts line shows {row!r} instead of a linked title (#10)")
+    if scheme != "light":  # pressing a move writes to the chat, which the next pass expects empty
+        return
+    page.click(".moves-bar [data-via='move']:has-text('Later')")
+    try:
+        page.wait_for_selector(".moves-bar.sent .sent-note", timeout=5000)
+        if page.eval_on_selector_all(".moves-bar button", "bs => bs.some((b) => !b.disabled)"):
+            failures.append(f"[{scheme}] a pressed move leaves the other buttons on (#10)")
+    except Exception:
+        failures.append(f"[{scheme}] pressing Later shows nothing on the page, only a toast (#10)")
 
 
 def follows_changes(ctx, srv: Server, vault: Path) -> None:
