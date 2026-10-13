@@ -93,11 +93,11 @@ them. Expand only when the user asks; distill itself never searches.
 
 | Person | Organization |
 |---|---|
-| current role and organization | what it does, in one line |
-| up to 3 earlier roles, with years | headquarters region |
+| current role and organization; when the newest evidence is old, write "as of <year>" | what it does, in one line |
+| up to 3 earlier roles or affiliations, with years (for researchers, the institutions their papers list) | headquarters region |
 | one line of expertise | size band (e.g. 50–200 people) |
 | up to 3 public works that matter to this vault, linked | website |
-| public professional channels: website, GitHub, X or Bluesky, LinkedIn URL | up to 3 products or works that matter to this vault |
+| public professional channels: website, GitHub, X or Bluesky, and a LinkedIn URL when a web search shows it (record the link; open the profile only with the LinkedIn setting) | up to 3 products or works that matter to this vault |
 | | people who already have cards, linked |
 
 Every fact gets its source URL and the date you checked it. A field you cannot

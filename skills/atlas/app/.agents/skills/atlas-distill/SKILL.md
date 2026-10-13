@@ -105,7 +105,8 @@ Before filing, look through `questions/` for one that already covers it:
 - **answered**: file the new question only if it asks something the answer did
   not cover.
 
-`vault/questions/<question as a short sentence>.md`:
+`vault/questions/<question as a short sentence>.md` (the file name drops the `?`
+and the other characters insights avoid; the title keeps it):
 
 ```markdown
 ---
@@ -171,6 +172,9 @@ that is only mentioned ("as Netflix does") gets no card.
    `university-of-tuebingen.md`, `dumay.md`.
 3. At most **five new cards per capture**, the actors the insights lean on most.
    List the others as candidates in your summary.
+4. If these are the vault's first person cards and `cabinet.enrich` in
+   `vault/atlas.yaml` is `ask` or missing, ask the LinkedIn question once
+   (`atlas-cabinet`, section 2).
 
 ## 7. Close the loop
 
