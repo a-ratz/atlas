@@ -75,11 +75,12 @@ When a message arrives:
 1. Read it: `USER [viewing: <path>] [via …]: text`. Open the viewed file first.
    `  CABINET <name> (<path>): …` lines under it are the cards of the people and
    organizations it names (AGENTS.md, Cabinet). When you learn something new about
-   one, add it to their card's timeline, and tell the user what you added.
+   one, add it to their card's timeline (`atlas-cabinet`), and tell the user what
+   you added.
    `[via command]` is a `/command` the user picked from the chat's list; AGENTS.md
    maps each one to its workflow.
 2. Do the work. Use the workflow skills (`atlas-learn`, `atlas-distill`,
-   `atlas-map`, `atlas-sketch`, `atlas-project`). Atlas re-reads the vault within ~10 seconds,
+   `atlas-map`, `atlas-sketch`, `atlas-project`, `atlas-cabinet`). Atlas re-reads the vault within ~10 seconds,
    so new files show up by themselves. If it takes more than a minute, keep
    the user posted with short progress lines (one per real step, not a
    heartbeat). They show as quiet status lines and do not end your turn:

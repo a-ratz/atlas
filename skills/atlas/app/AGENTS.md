@@ -130,8 +130,13 @@ The current state in a few sentences. Rewrite it when something changes.
 ```
 
 - **Content:** role, relation, contact details, projects. Nothing about private
-  life, and no web research about private people. Public figures may carry
-  public facts with links.
+  life. Public figures may carry public facts with links. Look up a private
+  person only through LinkedIn enrichment, and only when the user switched it
+  on.
+- **Enrichment:** `cabinet.enrich` in `vault/atlas.yaml` (`ask`, `linkedin`,
+  `off`) says whether new cards are filled with professional details from
+  LinkedIn. The `atlas-cabinet` skill asks once, checks the browser tool and the
+  login, and lists what may and may not go on a card.
 - **State versus timeline:** the text under the heading is rewritten; the
   timeline only grows, every entry with a date and a source.
 - **In chat:** when a message names a card, `wait` adds a line
@@ -156,6 +161,7 @@ The current state in a few sentences. Rewrite it when something changes.
 | agrees to distill, or captures are waiting | `.agents/skills/atlas-distill/SKILL.md` |
 | has five or more insights without a map, or asks for a map | `.agents/skills/atlas-map/SKILL.md` |
 | says "I have an idea…" | `.agents/skills/atlas-sketch/SKILL.md` |
+| wants a card for a person or organization, or asks to look someone up | `.agents/skills/atlas-cabinet/SKILL.md` |
 | names a project to work on, "new project", closes a session | `.agents/skills/atlas-project/SKILL.md` |
 | wants the demo notes gone ("clean the demo", "start fresh") | `.agents/skills/atlas-clean-demo/SKILL.md`; to load them: `engine/atlas.py demo` |
 

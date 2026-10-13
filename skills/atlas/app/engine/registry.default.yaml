@@ -17,10 +17,17 @@
 #
 # commands: what the user can type after "/" in the chat. Typing "/" lists them.
 # drop:     where a file dropped on Atlas lands, and what the composer then holds (see below)
+# cabinet:  enrich = ask | linkedin | off: whether new Cabinet cards are filled from LinkedIn
+#           (asked once with the first person card; atlas-cabinet skill)
 #   name, args (hint), help (one line), send (what your agent receives; {args} = the rest)
 
 user:
   name: ""            # how Atlas greets you; empty = no name
+
+cabinet:
+  enrich: ask         # ask | linkedin | off; asked once with the first person card
+  tool: ""            # the browser tool that passed the check
+  checked: ""         # date of the last passing check
 
 commands:
   - {name: learn, args: "<topic or question>", help: "Research it and land the result as a capture", send: "/learn {args}"}

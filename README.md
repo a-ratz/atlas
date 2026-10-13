@@ -165,6 +165,13 @@ A card's page lists the notes that mention them and the papers whose `authors:`
 name them, so "which insights about Anthropic do we have?" or "which papers by
 this author did we read?" is one click (or `atlas.py mentions "<name>"`).
 
+Optional: with the first person card, your agent asks whether to fill new
+cards from LinkedIn. On yes, it checks that it can drive your browser and that
+you are logged in, then adds only professional details (role, employer, past
+roles, education, public talks) with a dated source. It never connects,
+messages, or touches your LinkedIn settings. The person sees the profile visit
+unless you use LinkedIn's private mode.
+
 ### Small things
 
 <p align="center">
@@ -241,6 +248,7 @@ Atlas ships the workflows as skills that every harness reads from
 | agree to distill | `atlas-distill`: one claim per insight, every claim traced to its source |
 | have a cluster of insights | `atlas-map`: group them into a map |
 | say "I have an idea…" | `atlas-sketch` |
+| want a card for someone, or ask to look them up | `atlas-cabinet`: create and update cards, optionally from LinkedIn |
 | name a project, or close a session | `atlas-project`: load its memory, keep threads, decisions and lessons current |
 | want the demo gone | `atlas-clean-demo` |
 
@@ -294,7 +302,7 @@ single-user, local-first and young.
 
 ## Status and roadmap
 
-Atlas 0.6.1 is the current release. Stable: the
+Atlas 0.6.2 is the current release. Stable: the
 engine and reader, the duplex chat with answer blocks, project memory with boot
 packets, the checks, tours, the installer with upgrade and restore.
 
