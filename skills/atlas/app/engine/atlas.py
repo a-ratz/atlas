@@ -2432,7 +2432,8 @@ def qmd(*args: str, index: str | None = None, timeout: float = 1800) -> subproce
     exe = qmd_bin()
     if not exe:
         return subprocess.CompletedProcess(["qmd", *args], 127, "", "qmd is not installed")
-    env = {k: v for k, v in os.environ.items() if k != "INDEX_PATH"}  # it would beat --index: one database for all
+    # INDEX_PATH beats --index (one database for every vault); without an index it is the user's own setting
+    env = {k: v for k, v in os.environ.items() if not (index and k == "INDEX_PATH")}
     return subprocess.run([exe, *(["--index", index] if index else []), *args], capture_output=True, text=True,
                           encoding="utf-8", errors="replace", timeout=timeout, stdin=subprocess.DEVNULL, env=env)
 

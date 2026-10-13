@@ -236,6 +236,8 @@ def test_qmd_never_sees_index_path(engine, vault, fake, monkeypatch):
     monkeypatch.setenv("INDEX_PATH", "/elsewhere/qmd/index.sqlite")
     engine.qmd("status", index="atlas")
     assert fake.envs[-1] and "INDEX_PATH" not in fake.envs[-1]
+    engine.qmd("status")  # QMD's default index, which a user may keep at INDEX_PATH (#15, review round 3)
+    assert fake.envs[-1]["INDEX_PATH"] == "/elsewhere/qmd/index.sqlite"
 
 
 def test_smoke_runs_keep_qmd_inside_the_run(tmp_path):
