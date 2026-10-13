@@ -77,7 +77,8 @@ Nothing leaves the machine. It works on macOS, Linux and Windows.
 
 Run `qmd --version`.
 
-- **QMD is installed:** ask "Turn on search by meaning for this vault?"
+- **QMD is installed:** ask "Turn on search by meaning for this vault? The first
+  setup downloads about 2 GB of models."
 - **QMD is missing:** ask "Install QMD for search by meaning? It is optional:
   Atlas works without it. It needs Node.js or Bun, and its first run downloads
   about 2 GB of models." On yes: `npm install -g @tobilu/qmd` (or

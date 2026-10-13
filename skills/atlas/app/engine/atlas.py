@@ -2445,10 +2445,11 @@ QMD_AREAS = [  # area, mask inside the vault, the context line QMD keeps for the
     ("projects", "projects/**/*.md", "Projects: project.md, threads, decisions and lessons per project"),
     ("ideas", "{sketches,specs}/**/*.md", "Ideas: rough sketches and worked-out specs"),
     ("insights", "insights/**/*.md", "Insights: one claim per note, the title is the claim; maps are *-map.md"),
-    ("sources", "{sources,research}/**/*.md", "Sources and research runs: processed captures with their evidence"),
+    # captures too: a capture waiting to be distilled is what the vault knows newest, and it moves to sources/
+    ("sources", "{sources,research,captures}/**/*.md", "Sources, research runs and captures waiting to be distilled"),
 ]
 QMD_ROOTS = {"cabinet": ("cabinet/",), "projects": ("projects/",), "ideas": ("sketches/", "specs/"),
-             "insights": ("insights/",), "sources": ("sources/", "research/")}
+             "insights": ("insights/",), "sources": ("sources/", "research/", "captures/")}
 
 
 def qmd_bin() -> str | None:

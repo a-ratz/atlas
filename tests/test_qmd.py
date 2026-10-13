@@ -68,6 +68,14 @@ def test_setup_builds_the_vaults_own_index(engine, vault, fake):
     assert engine.qmd_settings() == {"enabled": True, "index": "atlas"}
 
 
+def test_a_waiting_capture_is_found_by_meaning(engine, vault, fake):
+    # a capture the agent just wrote was never indexed, and "what do we know" missed captures (#15, smoke run)
+    engine.cmd_qmd(Namespace(action="setup"))
+    sources = next(c for c in fake.calls if "atlas-sources" in c)
+    assert "captures" in sources[sources.index("--mask") + 1]
+    assert engine.qmd_areas_for(["captures/a-note-of-mine.md"]) == ["sources"]
+
+
 def test_a_second_vault_gets_an_index_of_its_own(engine, vault, fake):
     fake.add("atlas", "atlas-insights", Path("/somewhere/else/vault"))  # another vault on this machine
     name, _ = engine.qmd_plan()

@@ -19,7 +19,7 @@ whether QMD is installed and on, the index, and which collections exist.
 
 | Question | Collection |
 |---|---|
-| What does the vault already know about X? (`atlas-learn`, step 1) | `atlas-insights`, `atlas-sources` |
+| What does the vault already know about X? (`atlas-learn`, step 1) | `atlas-insights`, `atlas-sources` (sources, research runs and the captures still waiting) |
 | Is this claim already in the vault? (`atlas-distill`, duplicates) | `atlas-insights` |
 | Who is this person or organization? (`atlas-cabinet`) | `atlas-cabinet` |
 | Do we have this idea already? (`atlas-sketch`) | `atlas-ideas` |
@@ -48,9 +48,12 @@ Search with `grep -ril "<words>" vault/<folder>` or, while Atlas runs,
 
 ## Turn it on, off, or repair it
 
-- **On:** if `qmd --version` fails, ask first (it needs Node.js or Bun, and its
-  first run downloads about 2 GB of models), then `npm install -g @tobilu/qmd`.
-  Then `engine/atlas.py qmd setup`: it creates the index with the five
+- **On:** ask first, also when QMD is already installed: the first setup
+  downloads about 2 GB of models. Say what it creates: an index of the vault's
+  own with five collections (cabinet, projects, ideas, insights, sources with
+  captures), on this machine only. If `qmd --version` fails, it also needs
+  Node.js or Bun: `npm install -g @tobilu/qmd`. Then
+  `engine/atlas.py qmd setup`: it creates the index with the five
   collections, a context line each, and embeds them. When embedding fails, it
   says why and leaves search by meaning off.
 - **Off:** `engine/atlas.py qmd off`. Deep search falls back to instant
