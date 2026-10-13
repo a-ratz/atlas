@@ -65,6 +65,7 @@ adds or changes a feature adds it to a scenario or writes a new one.
 | [first-run](scenarios/first-run.md) | an empty Atlas, the first chat, a note |
 | [research-to-questions](scenarios/research-to-questions.md) | research → capture → distill → insights, open questions, cards |
 | [upgrade](scenarios/upgrade.md) | the last release with content, upgraded to this checkout |
+| [open-page-follows](scenarios/open-page-follows.md) | an open page follows the agent: a distill moves the capture, "Later" changes a question |
 
 ## Budget
 
