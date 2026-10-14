@@ -749,10 +749,13 @@ async function viewSearch(params) {
   main.innerHTML = `<section class="hero"><div class="kicker">${mode === "deep" ? "semantic search through QMD" : "instant title and text match"}</div><h1 class="page">“${esc(q)}”</h1></section>
     <div class="toolbar"><div class="seg" role="group" aria-label="Search mode"><a class="btn ghost${mode === "fast" ? " on" : ""}" href="#/search?q=${enc(q)}" aria-pressed="${mode === "fast"}">Instant</a><a class="btn ghost${mode === "deep" ? " on" : ""}" href="#/search?q=${enc(q)}&mode=deep" aria-pressed="${mode === "deep"}">Deep (QMD)</a></div></div>
     <div class="list" id="results"><div class="loading">${mode === "deep" ? "Searching by meaning (QMD); this can take a few seconds…" : "Searching…"}</div></div>`;
+  const token = state.routeToken;
   const data = await api(`/api/search?q=${enc(q)}&mode=${mode}`);
-  if (mode === "fast" && !data.results.length && state.meta.qmd) {  // the words found nothing; their meaning may
-    location.replace(`#/search?q=${enc(q)}&mode=deep`);
-    return;
+  if (token !== state.routeToken) return;  // the reader moved on while it searched
+  if (mode === "fast" && !data.results.length) {  // the words found nothing; their meaning may, if QMD is ready now
+    state.meta = await api("/api/meta");  // setup changes no note, so no index event told the app
+    if (token !== state.routeToken) return;
+    if (state.meta.qmd) { location.replace(`#/search?q=${enc(q)}&mode=deep`); return; }
   }
   if (data.note) toast(data.note);
   $("#results").innerHTML = data.results.length ? data.results.map((e) => e.id ? card(e, e.snippet ? `<div class="card-desc mono" style="font-size:12.5px">${esc(e.snippet)}</div>` : "")

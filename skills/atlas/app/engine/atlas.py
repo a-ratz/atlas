@@ -2442,7 +2442,8 @@ def cmd_commit(args) -> None:
     print(f"committed {_git_out('rev-parse', '--short', 'HEAD', cwd=top)} as {agent}: {len(rel_top)} path(s)")
     for n in notes:
         print(f"note: {n}")
-    refresh = qmd_refresh_after_commit([os.path.relpath(Path(top) / f, VAULT).replace("\\", "/") for f in committed if f])
+    refresh = qmd_refresh_after_commit([os.path.relpath(Path(top) / f, VAULT).replace("\\", "/") for f in committed if f],
+                                       index.types)
     if refresh:
         print(refresh)
 
@@ -2455,18 +2456,23 @@ def cmd_commit(args) -> None:
 # (atlas-qmd skill) query it. `qmd setup` creates it; `atlas.py commit` refreshes it in the background when a
 # commit touched an area, one run at a time (`qmd sync`).
 
-QMD_AREAS = [  # area, mask inside the vault, the context line QMD keeps for the collection
-    # Every collection is rooted at the vault and narrowed by its mask, so an area that has no folder yet
-    # (a fresh vault has no cabinet/) is still a valid collection that fills as notes arrive.
-    ("cabinet", "cabinet/**/*.md", "People and organizations: one card each with role, relation and timeline"),
-    ("projects", "projects/**/*.md", "Projects: project.md, threads, decisions and lessons per project"),
-    ("ideas", "{sketches,specs}/**/*.md", "Ideas: rough sketches and worked-out specs"),
-    ("insights", "insights/**/*.md", "Insights: one claim per note, the title is the claim; maps are *-map.md"),
+QMD_AREAS = [  # area, the note types it holds (their globs in the vault's registry), the context line QMD keeps
+    # Every collection is rooted at the vault and narrowed by its types' globs, so a folder that does not exist
+    # yet (a fresh vault has no cabinet/) is still a valid collection, and a vault that moved a folder keeps it.
+    ("cabinet", ("person", "org"), "People and organizations: one card each with role, relation and timeline"),
+    ("projects", ("group", "project", "thread", "decision", "lesson"),
+     "Projects: project.md, threads, decisions and lessons per project"),
+    ("ideas", ("sketch", "spec"), "Ideas: rough sketches and worked-out specs"),
+    ("insights", ("insight", "map"), "Insights: one claim per note, the title is the claim; maps are *-map.md"),
     # captures too: a capture waiting to be distilled is what the vault knows newest, and it moves to sources/
-    ("sources", "{sources,research,captures}/**/*.md", "Sources, research runs and captures waiting to be distilled"),
+    ("sources", ("source", "frame", "capture"), "Sources, research runs and captures waiting to be distilled"),
 ]
-QMD_ROOTS = {"cabinet": ("cabinet/",), "projects": ("projects/",), "ideas": ("sketches/", "specs/"),
-             "insights": ("insights/",), "sources": ("sources/", "research/", "captures/")}
+
+
+def qmd_globs(types: dict) -> dict[str, list[str]]:
+    """Each area's globs, from the vault's registry."""
+    return {area: list(dict.fromkeys(g for tid in tids for g in (types.get(tid) or {}).get("globs", [])))
+            for area, tids, _ in QMD_AREAS}
 
 
 def qmd_bin() -> str | None:
@@ -2475,13 +2481,17 @@ def qmd_bin() -> str | None:
 
 
 def qmd(*args: str, index: str | None = None, timeout: float = 1800) -> subprocess.CompletedProcess:
+    """QMD's answer; not installed or too slow is a failed answer, never an exception."""
     exe = qmd_bin()
     if not exe:
         return subprocess.CompletedProcess(["qmd", *args], 127, "", "qmd is not installed")
     # INDEX_PATH beats --index (one database for every vault); without an index it is the user's own setting
     env = {k: v for k, v in os.environ.items() if not (index and k == "INDEX_PATH")}
-    return subprocess.run([exe, *(["--index", index] if index else []), *args], capture_output=True, text=True,
-                          encoding="utf-8", errors="replace", timeout=timeout, stdin=subprocess.DEVNULL, env=env)
+    try:
+        return subprocess.run([exe, *(["--index", index] if index else []), *args], capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", timeout=timeout, stdin=subprocess.DEVNULL, env=env)
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess([exe, *args], 124, "", f"qmd {args[0]} took longer than {timeout:.0f} s")
 
 
 def qmd_config_dir() -> Path:  # where QMD keeps <index>.yml, the way QMD finds it
@@ -2528,18 +2538,17 @@ def qmd_set(**values: str) -> None:
     if "qmd:" not in [ln.split("#")[0].strip() for ln in lines]:
         lines += ["", "qmd:                  # search by meaning (atlas-qmd)"]
     start = next(i for i, ln in enumerate(lines) if ln.split("#")[0].strip() == "qmd:")
-    end = start + 1  # the block runs over indented lines (and blank lines between them)
-    while end < len(lines):
-        if lines[end].startswith((" ", "\t")):
-            end += 1
-        elif not lines[end].strip() and end + 1 < len(lines) and lines[end + 1].startswith((" ", "\t")):
-            end += 1
-        else:
-            break
+    end, last = start + 1, start  # the block runs to the next top-level key, past blank lines and comments
+    while end < len(lines) and (lines[end].startswith((" ", "\t")) or not lines[end].strip()
+                                or lines[end].lstrip().startswith("#")):
+        if lines[end].startswith((" ", "\t")) and lines[end].strip() and not lines[end].lstrip().startswith("#"):
+            last = end
+        end += 1
     for key, value in values.items():
         hit = next((i for i in range(start + 1, end) if lines[i].strip().startswith(f"{key}:")), None)
         if hit is None:
-            lines.insert(end, f"  {key}: {value}")
+            lines.insert(last + 1, f"  {key}: {value}")
+            last += 1
             end += 1
         else:
             comment = lines[hit][lines[hit].index("#"):] if "#" in lines[hit] else ""
@@ -2547,11 +2556,13 @@ def qmd_set(**values: str) -> None:
     REGISTRY.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def qmd_plan() -> tuple[str, list[dict]]:
+def qmd_plan(types: dict) -> tuple[str, list[dict]]:
     """This vault's index and its five collections. An index name another vault uses gets the vault's name added."""
     want = str(qmd_settings().get("index") or "atlas")
-    cols = [{"area": a, "name": f"atlas-{a}", "path": VAULT.resolve(), "mask": mask, "context": ctx}
-            for a, mask, ctx in QMD_AREAS]
+    globs = qmd_globs(types)
+    cols = [{"area": a, "name": f"atlas-{a}", "path": VAULT.resolve(), "context": ctx,
+             "mask": globs[a][0] if len(globs[a]) == 1 else "{" + ",".join(globs[a]) + "}"}
+            for a, _, ctx in QMD_AREAS if globs[a]]
     for n in range(10):
         name = want if n == 0 else f"{want}-{slug(VAULT.name, 24)}" + (f"-{n}" if n > 1 else "")
         if all(c["path"].resolve() == VAULT.resolve() for c in qmd_collections(name).values()):
@@ -2569,9 +2580,10 @@ def qmd_index() -> str | None:
     return name if cols and all(c["path"].resolve() == VAULT.resolve() for c in cols.values()) else None
 
 
-def qmd_areas_for(paths: list[str]) -> list[str]:
-    """Which areas the vault-relative paths belong to."""
-    return sorted({a for p in paths for a, roots in QMD_ROOTS.items() if p.replace("\\", "/").startswith(roots)})
+def qmd_areas_for(paths: list[str], types: dict) -> list[str]:
+    """Which areas the vault-relative paths belong to, by the registry's globs."""
+    return sorted({a for p in paths for a, globs in qmd_globs(types).items()
+                   if any(fnmatch.fnmatch(p.replace("\\", "/"), g) for g in globs)})
 
 
 def _try_lock(name: str):
@@ -2624,9 +2636,9 @@ def qmd_sync() -> tuple[bool, str]:
     return True, f"qmd: refreshed {index} ({', '.join(f'atlas-{a}' for a, *_ in QMD_AREAS)})"
 
 
-def qmd_refresh_after_commit(paths: list[str]) -> str | None:
+def qmd_refresh_after_commit(paths: list[str], types: dict) -> str | None:
     """Start `qmd sync` in the background when the commit touched an area, so the commit does not wait."""
-    areas = qmd_areas_for(paths)
+    areas = qmd_areas_for(paths, types)
     if not areas or not qmd_index():
         return None
     ensure_state()
@@ -2649,7 +2661,7 @@ def cmd_qmd(args) -> None:
         if not ok:
             sys.exit(1)
         return
-    name, cols = qmd_plan()
+    name, cols = qmd_plan(Index().types)
     existing = qmd_collections(name)
     if args.action == "status":
         print(f"qmd: {'installed' if qmd_bin() else 'not installed'}; enabled: {qmd_state()}; index: {name}")

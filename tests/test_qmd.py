@@ -21,6 +21,7 @@ class FakeQmd:
         self.envs: list[dict] = []
         self.fail: set[str] = set()
         self.during: dict[str, callable] = {}
+        self.slow: set[str] = set()
         self.hits: list[dict] = []
         self.conf = conf
         monkeypatch.setenv("QMD_CONFIG_DIR", str(conf))
@@ -35,6 +36,8 @@ class FakeQmd:
             rest = args[3:] if args[1] == "--index" else args[1:]
             if rest[0] in self.during:
                 self.during.pop(rest[0])()
+            if rest[0] in self.slow:
+                raise subprocess.TimeoutExpired(args, kw.get("timeout") or 0)
             if rest[0] in self.fail:
                 return subprocess.CompletedProcess(args, 1, "", f"{rest[0]}: model download failed")
             if rest[:2] == ["collection", "add"]:  # what QMD writes: <index>.yml with the collection
@@ -73,12 +76,12 @@ def test_a_waiting_capture_is_found_by_meaning(engine, vault, fake):
     engine.cmd_qmd(Namespace(action="setup"))
     sources = next(c for c in fake.calls if "atlas-sources" in c)
     assert "captures" in sources[sources.index("--mask") + 1]
-    assert engine.qmd_areas_for(["captures/a-note-of-mine.md"]) == ["sources"]
+    assert engine.qmd_areas_for(["captures/a-note-of-mine.md"], engine.Index().types) == ["sources"]
 
 
 def test_a_second_vault_gets_an_index_of_its_own(engine, vault, fake):
     fake.add("atlas", "atlas-insights", Path("/somewhere/else/vault"))  # another vault on this machine
-    name, _ = engine.qmd_plan()
+    name, _ = engine.qmd_plan(engine.Index().types)
     assert name == f"atlas-{engine.slug(vault.name, 24)}"
 
 
@@ -179,7 +182,7 @@ def test_deep_search_reads_the_vaults_index(engine, vault, fake):
 def repo(engine, vault, monkeypatch):
     """The vault as a git repository with an agent that may commit; returns the paths each refresh got."""
     started = []
-    monkeypatch.setattr(engine, "qmd_refresh_after_commit", lambda paths: started.append(paths))
+    monkeypatch.setattr(engine, "qmd_refresh_after_commit", lambda paths, types: started.append(paths))
     for k, v in (("NAME", "t"), ("EMAIL", "t@example.com")):
         monkeypatch.setenv(f"GIT_AUTHOR_{k}", v)
         monkeypatch.setenv(f"GIT_COMMITTER_{k}", v)
@@ -200,7 +203,7 @@ def test_a_folder_commit_refreshes_its_area(engine, vault, repo):
     (vault / "insights" / "A new claim.md").write_text("---\ndescription: d\n---\n\n# A new claim\n", encoding="utf-8")
     commit(engine, vault, "insights")
     assert "insights/A new claim.md" in repo[0]
-    assert engine.qmd_areas_for(repo[0]) == ["insights"]
+    assert engine.qmd_areas_for(repo[0], engine.Index().types) == ["insights"]
 
 
 def test_a_note_with_umlauts_refreshes_its_area(engine, vault, repo):
@@ -236,7 +239,7 @@ def test_an_index_of_another_vault_is_not_this_ones(engine, vault, fake):
     fake.add("atlas", "atlas-insights", Path("/somewhere/else/vault"))
     engine.qmd_set(enabled="on", index="atlas")
     assert engine.qmd_index() is None
-    assert engine.qmd_refresh_after_commit(["insights/x.md"]) is None
+    assert engine.qmd_refresh_after_commit(["insights/x.md"], engine.Index().types) is None
 
 
 def test_qmd_never_sees_index_path(engine, vault, fake, monkeypatch):
@@ -294,3 +297,38 @@ def test_meta_offers_deep_search_only_where_it_can_answer(engine, vault, fake):
     assert engine.deep_collections()[0] == "atlas"
     engine.qmd_set(enabled="off")
     assert engine.deep_collections() == (None, {})
+
+
+def test_qmd_settings_are_found_past_comments_and_blank_lines(engine, vault):
+    # `qmd off` wrote a second `enabled:` above the first, and YAML kept the old one (#15, review round 4)
+    reg = vault / "atlas.yaml"
+    text = reg.read_text(encoding="utf-8")
+    start = text.index("qmd:")
+    end = text.index("\n\n", start)
+    reg.write_text(text[:start] + "qmd:\n# my note on search\n\n\n  enabled: on\n  index: atlas" + text[end:], encoding="utf-8")
+    engine.qmd_set(enabled="off")
+    assert engine.qmd_state() == "off"
+    block = reg.read_text(encoding="utf-8")[start:]
+    assert block[:block.index("\n\n\n") + 40].count("enabled:") == 1 and "# my note on search" in block
+
+
+def test_a_vault_with_its_own_folders_gets_them_indexed(engine, vault):
+    # insights kept in claims/ were neither indexed nor refreshed (#15, review round 4)
+    reg = vault / "atlas.yaml"
+    reg.write_text(reg.read_text(encoding="utf-8").replace('globs: ["insights/*.md"]', 'globs: ["claims/*.md"]', 1),
+                   encoding="utf-8")
+    types = engine.Index().types
+    _, cols = engine.qmd_plan(types)
+    assert "claims/*.md" in next(c for c in cols if c["area"] == "insights")["mask"]
+    assert engine.qmd_areas_for(["claims/Octopuses hide.md"], types) == ["insights"]
+
+
+def test_a_setup_that_times_out_stays_off(engine, vault, fake):
+    # a TimeoutExpired from QMD skipped the rollback and left QMD on (#15, review round 4)
+    fake.slow.add("embed")
+    with pytest.raises(SystemExit):
+        engine.cmd_qmd(Namespace(action="setup"))
+    assert engine.qmd_state() == "off"
+    engine.qmd_set(enabled="on")
+    ok, msg = engine.qmd_sync()
+    assert not ok and "took longer than" in msg

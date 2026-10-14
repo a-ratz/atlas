@@ -191,23 +191,40 @@ def left_refresh(ctx, srv: Server, vault: Path, rel: str) -> None:
 
 
 def deep_after_nothing(page, base: str, scheme: str) -> None:
-    """With QMD on, an instant search that finds nothing goes on by meaning (smoke run on #15). The browser smoke
-    has no QMD: the meta and the deep answer are faked, the switch is the app's."""
+    """With QMD on, an instant search that finds nothing goes on by meaning (smoke run on #15), also when QMD
+    was set up after the page loaded (review round 4). The browser smoke has no QMD: the meta and the deep
+    answer are faked; the switch is the app's."""
+    page.goto(f"{base}/#/")
+    page.wait_for_selector("#main > *", timeout=15000)  # loaded with the real meta: no QMD
+
     def meta(route):
-        body = route.fetch().json()
-        route.fulfill(json={**body, "qmd": True})
+        route.fulfill(json={**route.fetch().json(), "qmd": True})
     page.route("**/api/meta", meta)
     page.route("**/api/search?*mode=deep*", lambda r: r.fulfill(json={"mode": "deep", "results": []}))
     page.goto(f"{base}/#/search?q=zzqxwv")
-    page.reload()  # a hash change keeps the document; the app reads the faked meta when it loads
     try:
         page.wait_for_function("location.hash.includes('mode=deep')", timeout=10000)
     except Exception:
-        failures.append(f"[{scheme}] an empty instant search with QMD on does not go on by meaning (#15)")
+        failures.append(f"[{scheme}] an empty instant search does not go on by meaning once QMD is on (#15)")
+    # a slow empty answer that arrives after the reader opened a note must not take them back (round 4)
+    held = []
+    page.route("**/api/search?*q=yyqxwv*", lambda r: held.append(r))
+    page.goto(f"{base}/#/search?q=yyqxwv")
+    for _ in range(50):
+        if held:
+            break
+        page.wait_for_timeout(100)
+    page.goto(f"{base}/#/projects")
+    page.wait_for_timeout(300)
+    if held:
+        held[0].fulfill(json={"mode": "fast", "results": []})
+    page.wait_for_timeout(800)
+    if not page.evaluate("location.hash").startswith("#/projects"):
+        failures.append(f"[{scheme}] a late search answer took the reader away from the page they opened (#15)")
+    page.unroute("**/api/search?*q=yyqxwv*")
     page.unroute("**/api/meta")
     page.unroute("**/api/search?*mode=deep*")
     page.reload()  # the faked meta stays in the app until it loads again
-
 
 if __name__ == "__main__":
     main()
