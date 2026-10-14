@@ -2522,10 +2522,10 @@ def _set_front_path(path: Path, machine: str, target: str) -> None:
     elif not front.strip():
         candidates = [nl.join(block)]
     else:  # a new key: last, at the root's indentation; first if appending would change the value above it
-        first = events[3] if len(events) > 3 and isinstance(events[2], yaml.MappingStartEvent) else None
-        column = first.start_mark.column if isinstance(first, yaml.ScalarEvent) else 0
+        root = events[2] if len(events) > 2 and isinstance(events[2], yaml.MappingStartEvent) else None
+        column = root.start_mark.column if root else 0  # where the mapping starts, a `?` indicator included
         entry = nl.join(" " * column + b for b in block)
-        line = front.rfind("\n", 0, first.start_mark.index) + 1 if first else 0
+        line = front.rfind("\n", 0, root.start_mark.index) + 1 if root else 0
         candidates = [front + nl + entry, front[:line] + entry + nl + front[line:]]
     for new in candidates:  # the file is the truth: write only what reads back as the old frontmatter plus this path
         try:
