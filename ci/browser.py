@@ -162,6 +162,8 @@ def slow_view_stays_behind(page, base: str, scheme: str) -> None:
     """A view whose data comes late does not paint over the page the reader opened meanwhile (CI on #18: Home,
     still loading after a reload, replaced an open question)."""
     held = []
+    page.goto(f"{base}/#/projects")  # from another page: a goto to the hash the page is on loads nothing
+    page.wait_for_timeout(300)
     page.route("**/api/home", lambda r: held.append(r))
     page.goto(f"{base}/#/")
     for _ in range(100):
