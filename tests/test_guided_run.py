@@ -105,6 +105,8 @@ def test_inline_links_with_backticks_and_bold_around_code():
     assert out[3] == '<a href="https://x.test/" target="_blank" rel="noopener">https://x.test/</a>note 0'
     # round 3: code stays literal; bold and URLs do not reach inside it
     assert out[4] == "<code>**/*.py</code> and <b>run tests</b>, <code>https://x.test</code>"
+
+
 @pytest.mark.parametrize("before, after", [
     ("", "paths:\n  laptop: /code/terrain\n"),
     ("paths:\n", "paths:\n  laptop: /code/terrain\n"),
@@ -134,3 +136,30 @@ def test_map_path_keeps_crlf_and_refuses_a_paths_that_is_not_a_mapping(engine, v
     note.write_text("---\npaths: /code/terrain\n---\n", encoding="utf-8")
     with pytest.raises(SystemExit, match="not a mapping"):
         engine._set_front_path(note, "laptop", "/code/terrain")
+
+
+@pytest.mark.parametrize("before, after", [
+    # review round 1 on #30: a quoted key, a comment between entries, a flow mapping over several lines
+    ('"paths": {desk: /d/terrain}\n', "paths:\n  desk: /d/terrain\n  laptop: /code/terrain\n"),
+    ("paths:\n  desk: /d/terrain\n# moved in May\n  laptop: /old\n", "paths:\n  desk: /d/terrain\n  laptop: /code/terrain\n"),
+    ("paths: {desk: /d/terrain,\n  laptop: /old\n}\n", "paths:\n  desk: /d/terrain\n  laptop: /code/terrain\n"),
+    ("paths:\n  desk: /d/terrain\n# about next\n", "paths:\n  desk: /d/terrain\n  laptop: /code/terrain\n# about next\n"),
+])
+def test_map_path_finds_the_whole_paths_value(engine, vault, before, after):
+    project(vault, "terrain", "status: active\n" + before + "next: step 5\n")
+    note = vault / "projects/private/terrain/project.md"
+    engine._set_front_path(note, "laptop", "/code/terrain")
+    assert note.read_text(encoding="utf-8") == f"---\nstatus: active\n{after}next: step 5\n---\n\n# terrain\n"
+    assert engine.Index().entities["projects/private/terrain/project.md"].meta["paths"]["laptop"] == "/code/terrain"
+
+
+@pytest.mark.parametrize("front", ["paths: &where {desk: /d}\nalso: *where\n", "where: &w {desk: /d}\npaths: *w\n",
+                                   "paths:\n  desk: &d /d\nalso: *d\n"])
+def test_map_path_leaves_anchors_and_aliases_to_the_user(engine, vault, front):
+    # rewriting would drop an anchor that another key still uses, or expand an alias (#30 review round 1)
+    project(vault, "terrain", front)
+    note = vault / "projects/private/terrain/project.md"
+    before = note.read_bytes()
+    with pytest.raises(SystemExit, match="anchor or alias"):
+        engine._set_front_path(note, "laptop", "/code/terrain")
+    assert note.read_bytes() == before

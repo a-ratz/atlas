@@ -2451,29 +2451,71 @@ def cmd_machine(args) -> None:
     print("(the key of `paths:` in project.md; set $ATLAS_MACHINE to name this machine differently)", file=sys.stderr)
 
 
+def _top_value_span(events: list, key: str) -> tuple[int, int, int, bool] | None:
+    """Where a top-level `key:` and its value sit in the YAML text, from PyYAML parse events: (start of the
+    key, end of the value's content, the key's column, whether the value holds an anchor or alias).
+    A block value ends at its last scalar, so comments after it stay; the last duplicate key wins, as in PyYAML."""
+    import yaml
+
+    def node(i: int) -> tuple[int, int, bool]:  # one node from events[i]: next index, end of content, anchored
+        ev = events[i]
+        anchored = getattr(ev, "anchor", None) is not None
+        if not isinstance(ev, (yaml.MappingStartEvent, yaml.SequenceStartEvent)):
+            return i + 1, ev.end_mark.index, anchored
+        flows, last, i = [ev.flow_style], ev.end_mark.index, i + 1
+        while flows:
+            ev = events[i]
+            anchored |= getattr(ev, "anchor", None) is not None
+            if isinstance(ev, (yaml.MappingStartEvent, yaml.SequenceStartEvent)):
+                flows.append(ev.flow_style)
+            elif isinstance(ev, (yaml.MappingEndEvent, yaml.SequenceEndEvent)):
+                if flows.pop():
+                    last = ev.end_mark.index  # a flow collection ends at its bracket
+            else:
+                last = ev.end_mark.index
+            i += 1
+        return i, last, anchored
+
+    if len(events) < 3 or not isinstance(events[2], yaml.MappingStartEvent):
+        return None
+    found, i = None, 3
+    while not isinstance(events[i], yaml.MappingEndEvent):
+        k = events[i]
+        i, _, key_anchored = node(i)
+        i, end, anchored = node(i)
+        if isinstance(k, yaml.ScalarEvent) and k.value == key:
+            found = (k.start_mark.index, end, k.start_mark.column, anchored or key_anchored)
+    return found
+
+
 def _set_front_path(path: Path, machine: str, target: str) -> None:
-    """Set `paths.<machine>` in a note's frontmatter. Only the `paths:` block is rewritten; every other
+    """Set `paths.<machine>` in a note's frontmatter. Only the `paths:` value is rewritten; every other
     line, the line endings and the body stay byte-identical (a YAML round trip restyled the whole file, #29)."""
     import yaml
     text = path.read_bytes().decode("utf-8")  # read_text would turn \r\n into \n
     m = FRONT.match(text)
     if m:
-        head, lines, tail = text[:m.start(1)], m.group(1).splitlines(), text[m.end(1):]
+        head, front, tail = text[:m.start(1)], m.group(1), text[m.end(1):]
     else:
-        head, lines, tail = "---\n", [], "\n---\n" + ("" if text.startswith("\n") else "\n") + text
+        head, front, tail = "---\n", "", "\n---\n" + ("" if text.startswith("\n") else "\n") + text
     nl = "\r\n" if head.endswith("\r\n") else "\n"
-    start = next((i for i, line in enumerate(lines) if re.match(r"^paths\s*:", line)), len(lines))
-    end = start + 1 if start < len(lines) else start
-    while end < len(lines) and (lines[end][:1] in (" ", "\t") or not lines[end].strip()):
-        end += 1  # the block: indented lines under `paths:` (and blank lines between them)
-    while end > start + 1 and not lines[end - 1].strip():
-        end -= 1  # blank lines after the block are not part of it
-    paths = (yaml.safe_load("\n".join(lines[start:end])) or {}).get("paths") if end > start else None
-    if paths is not None and not isinstance(paths, dict):
+    try:
+        meta, span = yaml.safe_load(front) or {}, _top_value_span(list(yaml.parse(front)), "paths")
+    except yaml.YAMLError as err:
+        sys.exit(f"{path.name}: the frontmatter is not valid YAML; fix it first ({err})")
+    paths = meta.get("paths") if isinstance(meta, dict) else None
+    if not isinstance(meta, dict) or (paths is not None and not isinstance(paths, dict)):
         sys.exit(f"{path.name}: `paths:` is not a mapping of machine: folder; fix it by hand first")
-    paths = {**(paths or {}), machine: target}
-    lines[start:end] = yaml.safe_dump({"paths": paths}, sort_keys=False, allow_unicode=True, width=1000).splitlines()
-    path.write_text(head + nl.join(lines) + tail, encoding="utf-8", newline="")
+    block = yaml.safe_dump({"paths": {**(paths or {}), machine: target}},
+                           sort_keys=False, allow_unicode=True, width=1000).splitlines()
+    if span and span[3]:
+        sys.exit(f"{path.name}: `paths:` uses a YAML anchor or alias; set `{machine}: {target}` under it by hand")
+    if span:
+        start, end, column, _ = span
+        front = front[:start] + (nl + " " * column).join(block) + front[end:]
+    else:
+        front = front + nl + nl.join(block) if front.strip() else nl.join(block)
+    path.write_text(head + front + tail, encoding="utf-8", newline="")
 
 
 def cmd_map_path(args) -> None:
