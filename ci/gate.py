@@ -291,6 +291,13 @@ def check_docs(args) -> None:
         fail(f"{badge.relative_to(ROOT).as_posix()} shows {', '.join(sorted(shown)) or 'no version'}, VERSION is {version}")
     else:
         ok(f"the version badge shows {version}")
+    release = re.search(r"Atlas (\S+) is the current release", (ROOT / "README.md").read_text(encoding="utf-8"))
+    if not release:
+        fail('README.md has no "Atlas <version> is the current release" line')
+    elif release.group(1) != version:
+        fail(f"README.md says Atlas {release.group(1)} is the current release, VERSION is {version}")
+    else:
+        ok(f"the README names {version} as the current release")
 
 
 def check_hygiene(args) -> None:

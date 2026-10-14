@@ -370,7 +370,8 @@ tests/                           tests for the engine and the skills
 - Re-take the README screenshots after a UI change: `uv run site/readme_shots.py`
   stages the demo vault as the pictures show it and writes `docs/assets/*.png`
   (once: `uvx playwright@1.55.0 install chromium`). A release also updates
-  `docs/assets/badges/version.svg`; the gate fails while it differs from `VERSION`.
+  `docs/assets/badges/version.svg` and the "current release" line under Status;
+  the gate fails while either differs from `VERSION`.
 
 ## License
 
