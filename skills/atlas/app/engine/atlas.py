@@ -1265,10 +1265,23 @@ def deep_collections() -> tuple[str | None, dict]:
 FRONT_LINE = re.compile(r"^\s*([\w-]+:|- |---$|$)")  # what a frontmatter line looks like
 
 
-def snippet_text(snippet: str, title: str = "") -> str:
+def frontmatter_end(rel: str) -> int:
+    """The line number (from 1) of a note's closing `---`; 0 without frontmatter."""
+    try:
+        lines = (VAULT / rel).read_text(encoding="utf-8", errors="replace").splitlines()  # as parse_file reads it
+    except OSError:
+        return 0
+    if not lines or lines[0].rstrip() != "---":
+        return 0
+    # unindented only: an indented --- belongs to a block scalar (description: |)
+    return next((n + 1 for n, line in enumerate(lines[1:], 1) if line.rstrip() == "---"), 0)
+
+
+def snippet_text(snippet: str, title: str = "", keys: frozenset = frozenset(), front_end: int = 0) -> str:
     """QMD's snippet as the body text it found: without its diff header, without the frontmatter a hit near
     the top of a note starts in (opened or closed inside the snippet, or both), and without the title heading,
     which the result card shows already. Nothing left: empty, and the card shows its description."""
+    head = re.match(r"@@ -(\d+)", snippet or "")  # QMD's hunk header: the line the excerpt starts on
     lines = re.sub(r"^@@.*?\n", "", snippet or "", flags=re.S).splitlines()
     dashes = [i for i, line in enumerate(lines) if line.strip() == "---"]
     if lines and lines[0].strip() == "---":  # opens in the snippet: up to its end, or all of it that is there
@@ -1276,6 +1289,10 @@ def snippet_text(snippet: str, title: str = "") -> str:
         lines = lines[end + 1:]
     elif dashes and all(FRONT_LINE.match(line) for line in lines[:dashes[0]]):  # starts inside it
         lines = lines[dashes[0] + 1:]
+    elif lines and keys and head and int(head.group(1)) <= front_end \
+            and lines[0].split(":", 1)[0].strip() in keys:  # inside it (by line), and its end is not in the snippet
+        while lines and (lines[0].split(":", 1)[0].strip() in keys or lines[0].startswith((" ", "- ")) or not lines[0].strip()):
+            lines = lines[1:]
     norm = lambda s: " ".join(s.split()).lower()
     while lines and (not lines[0].strip() or (title and lines[0].lstrip().startswith("# ")
                                                and norm(lines[0].lstrip()[2:]) == norm(title))):
@@ -1308,7 +1325,8 @@ def deep_search(index: Index, q: str) -> list[dict]:
             continue
         seen.add(rel)
         e = index.entities.get(rel) if rel else None
-        snippet = snippet_text(h.get("snippet", ""), e.title if e else h.get("title") or "")
+        snippet = snippet_text(h.get("snippet", ""), e.title if e else h.get("title") or "",
+                               frozenset(e.meta) if e else frozenset(), frontmatter_end(rel) if e else 0)
         if e:
             out.append({**e.card(index), "snippet": snippet, "score": h.get("score")})
         else:
@@ -2513,7 +2531,8 @@ def cmd_commit(args) -> None:
     lock = _lock("git.lock")
     rel_top = [os.path.relpath(p, top).replace("\\", "/") for p in paths]
     staged = set((_git_out("diff", "--cached", "--name-only", cwd=top) or "").splitlines())
-    unrelated = sorted(s for s in staged if s not in rel_top)
+    # a named folder covers what is staged inside it (a rename into it, say)
+    unrelated = sorted(s for s in staged if not any(s == r or s.startswith(r.rstrip("/") + "/") for r in rel_top))
     if unrelated:
         sys.exit("unrelated changes are staged, not committing: " + ", ".join(unrelated[:8]) +
                  "\nCommit or unstage them first; this command commits only the paths you name.")
@@ -2599,9 +2618,17 @@ def qmd(*args: str, index: str | None = None, timeout: float = 1800) -> subproce
         return subprocess.CompletedProcess(["qmd", *args], 127, "", "qmd is not installed")
     # INDEX_PATH beats --index (one database for every vault); without an index it is the user's own setting
     env = {k: v for k, v in os.environ.items() if not (index and k == "INDEX_PATH")}
+    for k in ("QMD_CONFIG_DIR", "INDEX_PATH", "XDG_CONFIG_HOME", "XDG_CACHE_HOME"):  # QMD runs in the vault (below):
+        if env.get(k) and not os.path.isabs(env[k]):                                 # relative paths keep their meaning
+            try:
+                env[k] = os.path.abspath(env[k])
+            except OSError:  # the start folder itself is gone: nothing to resolve against
+                pass
     try:
+        # cwd: QMD's model loader stops when the server's own start folder was removed since (uv_cwd)
         return subprocess.run([exe, *(["--index", index] if index else []), *args], capture_output=True, text=True,
-                              encoding="utf-8", errors="replace", timeout=timeout, stdin=subprocess.DEVNULL, env=env)
+                              encoding="utf-8", errors="replace", timeout=timeout, stdin=subprocess.DEVNULL, env=env,
+                              cwd=VAULT)
     except subprocess.TimeoutExpired:
         return subprocess.CompletedProcess([exe, *args], 124, "", f"qmd {args[0]} took longer than {timeout:.0f} s")
 

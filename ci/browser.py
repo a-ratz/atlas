@@ -98,6 +98,7 @@ def checks(page, base: str, scheme: str) -> None:
     deep_after_nothing(page, base, scheme)
     slow_view_stays_behind(page, base, scheme)
     project_pages(page, base, scheme)
+    card_facts(page, base, scheme)
     page.goto(f"{base}/#/chat")
     page.wait_for_selector(".op-bar", timeout=15000)
     if not page.query_selector("#op-title"):
@@ -141,6 +142,17 @@ def checks(page, base: str, scheme: str) -> None:
             failures.append(f"[{scheme}] a pressed move leaves the other buttons on (#10)")
     except Exception:
         failures.append(f"[{scheme}] pressing Later shows nothing on the page, only a toast (#10)")
+
+
+def card_facts(page, base: str, scheme: str) -> None:
+    """The facts line leaves out the type's status field, which the badge shows (#22: depth twice)."""
+    page.goto(f"{base}/#/t/person")
+    page.wait_for_selector("#list .card", timeout=15000)
+    first = page.eval_on_selector("#list .card a, #list a.card", "a => a.getAttribute('href')")
+    page.goto(f"{base}/{first}")
+    page.wait_for_selector(".reader-main .meta-row", timeout=15000)
+    if "depth:" in page.inner_text(".reader-main .meta-row"):
+        failures.append(f"[{scheme}] a card's facts line repeats its depth next to the badge (#22)")
 
 
 def project_pages(page, base: str, scheme: str) -> None:

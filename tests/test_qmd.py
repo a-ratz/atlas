@@ -19,6 +19,7 @@ class FakeQmd:
     def __init__(self, engine, monkeypatch, conf: Path):
         self.calls: list[list[str]] = []
         self.envs: list[dict] = []
+        self.cwds: list = []
         self.fail: set[str] = set()
         self.during: dict[str, callable] = {}
         self.slow: set[str] = set()
@@ -33,6 +34,7 @@ class FakeQmd:
                 return real(args, **kw)
             self.calls.append(args)
             self.envs.append(kw.get("env") or {})
+            self.cwds.append(kw.get("cwd"))
             rest = args[3:] if args[1] == "--index" else args[1:]
             if rest[0] in self.during:
                 self.during.pop(rest[0])()
@@ -343,3 +345,38 @@ def test_notes_right_in_a_recursive_folder_refresh_their_area(engine, vault):
     types = engine.Index().types
     assert engine.qmd_areas_for(["sources/a.md", "specs/a.md"], types) == ["ideas", "sources"]
     assert engine.qmd_areas_for(["research/sleep/run-1/brief.md"], types) == ["sources"]
+
+
+def test_qmd_runs_in_the_vault_whatever_the_server_started_in(engine, vault, fake):
+    # a server started from a folder removed since made QMD's model loader fail (uv_cwd), guided run (#22)
+    engine.qmd("status", index="atlas")
+    assert fake.cwds[-1] == engine.VAULT
+
+
+def test_a_snippet_inside_frontmatter_that_does_not_reach_its_end(engine):
+    # a source's hit showed `source_type: research question: "…" date: … sources:` as its excerpt (#22)
+    snippet = "@@ -2,6 @@\nsource_type: research\nquestion: \"What makes runs fair?\"\ndate: 2026-10-14\nsources:\n  - talk\nThe body"
+    keys = frozenset({"source_type", "question", "date", "sources"})
+    assert engine.snippet_text(snippet, "", keys, front_end=8) == "The body"
+    assert engine.snippet_text("Note: a body line\nmore", "", keys, 8) == "Note: a body line\nmore"  # not a key of the note
+    # the body can start a line with a frontmatter key, too: past the frontmatter it stays (#23, review round 1)
+    body = "@@ -14,3 @@\nquestion: what makes a death fair?\n- seen threats\n- a lesson"
+    assert engine.snippet_text(body, "", keys, front_end=8).startswith("question: what makes")
+
+
+def test_relative_qmd_paths_keep_their_meaning_in_the_vault(engine, vault, fake, monkeypatch, tmp_path):
+    # QMD runs in the vault now; a relative QMD_CONFIG_DIR would point somewhere else there (#23, review round 1)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("QMD_CONFIG_DIR", "conf")
+    engine.qmd("status", index="atlas")
+    assert fake.envs[-1]["QMD_CONFIG_DIR"] == str(tmp_path / "conf")
+
+
+def test_the_frontmatter_end_of_any_note(engine, vault):
+    # a non-UTF-8 byte made deep search answer 500; an indented --- in a block scalar ended the frontmatter early
+    (vault / "sources").mkdir(exist_ok=True)
+    (vault / "sources" / "latin1.md").write_bytes(b"---\ntitle: Caf\xe9\n---\n\nBody\n")
+    assert engine.frontmatter_end("sources/latin1.md") == 3
+    (vault / "sources" / "scalar.md").write_text("---\ndescription: |\n  one\n  ---\n  two\ndate: 2026\n---\nBody\n",
+                                                  encoding="utf-8")
+    assert engine.frontmatter_end("sources/scalar.md") == 7  # (#23, review round 2)

@@ -972,7 +972,8 @@ function factValue(e, text) {  // links resolve on the raw text; every piece is 
 function readerHead(e, { crumbs = true } = {}) {
   const t = typeOf(e.type);
   const nav = e.map_nav;
-  const facts = Object.entries(e.facts || {}).filter(([k]) => !["category", "description", "status", "revisit_after", "superseded_by", "source", "confidence", "date", "question", ...BEHIND_STATUS].includes(k))
+  const facts = Object.entries(e.facts || {}).filter(([k]) => !["category", "description", "status", "revisit_after", "superseded_by", "source", "confidence", "date", "question", ...BEHIND_STATUS].includes(k)
+    && k !== t?.status)  // the type's status field (a card's depth) is the badge already
     .map(([k, v]) => `<span title="${esc(k)}">${esc(k)}: ${factValue(e, Array.isArray(v) ? v.join(", ") : typeof v === "object" && v ? JSON.stringify(v) : String(v))}</span>`).join("");
   const behind = BEHIND_STATUS.filter((k) => e.facts?.[k] != null).map((k) => `${k}: ${e.facts[k]}`).join(", ");
   const ep = epistemic(e);

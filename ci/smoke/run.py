@@ -134,7 +134,7 @@ def prepare(args) -> None:
     log = open(run / "server.log", "w", encoding="utf-8")
     server = subprocess.Popen([*uv, str(atlas_dir / "engine" / "atlas.py"), "--vault", str(atlas_dir / "vault"),
                                "serve", "--operator", "--port", str(port)], env=env, stdout=log, stderr=subprocess.STDOUT,
-                              start_new_session=True)
+                              start_new_session=True, cwd=atlas_dir)  # as a user starts it: from the Atlas folder
     url = f"http://127.0.0.1:{port}"
     (run / "run.json").write_text(json.dumps({"run": str(run), "url": url, "pid": server.pid}), encoding="utf-8")
     for _ in range(300):
