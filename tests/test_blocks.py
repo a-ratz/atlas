@@ -47,3 +47,13 @@ def test_indented_code_and_inline_spans_are_not_fences(engine, vault):
     for before in ("    ```python\n    print(1)\n", "Use ```python``` for code.\n"):
         text = before + "\n```atlas:choices\noptions: [A, B]\n"
         assert kinds(engine, text)[-1] == "choices", before
+
+
+def test_a_quoted_example_html_lines_and_stray_returns(engine, vault):
+    # round 3: a closed example in a blockquote swallowed the prose after it; an HTML-like line hid an open
+    # block; a bare carriage return made the whole message an error (#21)
+    quoted = "> ```atlas:choices\n> options: [A]\n> ```\nThat is all."
+    blocks = engine.render_agent_message(engine.Index(), quoted)
+    assert [b["kind"] for b in blocks] == ["md"] and "That is all." in blocks[0]["html"]
+    assert kinds(engine, "<br>\n```atlas:choices\noptions: [A, B]\n")[-1] == "choices"
+    assert kinds(engine, "Done.\rNext steps:\n```atlas:choices\noptions: [A, B]\n")[-1] == "choices"

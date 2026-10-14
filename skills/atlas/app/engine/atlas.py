@@ -901,21 +901,25 @@ def _block_unsafe(index: Index, kind: str, body: str) -> dict:
     return {"kind": "error", "text": f"unknown block atlas:{kind}"}
 
 
+FENCE_LINE = re.compile(r"^ {0,3}(`{3,}[^`\n]*|~{3,}[^\n]*)$", re.M)  # a whole line that opens or closes a code block
+
+
 def atlas_block_open_at_end(text: str) -> bool:
-    """Whether the message ends inside an `atlas:` block that was never closed. CommonMark decides what a
-    fence is (indented code, inline spans, ~~~ and longer fences are not openers): markdown-it parses the
-    message, and an unclosed fence runs to its end without a closing line."""
-    from markdown_it import MarkdownIt
-    fences = [t for t in MarkdownIt("commonmark").parse(text) if t.type == "fence"]
-    if not fences or fences[-1].markup != "```" or not fences[-1].info.startswith("atlas:"):
+    """Whether the message ends inside an `atlas:` block that was never closed, in the renderer's own terms
+    (BLOCK: an opener at the start of a line). After the last complete block, the last opener counts when no
+    fence-like line follows it and it is not inside another code block (an even number of fence lines before)."""
+    tail = text[max((m.end() for m in BLOCK.finditer(text)), default=0):]
+    openers = list(re.finditer(r"^```atlas:[a-z]+[^\n]*\n", tail, re.M))
+    if not openers:
         return False
-    lines, (start, end) = text.split("\n"), fences[-1].map
-    last = lines[end - 1] if end - 1 > start else ""
-    return not re.fullmatch(r" {0,3}`{3,}[ \t]*", last)  # its last line is no closing fence: it never closed
+    opener = openers[-1]
+    if FENCE_LINE.search(tail[opener.end():]) or re.search(r"^\s*(```|~~~)", tail[opener.end():], re.M):
+        return False
+    return len(FENCE_LINE.findall(tail[:opener.start()])) % 2 == 0
 
 
 def render_agent_message(index: Index, text: str) -> list[dict]:
-    text = text.replace("\r\n", "\n")  # an agent on Windows writes CRLF; the fences are matched per line
+    text = text.replace("\r\n", "\n").replace("\r", "\n")  # CRLF from Windows, or a stray CR: fences match per line
     if atlas_block_open_at_end(text):  # an agent left its last block open: the end of the message closes it
         text = text.rstrip("\n") + "\n```"
     blocks, pos = [], 0
