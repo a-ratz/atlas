@@ -909,18 +909,33 @@ def atlas_block_open_at_end(text: str) -> bool:
     line the Markdown way: a fence opens with three or more backticks or tildes (up to three spaces in; a
     backtick fence's info string has no backticks) and closes only with the same character, at least as
     many, and nothing after them. A quoted line (`> `) or indented code is no fence."""
-    fence = None  # (character, length, is it an atlas: block)
-    for line in text.split("\n"):
+    fence, opened = None, None  # (character, length, is it an atlas: block), and where it opened
+    lines = text.split("\n")
+    for n, line in enumerate(lines):
         m = FENCE.match(line)
         if not m:
             continue
         mark, info = m.group(2), m.group(3)
         if fence is None:
             if not (mark[0] == "`" and "`" in info):
-                fence = (mark[0], len(mark), mark == "```" and info.startswith("atlas:"))
+                fence, opened = (mark[0], len(mark), mark == "```" and info.startswith("atlas:")), n
         elif mark[0] == fence[0] and len(mark) >= fence[1] and not info.strip():
             fence = None
-    return fence is not None and fence[2]
+    if fence is None or not fence[2]:
+        return False
+    # Close it only where nothing else can pair with the added fence: every earlier `atlas:` opener belongs
+    # to a complete block (BLOCK does not follow other fences), and in a list item every line after the
+    # opener is indented at least as far, so it is the block's payload and not prose after the list.
+    # Otherwise the answer stays as it was.
+    start = sum(len(x) + 1 for x in lines[:opened]) + len(lines[opened]) - len(lines[opened].lstrip())
+    done = [(m.start(), m.end()) for m in BLOCK.finditer(text)]
+    if any(not any(a <= o < b for a, b in done) for o in (m.start() for m in re.finditer(r"```atlas:", text[:start]))):
+        return False
+    indent = len(lines[opened]) - len(lines[opened].lstrip())
+    above = next((x for x in reversed(lines[:opened]) if x.strip()), "")
+    if indent and re.match(r"\s*([-*+]|\d+[.)])\s", above):  # inside a list item: unindented lines leave it
+        return all(len(x) - len(x.lstrip()) >= indent for x in lines[opened + 1:] if x.strip())
+    return True
 
 
 def render_agent_message(index: Index, text: str) -> list[dict]:

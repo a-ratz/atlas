@@ -68,3 +68,15 @@ def test_fences_are_followed_by_their_delimiter(engine, vault):
     yaml_label = "```atlas:choices\noptions:\n  - label: |\n      ```python\n      print(1)\n    send: run it\n"
     assert kinds(engine, yaml_label)[-1] == "choices"
     assert kinds(engine, "Pick:\n  ```atlas:choices\noptions: [A, B]\n")[-1] == "choices"
+
+
+def test_closing_stays_out_of_the_way_when_it_could_pair_wrong(engine, vault):
+    # round 5: an atlas: opener quoted in a closed example, or prose after a list item, must not be swallowed;
+    # in doubt the answer renders as it did before closing existed (#21)
+    for fence in ("~~~", "````"):
+        text = f"Like this:\n{fence}\n```atlas:choices\n{fence}\nNow pick:\n```atlas:choices\noptions: [A, B]\n"
+        blocks = engine.render_agent_message(engine.Index(), text)
+        assert "Now pick:" in " ".join(b.get("html", "") for b in blocks), fence
+    listed = "1. Pick one:\n  ```atlas:choices\n  options: [A, B]\nThat is all."
+    blocks = engine.render_agent_message(engine.Index(), listed)
+    assert "That is all." in " ".join(b.get("html", "") for b in blocks)
