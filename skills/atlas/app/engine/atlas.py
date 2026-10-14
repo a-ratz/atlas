@@ -901,7 +901,12 @@ def _block_unsafe(index: Index, kind: str, body: str) -> dict:
     return {"kind": "error", "text": f"unknown block atlas:{kind}"}
 
 
+OPEN_AT_END = re.compile(r"^```atlas:[a-z]+[^\n]*\n(?:(?!^```[ \t]*$).)*\Z", re.S | re.M)
+
+
 def render_agent_message(index: Index, text: str) -> list[dict]:
+    if OPEN_AT_END.search(text):  # an agent left its last block open: the end of the message closes it
+        text = text.rstrip("\n") + "\n```"
     blocks, pos = [], 0
     for m in BLOCK.finditer(text):
         before = text[pos:m.start()].strip()
