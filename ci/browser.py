@@ -107,6 +107,8 @@ def teams_races(page, base: str, scheme: str) -> None:
         stuck = page.evaluate("() => document.querySelector('.tm-compose button').disabled || document.querySelector('#tm-text').disabled")
         if stuck or page.input_value("#tm-text") != f"no answer ({scheme})":
             failures.append(f"[{scheme}] teams: a send without an answer left the composer stuck or lost the draft")
+        if "may have gone out" not in (page.inner_text("#toast") or ""):  # round 3: unconfirmed, never "not sent"
+            failures.append(f"[{scheme}] teams: a send without an answer was reported as not sent")
         page.unroute("**/api/addons/teams/chats/*/messages")
         page.fill("#tm-text", "")
 

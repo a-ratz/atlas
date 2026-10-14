@@ -221,7 +221,7 @@ export async function view(main, ctx) {
     try {
       ({ status, data } = await call(pathOf(target), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) }));
     } catch {
-      // the request never got an answer (Atlas restarting, the network gone): the draft stays for a retry
+      // no answer (Atlas restarting, the network gone): Teams may have taken the message all the same
     } finally {
       sending = false;
       area.disabled = button.disabled = false;
@@ -232,9 +232,12 @@ export async function view(main, ctx) {
       if (target !== open) ctx.toast(`Sent to ${target.title}.`);  // the reader moved on: the answer is not this conversation's
       else if (data.messages) renderMessages(data.messages, true);
       else loadMessages(true);
+    } else if (!status) {
+      // unconfirmed, not failed: show the conversation as it is, and keep the draft in case it did not arrive
+      ctx.toast("No answer, so the message may have gone out. Check the conversation before sending it again.");
+      if (target === open) loadMessages(true);
     } else if (status === 403 && data.error === "post_refused") ctx.toast("Not sent: this channel does not take your posts.");
-    else ctx.toast(status === 429 ? "Microsoft asks to slow down; try again in a moment."
-      : status ? `Not sent: Teams answered ${status}.` : "Not sent: Atlas did not answer. Try again in a moment.");
+    else ctx.toast(status === 429 ? "Microsoft asks to slow down; try again in a moment." : `Not sent: Teams answered ${status}.`);
     if (target === open) area.focus();
   }
 
