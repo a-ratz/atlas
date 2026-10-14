@@ -357,5 +357,16 @@ def test_a_snippet_inside_frontmatter_that_does_not_reach_its_end(engine):
     # a source's hit showed `source_type: research question: "…" date: … sources:` as its excerpt (#22)
     snippet = "@@ -2,6 @@\nsource_type: research\nquestion: \"What makes runs fair?\"\ndate: 2026-10-14\nsources:\n  - talk\nThe body"
     keys = frozenset({"source_type", "question", "date", "sources"})
-    assert engine.snippet_text(snippet, "", keys) == "The body"
-    assert engine.snippet_text("Note: a body line\nmore", "", keys) == "Note: a body line\nmore"  # not a key of the note
+    assert engine.snippet_text(snippet, "", keys, front_end=8) == "The body"
+    assert engine.snippet_text("Note: a body line\nmore", "", keys, 8) == "Note: a body line\nmore"  # not a key of the note
+    # the body can start a line with a frontmatter key, too: past the frontmatter it stays (#23, review round 1)
+    body = "@@ -14,3 @@\nquestion: what makes a death fair?\n- seen threats\n- a lesson"
+    assert engine.snippet_text(body, "", keys, front_end=8).startswith("question: what makes")
+
+
+def test_relative_qmd_paths_keep_their_meaning_in_the_vault(engine, vault, fake, monkeypatch, tmp_path):
+    # QMD runs in the vault now; a relative QMD_CONFIG_DIR would point somewhere else there (#23, review round 1)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("QMD_CONFIG_DIR", "conf")
+    engine.qmd("status", index="atlas")
+    assert fake.envs[-1]["QMD_CONFIG_DIR"] == str(tmp_path / "conf")
