@@ -18,7 +18,8 @@ vault/               the user's knowledge. Plain Markdown files are the truth.
   sketches/  specs/  ideas: rough (sketch) and worked out (spec)
   projects/<group>/  projects in groups (private is the default); _group.md holds the group's rules
     <slug>/          project.md + threads/ decisions/ lessons/: one memory, shared by every agent
-  you/               the user: goals.md, profile.md (what agents learned), notes/ (from: user)
+  you/               the user: goals.md, profile.md (what agents learned; both written when there is
+                     something to put in them), notes/ (from: user)
   agents/            one identity file per agent (claude.md, codex.md, …); yours is yours
   cabinet/           who is who: people/ and orgs/, one card per person or organization (see Cabinet)
   tours/             guided tours through what changed, written by agents for the user
@@ -73,7 +74,7 @@ Follow `.agents/skills/atlas-operator/SKILL.md`. In short:
    `uv run --no-project engine/atlas.py serve --operator`
    (Claude Code: run it as a background task. Other harnesses: `nohup … &` or
    your harness's background mode.)
-3. Tell the user to open **http://localhost:8765**.
+3. Tell the user to open the URL `serve` printed (`engine/atlas.py status` shows it again).
 4. Enter the listening loop for your harness (next section).
 
 ## Talking with the user through Atlas

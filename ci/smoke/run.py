@@ -193,8 +193,9 @@ You are the agent connected to a fresh Atlas install, the way a user's agent wou
   other vault), a git identity and QMD's folders, so nothing touches the real user's configuration.
   Do not install anything outside this folder.
 
-Loop: `uv run --no-project engine/atlas.py --vault "{vault}" wait --agent {agent}` (from `{atlas}`), do
-what the message asks with the skills, answer with `say`, and wait again. Stop after {timebox} minutes
+Loop: `uv run --no-project engine/atlas.py --vault "{vault}" wait --agent {agent} --timeout 240` (from
+`{atlas}`; in the foreground, as AGENTS.md's mode B; run it again when it times out), do what the
+message asks with the skills, answer with `say`, and wait again. Stop after {timebox} minutes
 or when a message says "smoke run over". Keep a short log of what you did in `{run}/operator-log.md`:
 each request, the skill you used, what you wrote, anything that went wrong or was unclear in the
 instructions.

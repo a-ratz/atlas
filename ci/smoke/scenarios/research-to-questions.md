@@ -26,7 +26,7 @@ people and organizations involved.
 - The capture has sources and a section of open questions; the distill turns it into insights that
   link each other and move the capture to sources.
 - Open questions: only the few that would change a claim, each naming the insight it `affects`;
-  never more than 7 open. "Later" moves one to "+N resting".
+  never more than 7 open. "Later" moves one to "+N dormant".
 - The sidebar numbers match the lists they open.
 - Cards: the distill created minimal cards only for the people and organizations the insights rest on,
   with nothing on them the capture does not say. Expand completes one to the profile (role, earlier

@@ -179,8 +179,11 @@ that is only mentioned ("as Netflix does") gets no card.
 ## 7. Close the loop
 
 1. Move the capture to `vault/sources/` (keep its name) so `captures/` only
-   holds what still waits. If it names its authors or organizations but has no
-   `authors:` or `orgs:` yet, add them to its frontmatter (AGENTS.md, Cabinet).
+   holds what still waits. A capture that yields no insight moves too, with
+   `distilled: "none: <why>"` in its frontmatter (no source, nothing new, too
+   vague), so it stays findable as a source that gave nothing. If the capture
+   names its authors or organizations but has no `authors:` or `orgs:` yet,
+   add them to its frontmatter (AGENTS.md, Cabinet).
 2. If a map covers the topic, add each new insight to it, and add the map to
    the insight's `topics`.
 3. In Atlas, show what you made and what is next:
@@ -204,5 +207,7 @@ that is only mentioned ("as Netflix does") gets no card.
    connection.
 5. Run `uv run --no-project engine/atlas.py next`. If it reports five or more
    insights without a map, offer to build one (`atlas-map`).
-6. Commit what you wrote, including the capture's old path (it moved):
+6. Commit what you wrote, including the capture's old path (it moved). Run it
+   from the Atlas folder; paths are relative to it (`vault/captures/<file>.md`,
+   `vault/sources/<file>.md`, …):
    `engine/atlas.py commit --agent <id> -m "distill: <capture slug>" <paths>`.
