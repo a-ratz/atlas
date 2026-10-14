@@ -59,7 +59,8 @@ uv run ci/smoke/run.py stop <run folder> [--clean]
 
 ## Scenarios
 
-`scenarios/*.md`, one per user journey: frontmatter (`demo`, `timebox` in minutes, `max_steps`),
+`scenarios/*.md`, one per user journey: frontmatter (`demo`, `timebox` in minutes, `max_steps`, and
+`addons` to switch addons on before Atlas starts),
 the steps a user takes, what must be observable, and the screenshots to take. A pull request that
 adds or changes a feature adds it to a scenario or writes a new one.
 
@@ -71,6 +72,7 @@ adds or changes a feature adds it to a scenario or writes a new one.
 | [search-by-meaning](scenarios/search-by-meaning.md) | QMD turned on, a paraphrase found, a new note findable, then off |
 | [open-page-follows](scenarios/open-page-follows.md) | an open page follows the agent: a distill moves the capture, "Later" changes a question |
 | [idea-to-project](scenarios/idea-to-project.md) | ideas from the vault, a spec, a project that knows where it came from |
+| [teams-addon](scenarios/teams-addon.md) | the Teams addon over its demo: chats, channels, posting, both themes; the agent keeps Teams out of the notes |
 
 ## Budget
 
