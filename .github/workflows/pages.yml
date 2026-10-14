@@ -4,7 +4,7 @@ name: Demo site
 on:
   push:
     branches: [main]
-    paths: ["skills/atlas/app/**", "site/**", ".github/workflows/pages.yml"]
+    paths: ["skills/atlas/app/**", "site/**", "docs/guided-run/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 permissions:
   contents: read
