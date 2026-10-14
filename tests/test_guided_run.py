@@ -242,5 +242,18 @@ def test_the_build_skills_answer_what_the_operator_asked():
     assert "what was verified and how" in proj and "does not count" in proj and "`boot` prints it as text" in proj
     distill = (skills / "atlas-distill" / "SKILL.md").read_text(encoding="utf-8")
     # the bug phase's operator: promoting a lesson, a first insight on a new topic, bug threads, corrections
-    assert "write a short capture with the lesson's evidence" in proj and "do not force one: offer a map" in distill
+    assert "write a short capture with the lesson's evidence" in proj and 'do not force one: set `unconnected: "<why>"`' in distill
     assert "A bug gets its own\nthread" in proj and "add a dated correction that names it" in proj
+
+
+def test_an_insight_with_no_neighbour_yet_can_say_so(engine, vault):
+    # the first insight on a new topic: no honest link exists, and atlas-map needs five insights (#33 review round 2)
+    (vault / "insights").mkdir(exist_ok=True)
+    def insight(name, extra=""):
+        (vault / "insights" / f"{name}.md").write_text(
+            f"---\ndescription: d\nconfidence: working\n{extra}---\n\n# {name}\n", encoding="utf-8")
+    insight("Levels feel varied when players perceive it")
+    insight("Synthetic clicks miss a page that changes under the pointer")
+    assert engine.health(engine.Index())["orphans"] == 2
+    insight("Synthetic clicks miss a page that changes under the pointer", 'unconnected: "first note on software testing"\n')
+    assert engine.health(engine.Index())["orphans"] == 1  # the other one still counts

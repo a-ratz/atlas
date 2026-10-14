@@ -2094,7 +2094,7 @@ def health(index: Index) -> dict:
     if len(insights) >= 2:  # the first insight of a vault has nothing to link to yet
         for e in insights:
             linked = [i for i in e.links + index.backlinks.get(e.id, []) if index.entities.get(i) and index.entities[i].type in knowledge]
-            if not linked:
+            if not linked and not e.meta.get("unconnected"):  # `unconnected: "<why>"`: nothing related exists yet
                 orphans.append(e)
     checked = {tid for tid, spec in index.types.items() if "checks" in spec}  # types that declare checks (even `checks: {}`)
     agents = known_agents(index)

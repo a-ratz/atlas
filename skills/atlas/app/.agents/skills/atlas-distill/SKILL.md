@@ -78,8 +78,9 @@ Quality bar:
   sources agree), `proven` (replicated or well-established).
 - **Links:** link at least one existing insight whenever one is related. The
   connections are what turns a list into knowledge. When none is (the first
-  insight on a new topic), do not force one: offer a map for the topic; until
-  then `check` lists the insight as unconnected.
+  insight on a new topic), do not force one: set `unconnected: "<why>"` (say,
+  "first note on software testing"), which `check` accepts, and tell the user.
+  Remove the field once a related insight links it.
 - Cite paper versions (`2609.16247v2`) and set `revisit_after` for preprints
   (about three months out).
 
