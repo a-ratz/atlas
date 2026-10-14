@@ -2519,17 +2519,15 @@ def _set_front_path(path: Path, machine: str, target: str) -> None:
         while end > start and front[end - 1] in " \t\r\n":
             end -= 1  # a block scalar (`|-`) ends after its newline; the line break stays outside
         candidates = [front[:start] + (nl + " " * column).join(block) + front[end:]]
-    elif not front.strip():
-        candidates = [nl.join(block)]
-    else:  # a new key: last, at the root's indentation; first if appending would change the value above it
-        first = events[3] if len(events) > 3 and isinstance(events[2], yaml.MappingStartEvent) else None
-        at = first.start_mark.index if first else 0  # the first key; a root anchor or tag stays above it
-        line = front.rfind("\n", 0, at) + 1
-        if front[line:at].strip() == "?":  # an explicit first key: the root starts at the indicator
-            at = line + front[line:at].index("?")
-        column = at - line
-        entry = nl.join(" " * column + b for b in block)
-        candidates = [front + nl + entry, front[:line] + entry + nl + front[line:]]
+    elif not meta:  # nothing but blank lines or comments
+        candidates = [front + nl + nl.join(block) if front.strip() else nl.join(block)]
+    else:  # a new key: try the layouts the root could have, last first; the read-back below picks
+        root, first = events[2], events[3]  # a mapping with at least one key: `meta` is a non-empty dict
+        columns = dict.fromkeys((root.start_mark.column, first.start_mark.column, 0))  # `?`, anchors, indents
+        entry = lambda c: nl.join(" " * c + b for b in block)
+        starts = dict.fromkeys(front.rfind("\n", 0, m.index) + 1 for m in (root.start_mark, first.start_mark))
+        candidates = ([front + nl + entry(c) for c in columns]  # last, the usual place
+                      + [front[:s] + entry(c) + nl + front[s:] for s in starts for c in columns])  # or first
     for new in candidates:  # the file is the truth: write only what reads back as the old frontmatter plus this path
         try:
             if yaml.safe_load(new) == {**meta, "paths": want}:

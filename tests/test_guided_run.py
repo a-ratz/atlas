@@ -187,6 +187,9 @@ def test_map_path_writes_nothing_it_cannot_read_back(engine, vault, monkeypatch)
     ("? status\n: active\nrepo: x", "? status\n: active\nrepo: x\npaths:\n  laptop: /code/terrain"),
     # round 5: a root anchor on its own line; the keys below it set the indentation
     ("&root\n  status: active\n  repo: x", "&root\n  status: active\n  repo: x\n  paths:\n    laptop: /code/terrain"),
+    # round 6: a `?` on its own line above the first key
+    ("?\n  status\n: active\nrepo: x", "?\n  status\n: active\nrepo: x\npaths:\n  laptop: /code/terrain"),
+    ("# nothing yet", "# nothing yet\npaths:\n  laptop: /code/terrain"),
 ])
 def test_map_path_adds_paths_where_it_reads_back(engine, vault, front, expected):
     note = vault / "projects/private/terrain/project.md"
