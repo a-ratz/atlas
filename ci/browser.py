@@ -90,6 +90,7 @@ def checks(page, base: str, scheme: str) -> None:
         failures.append(f"[{scheme}] a status from the link shows no active chip (#4, round 2)")
     if not page.query_selector('.nav-link.active[data-t="question"]'):
         failures.append(f"[{scheme}] the sidebar does not mark a link with a query (#4, round 2)")
+    deep_after_nothing(page, base, scheme)
     page.goto(f"{base}/#/chat")
     page.wait_for_selector(".op-bar", timeout=15000)
     if not page.query_selector("#op-title"):
@@ -187,6 +188,49 @@ def left_refresh(ctx, srv: Server, vault: Path, rel: str) -> None:
         failures.append(f"a note opened at {page.evaluate('scrollY')}, the position of a refresh the reader left "
                         "(#14, review round 2)")
     page.close()
+
+
+def deep_after_nothing(page, base: str, scheme: str) -> None:
+    """With QMD on, an instant search that finds nothing goes on by meaning (smoke run on #15), also when QMD
+    was set up after the page loaded (review round 4). The browser smoke has no QMD: the meta and the deep
+    answer are faked; the switch is the app's."""
+    page.goto(f"{base}/#/search?q=memory")
+    page.wait_for_selector("#results .card, #results .empty", timeout=15000)  # loaded with the real meta: no QMD
+    if page.query_selector(".seg a:has-text('By meaning')"):
+        failures.append(f"[{scheme}] the search offers 'By meaning' without QMD (#15, second smoke run)")
+
+    def meta(route):
+        route.fulfill(json={**route.fetch().json(), "qmd": True})
+    page.route("**/api/meta", meta)
+    page.route("**/api/search?*mode=deep*", lambda r: r.fulfill(json={"mode": "deep", "results": []}))
+    page.goto(f"{base}/#/search?q=zzqxwv")
+    try:
+        page.wait_for_function("location.hash.includes('mode=deep')", timeout=10000)
+    except Exception:
+        failures.append(f"[{scheme}] an empty instant search does not go on by meaning once QMD is on (#15)")
+    # a slow empty answer that arrives after the reader opened a note must not take them back (round 4)
+    held = []
+    page.route("**/api/search?*q=yyqxwv*", lambda r: held.append(r))
+    page.goto(f"{base}/#/search?q=yyqxwv")
+    for _ in range(150):  # the search waits for the meta first; a slow runner takes its time
+        if held:
+            break
+        page.wait_for_timeout(100)
+    page.goto(f"{base}/#/projects")
+    page.wait_for_timeout(300)
+    if not held:
+        failures.append(f"[{scheme}] the late-answer check never saw its search request (#15)")
+    for r in held:  # every held request gets its answer, so nothing hangs into the next check
+        r.fulfill(json={"mode": "fast", "results": []})
+    page.wait_for_timeout(800)
+    if held and not page.evaluate("location.hash").startswith("#/projects"):
+        failures.append(f"[{scheme}] a late search answer took the reader away from the page they opened (#15)")
+    page.unroute("**/api/search?*q=yyqxwv*")
+    page.unroute("**/api/meta")
+    page.unroute("**/api/search?*mode=deep*")
+    page.goto(f"{base}/#/")
+    page.reload()  # the faked meta stays in the app until it loads again
+    page.wait_for_selector("#main > *", timeout=15000)
 
 if __name__ == "__main__":
     main()
