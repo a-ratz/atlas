@@ -223,7 +223,7 @@ files:
     name: University of Tübingen
     depth: minimal
     aliases: [University of Tübingen, Universität Tübingen]
-    kind: research
+    kind: university
     relation: where the closed-loop study behind Nightlight's cue timing was done
     website: https://uni-tuebingen.de/
     created_by: claude

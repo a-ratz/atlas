@@ -1835,7 +1835,8 @@ def make_app(index: Index):
             path, n = folder / f"{Path(name).stem}-{n}{Path(name).suffix}", n + 1
         with open(path, "xb") as fh:  # exclusive: never write through a link
             fh.write(bytes(data))
-        return JSONResponse({"ok": True, "path": path.relative_to(VAULT.resolve()).as_posix()})
+        committed = path.suffix.lower() == ".md" and await run_in_threadpool(commit_drop, path)
+        return JSONResponse({"ok": True, "path": path.relative_to(VAULT.resolve()).as_posix(), "committed": committed})
 
     def chat_payload() -> dict:
         outbox = [{**r, "n": i} for i, r in enumerate(read_jsonl(OUTBOX))]  # n: its place, to tell later from earlier
@@ -2576,6 +2577,25 @@ def _set_front_key(fm_lines: list[str], key: str, value: str, only_if_missing: b
             return True
     fm_lines.append(f"{key}: {value}")
     return True
+
+
+def commit_drop(path: Path) -> bool:
+    """Commit a Markdown file the user dropped on Atlas, in the user's git name. A later agent commit then sees
+    its history and leaves created_by unset instead of naming the agent (#42). Without git, or before the first
+    commit, the file just waits in captures/."""
+    top = _git_out("rev-parse", "--show-toplevel", cwd=VAULT)
+    if top is None or _git_out("rev-parse", "--verify", "-q", "HEAD", cwd=top) is None:
+        return False
+    rel = os.path.relpath(path, top).replace("\\", "/")
+    try:
+        lock = _lock("git.lock")
+    except SystemExit:  # an agent is committing right now; the file stays uncommitted, as before
+        return False
+    try:  # `commit -- <path>` commits this file only, whatever else is staged
+        return (_git_out("add", "--", rel, cwd=top) is not None
+                and _git_out("commit", "-q", "-m", f"drop: {path.name}", "--", rel, cwd=top) is not None)
+    finally:
+        lock.close()
 
 
 def stamp(path: Path, agent: str, new_file: bool) -> str | None:

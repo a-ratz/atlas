@@ -9,6 +9,7 @@ import re
 import subprocess
 import time
 from argparse import Namespace
+from pathlib import Path
 
 import pytest
 
@@ -189,3 +190,67 @@ def test_a_staged_rename_inside_a_named_folder_is_part_of_the_commit(engine, vau
     git("mv", "captures/moved.md", "sources/moved.md")
     engine.cmd_commit(Namespace(agent="gate", message="distill: moved", paths=[str(vault / "sources")]))
     assert "sources/moved.md" in git("show", "--name-only", "HEAD").stdout
+
+
+def drop_repo(vault, monkeypatch):
+    """The vault as the user's git repository, after the install commit; returns a git runner."""
+    for k, v in (("NAME", "Ada"), ("EMAIL", "ada@example.org")):
+        monkeypatch.setenv(f"GIT_AUTHOR_{k}", v)
+        monkeypatch.setenv(f"GIT_COMMITTER_{k}", v)
+    git = lambda *a: subprocess.run(["git", "-C", str(vault), *a], capture_output=True, text=True, encoding="utf-8",
+                                    check=True).stdout
+    git("init", "-q")
+    git("add", "-A")
+    git("commit", "-q", "--allow-empty", "-m", "atlas: install")
+    for folder in ("captures", "sources", "agents"):
+        (vault / folder).mkdir(exist_ok=True)
+    return git
+
+
+def test_a_dropped_note_is_committed_alone_in_the_users_name(engine, vault, monkeypatch):
+    # the distill's commit named the agent as the author of a capture the user had dropped (#42)
+    git = drop_repo(vault, monkeypatch)
+    (vault / "insights" / "Half done.md").write_text("---\ndescription: d\n---\n\n# Half done\n", encoding="utf-8")
+    git("add", "insights/Half done.md")  # someone else's staged work stays staged
+    drop = vault / "captures" / "notes-from-a-talk.md"
+    drop.write_text("---\nkind: research\n---\n\n# Notes from a talk\n", encoding="utf-8")
+    assert engine.commit_drop(drop)
+    assert git("log", "-1", "--format=%an|%s").strip() == "Ada|drop: notes-from-a-talk.md"
+    assert git("show", "--name-only", "--format=", "HEAD").split() == ["captures/notes-from-a-talk.md"]
+    assert git("diff", "--cached", "--name-only").splitlines() == ["insights/Half done.md"]
+
+
+def test_a_distilled_drop_does_not_name_the_agent_as_its_author(engine, vault, monkeypatch):
+    git = drop_repo(vault, monkeypatch)
+    (vault / "agents" / "claude.md").write_text("---\nname: Claude\n---\n\n# Claude\n", encoding="utf-8")
+    drop = vault / "captures" / "notes-from-a-talk.md"
+    drop.write_text("---\nkind: research\n---\n\n# Notes from a talk\n", encoding="utf-8")
+    assert engine.commit_drop(drop)
+    drop.rename(vault / "sources" / drop.name)  # the distill moves it, then commits both paths
+    engine.cmd_commit(Namespace(agent="claude", message="distill: notes-from-a-talk",
+                                paths=[str(drop), str(vault / "sources" / drop.name), str(vault / "agents" / "claude.md")]))
+    text = (vault / "sources" / drop.name).read_text(encoding="utf-8")
+    assert "created_by" not in text and "updated_by: claude" in text
+
+
+def test_a_drop_before_the_first_commit_just_waits(engine, vault, monkeypatch):
+    for k, v in (("NAME", "Ada"), ("EMAIL", "ada@example.org")):
+        monkeypatch.setenv(f"GIT_AUTHOR_{k}", v)
+    subprocess.run(["git", "-C", str(vault), "init", "-q"], check=True)
+    (vault / "captures").mkdir(exist_ok=True)
+    drop = vault / "captures" / "early.md"
+    drop.write_text("# Early\n", encoding="utf-8")
+    assert engine.commit_drop(drop) is False and drop.exists()
+
+
+def test_the_distill_rules_from_the_smoke_runs(engine):
+    # confidence counts evidence, revisits only for changing sources, organization kinds, hand-copied captures (#42)
+    skills = Path(__file__).resolve().parent.parent / "skills" / "atlas" / "app" / ".agents" / "skills"
+    distill = (skills / "atlas-distill" / "SKILL.md").read_text(encoding="utf-8")
+    cabinet = (skills / "atlas-cabinet" / "SKILL.md").read_text(encoding="utf-8")
+    assert "counts the evidence the note can point to" in distill and '"Well\n    known" alone is not `proven`' in distill
+    assert "only when the cited text can still change" in distill and "gets no `revisit_after`" in distill
+    assert "several\n  sources agree" not in distill and "set `revisit_after` for preprints" not in distill
+    kinds = "company, university, research lab,\n   nonprofit, public body, open-source project, media, other"
+    assert kinds in cabinet and "write `unknown`" in cabinet
+    assert "gets `created_by: unknown` in its frontmatter" in distill

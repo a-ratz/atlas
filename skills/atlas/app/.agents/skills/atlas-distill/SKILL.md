@@ -71,7 +71,7 @@ description: One sentence that adds context beyond the title (max 150 characters
 category: <a short topic label; reuse the labels already in the vault>
 confidence: speculative | working | proven
 source: <capture file name without .md>
-revisit_after: YYYY-MM-DD   # only if the claim rests on a preprint or fast-moving source
+revisit_after: YYYY-MM-DD   # only if the cited text can still change (see below)
 topics: []                  # map links like "[[sleep-map]]" once a map exists
 ---
 
@@ -95,15 +95,25 @@ Quality bar:
   "Slow-wave sleep strengthens declarative memories more than REM sleep" passes.
 - **Description test:** it says something the title does not (the mechanism,
   the scope, the evidence).
-- **Confidence:** `speculative` (one source, or inference), `working` (several
-  sources agree), `proven` (replicated or well-established).
+- **Confidence** counts the evidence the note can point to, not how well known
+  the result is:
+  - `speculative`: an inference, a secondary source only, or a primary you
+    could not read;
+  - `working`: a primary source you read that shows the claim directly (one
+    strong paper is enough);
+  - `proven`: `working` plus an independent confirmation the note links: a
+    replication, a review or meta-analysis, a standard reference. "Well
+    known" alone is not `proven`.
 - **Links:** link at least one existing insight whenever one is related. The
   connections are what turns a list into knowledge. When none is (the first
   insight on a new topic), do not force one: set `unconnected: "<why>"` (say,
   "first note on software testing"), which `check` accepts, and tell the user.
   Remove the field once a related insight links it.
-- Cite paper versions (`2609.16247v2`) and set `revisit_after` for preprints
-  (about three months out).
+- Cite paper versions (`2609.16247v2`). Set `revisit_after` (about three
+  months out) only when the cited text can still change: a preprint without a
+  final version, tool docs or a changelog, live data. A paper published in a
+  journal or at a conference is cited in that version (add the arXiv version if
+  that is what you read) and gets no `revisit_after`.
 
 ## 5. File the open questions that matter
 
@@ -191,7 +201,9 @@ that is only mentioned ("as Netflix does") gets no card.
    ```
 
    People go to `cabinet/people/<name>.md`, organizations to
-   `cabinet/orgs/<name>.md` (with `kind:` instead of `role:`). The file name is
+   `cabinet/orgs/<name>.md` (with `kind:` instead of `role:`: one of company,
+   university, research lab, nonprofit, public body, open-source project,
+   media, other; `unknown` when the source does not say). The file name is
    the name in lowercase ASCII with hyphens: `jan-born.md`,
    `university-of-tuebingen.md`, `dumay.md`.
 3. At most **five new cards per capture**, the actors the insights lean on most.
@@ -231,7 +243,10 @@ that is only mentioned ("as Netflix does") gets no card.
    connection.
 5. Run `uv run --no-project engine/atlas.py next`. If it reports five or more
    insights without a map, offer to build one (`atlas-map`).
-6. Commit what you wrote, including the capture's old path (it moved). Run it
+6. Commit what you wrote, including the capture's old path (it moved). A
+   capture that git does not know yet and that you did not write (the user
+   copied it into `captures/`) gets `created_by: unknown` in its frontmatter
+   first, so the commit does not name you as its author. Run it
    from the Atlas folder; paths are relative to it (`vault/captures/<file>.md`,
    `vault/sources/<file>.md`, …):
    `engine/atlas.py commit --agent <id> -m "distill: <capture slug>" <paths>`.
