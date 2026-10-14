@@ -214,18 +214,18 @@ def test_a_dropped_note_is_committed_alone_in_the_users_name(engine, vault, monk
     git("add", "insights/Half done.md")  # someone else's staged work stays staged
     drop = vault / "captures" / "notes-from-a-talk.md"
     drop.write_text("---\nkind: research\n---\n\n# Notes from a talk\n", encoding="utf-8")
-    assert engine.commit_drop(drop)
+    assert engine.commit_drop(drop, engine.Index().types)
     assert git("log", "-1", "--format=%an|%s").strip() == "Ada|drop: notes-from-a-talk.md"
     assert git("show", "--name-only", "--format=", "HEAD").split() == ["captures/notes-from-a-talk.md"]
     assert git("diff", "--cached", "--name-only").splitlines() == ["insights/Half done.md"]
 
 
 def test_a_distilled_drop_does_not_name_the_agent_as_its_author(engine, vault, monkeypatch):
-    git = drop_repo(vault, monkeypatch)
+    drop_repo(vault, monkeypatch)
     (vault / "agents" / "claude.md").write_text("---\nname: Claude\n---\n\n# Claude\n", encoding="utf-8")
     drop = vault / "captures" / "notes-from-a-talk.md"
     drop.write_text("---\nkind: research\n---\n\n# Notes from a talk\n", encoding="utf-8")
-    assert engine.commit_drop(drop)
+    assert engine.commit_drop(drop, engine.Index().types)
     drop.rename(vault / "sources" / drop.name)  # the distill moves it, then commits both paths
     engine.cmd_commit(Namespace(agent="claude", message="distill: notes-from-a-talk",
                                 paths=[str(drop), str(vault / "sources" / drop.name), str(vault / "agents" / "claude.md")]))
@@ -240,7 +240,7 @@ def test_a_drop_before_the_first_commit_just_waits(engine, vault, monkeypatch):
     (vault / "captures").mkdir(exist_ok=True)
     drop = vault / "captures" / "early.md"
     drop.write_text("# Early\n", encoding="utf-8")
-    assert engine.commit_drop(drop) is False and drop.exists()
+    assert engine.commit_drop(drop, engine.Index().types) is False and drop.exists()
 
 
 def test_the_distill_rules_from_the_smoke_runs(engine):
@@ -274,7 +274,7 @@ def test_a_slow_commit_hook_does_not_cut_a_drop_short(engine, vault, monkeypatch
     hook.chmod(0o755)
     drop = vault / "captures" / "slow.md"
     drop.write_text("# Slow\n", encoding="utf-8")
-    assert engine.commit_drop(drop)
+    assert engine.commit_drop(drop, engine.Index().types)
     assert git("log", "-1", "--format=%s").strip() == "drop: slow.md"
     assert not (vault / ".git" / "index.lock").exists()
 
@@ -287,6 +287,17 @@ def test_a_drop_a_hook_rejects_is_not_left_staged(engine, vault, monkeypatch):
     hook.chmod(0o755)
     drop = vault / "captures" / "refused.md"
     drop.write_text("# Refused\n", encoding="utf-8")
-    assert engine.commit_drop(drop) is False and drop.exists()
+    assert engine.commit_drop(drop, engine.Index().types) is False and drop.exists()
     assert git("diff", "--cached", "--name-only").strip() == ""
     assert git("log", "-1", "--format=%s").strip() == "atlas: install"
+
+
+def test_a_committed_drop_refreshes_search_by_meaning(engine, vault, monkeypatch):
+    # the drop commit skipped the QMD refresh that `commit` starts, so the capture stayed out of the index (#43 review)
+    drop_repo(vault, monkeypatch)
+    started = []
+    monkeypatch.setattr(engine, "qmd_refresh_after_commit", lambda paths, types: started.append(paths))
+    drop = vault / "captures" / "indexed.md"
+    drop.write_text("# Indexed\n", encoding="utf-8")
+    assert engine.commit_drop(drop, engine.Index().types)
+    assert started == [["captures/indexed.md"]]

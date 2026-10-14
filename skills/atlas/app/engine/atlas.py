@@ -1835,7 +1835,7 @@ def make_app(index: Index):
             path, n = folder / f"{Path(name).stem}-{n}{Path(name).suffix}", n + 1
         with open(path, "xb") as fh:  # exclusive: never write through a link
             fh.write(bytes(data))
-        committed = path.suffix.lower() == ".md" and await run_in_threadpool(commit_drop, path)
+        committed = path.suffix.lower() == ".md" and await run_in_threadpool(commit_drop, path, index.types)
         return JSONResponse({"ok": True, "path": path.relative_to(VAULT.resolve()).as_posix(), "committed": committed})
 
     def chat_payload() -> dict:
@@ -2579,7 +2579,7 @@ def _set_front_key(fm_lines: list[str], key: str, value: str, only_if_missing: b
     return True
 
 
-def commit_drop(path: Path) -> bool:
+def commit_drop(path: Path, types: dict) -> bool:
     """Commit a Markdown file the user dropped on Atlas, in the user's git name. A later agent commit then sees
     its history and leaves created_by unset instead of naming the agent (#42). Without git, or before the first
     commit, the file just waits in captures/."""
@@ -2598,6 +2598,7 @@ def commit_drop(path: Path) -> bool:
         if not run("add", "--", rel):
             return False
         if run("commit", "-q", "-m", f"drop: {path.name}", "--", rel):
+            qmd_refresh_after_commit([os.path.relpath(path, VAULT).replace("\\", "/")], types)  # as `commit` does
             return True
         run("reset", "-q", "--", rel)  # a hook said no: unstage it, or every later `commit` stops at "unrelated changes"
         return False
