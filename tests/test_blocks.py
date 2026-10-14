@@ -40,3 +40,10 @@ def test_an_opener_quoted_in_another_code_block_stays_quoted(engine, vault):
         text = f"Write it like this:\n{fence}text\n```atlas:choices\noptions: [A]\n{fence}\nThat is all."
         blocks = engine.render_agent_message(engine.Index(), text)
         assert [b["kind"] for b in blocks] == ["md"] and "That is all." in blocks[0]["html"], fence
+
+
+def test_indented_code_and_inline_spans_are_not_fences(engine, vault):
+    # an indented ```python example or an inline ```python``` span hid the open choices at the end (#21, round 2)
+    for before in ("    ```python\n    print(1)\n", "Use ```python``` for code.\n"):
+        text = before + "\n```atlas:choices\noptions: [A, B]\n"
+        assert kinds(engine, text)[-1] == "choices", before
