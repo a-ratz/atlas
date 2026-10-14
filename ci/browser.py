@@ -99,6 +99,14 @@ def checks(page, base: str, scheme: str) -> None:
     page.wait_for_selector(".side-col", timeout=15000)
     if not (page.query_selector(".side-col .chain a[href*='specs']") and page.query_selector(".side-col .chain a[href*='sketches']")):
         failures.append(f"[{scheme}] the project page does not show the spec and sketch it came from (#16)")
+    for project in ("projects/private/nightlight/project.md", "projects/work/thesis/project.md"):
+        page.goto(f"{base}/#/e/{urllib.parse.quote(project, safe='')}")
+        page.wait_for_selector(f".side-col .path:has-text('{project}')", timeout=15000)  # this project, not the last
+        if page.query_selector(".left-off"):
+            head = page.inner_text(".left-off h2").strip()
+            lines = page.eval_on_selector_all(".left-off .line", "ls => ls.map((l) => l.innerText)")
+            if any(head in line for line in lines) and len(lines) == 1:
+                failures.append(f"[{scheme}] {project}: 'Where we left off' says {head!r} twice (#16 smoke run)")
 
 
 def follows_changes(ctx, srv: Server, vault: Path) -> None:

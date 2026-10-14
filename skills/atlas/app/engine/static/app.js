@@ -1117,7 +1117,8 @@ function renderProject(e) {
           <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px"><span class="kicker">Where we left off</span>
             <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--soft)">${[...new Set(ls.lines.map((l) => l.agent))].map((a) => avatar(a, "s")).join("")}${esc(dayLabel(ls.date))} · ${esc([...new Set(ls.lines.map((l) => agentName(l.agent)))].join(" and "))}</span></div>
           <h2 id="left-h" class="h-serif">${inline(ls.lines.at(-1).text)}</h2>
-          <div class="lines">${ls.lines.map((l) => `<div class="line">${avatar(l.agent, "s")}<div><a class="th" href="#/e/${enc(l.thread)}">${esc(l.title)}</a>${inline(l.text)}</div></div>`).join("")}</div>
+          ${ls.lines.length > 1 ? `<div class="lines">${ls.lines.map((l) => `<div class="line">${avatar(l.agent, "s")}<div><a class="th" href="#/e/${enc(l.thread)}">${esc(l.title)}</a>${inline(l.text)}</div></div>`).join("")}</div>`
+            : `<div class="lines"><a class="th" href="#/e/${enc(ls.lines[0].thread)}">${esc(ls.lines[0].title)}</a></div>`}
           ${ls.commits?.length ? `<div class="chips" style="align-items:center;font-size:12.5px;color:var(--faint)"><span>commits</span>${ls.commits.map((c) => `<span class="badge" title="${esc(c.subject)}">${esc(c.sha.slice(0, 7))}</span>`).join("")}</div>` : ""}
         </section>` : ""}
 
