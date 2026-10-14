@@ -2592,8 +2592,9 @@ def commit_drop(path: Path, types: dict) -> bool:
     except SystemExit:  # an agent is committing right now; the file stays uncommitted, as before
         return False
     # No timeout, as in `commit`: a slow commit hook must finish, not be killed and leave .git/index.lock behind.
-    run = lambda *a: subprocess.run(["git", *a], cwd=top, capture_output=True, text=True, encoding="utf-8",
-                                    errors="replace").returncode == 0
+    # --literal-pathspecs: a folder named "vault[1]" is a name, not a pattern that also matches "vault1"
+    run = lambda *a: subprocess.run(["git", "--literal-pathspecs", *a], cwd=top, capture_output=True, text=True,
+                                    encoding="utf-8", errors="replace").returncode == 0
     try:  # `commit -- <path>` commits this file only, whatever else is staged
         if not run("add", "--", rel):
             return False

@@ -301,3 +301,24 @@ def test_a_committed_drop_refreshes_search_by_meaning(engine, vault, monkeypatch
     drop.write_text("# Indexed\n", encoding="utf-8")
     assert engine.commit_drop(drop, engine.Index().types)
     assert started == [["captures/indexed.md"]]
+
+
+def test_a_drop_commits_its_own_path_even_in_a_bracketed_folder(engine, tmp_path, monkeypatch):
+    # git read "vault[1]/captures/capture.md" as a pattern and committed vault1/captures/capture.md along with it (#43 review)
+    for k, v in (("NAME", "Ada"), ("EMAIL", "ada@example.org")):
+        monkeypatch.setenv(f"GIT_AUTHOR_{k}", v)
+        monkeypatch.setenv(f"GIT_COMMITTER_{k}", v)
+    outer = tmp_path / "outer"
+    git = lambda *a: subprocess.run(["git", "-C", str(outer), *a], capture_output=True, text=True, encoding="utf-8",
+                                    check=True).stdout
+    for name in ("vault[1]", "vault1"):
+        (outer / name / "captures").mkdir(parents=True)
+    git("init", "-q")
+    git("commit", "-q", "--allow-empty", "-m", "start")
+    (outer / "vault1" / "captures" / "capture.md").write_text("# Not this one\n", encoding="utf-8")
+    engine.set_vault(outer / "vault[1]")
+    drop = outer / "vault[1]" / "captures" / "capture.md"
+    drop.write_text("# This one\n", encoding="utf-8")
+    assert engine.commit_drop(drop, engine.Index().types)
+    assert git("show", "--name-only", "--format=", "HEAD").splitlines() == ["vault[1]/captures/capture.md"]
+    assert "vault1/" in git("status", "--porcelain", "--untracked-files=all")
