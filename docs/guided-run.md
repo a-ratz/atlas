@@ -17,8 +17,9 @@ killing.
 
 How the run was set up:
 
-- Atlas 0.9.0, freshly installed in a new folder: empty vault, no QMD index, no cards. The
-  game's code went into a separate, empty git repository.
+- Atlas 0.9.0, freshly installed in a new folder: empty vault, no QMD index, no cards (step 0
+  shows how a user installs and starts it). The game's code went into a separate, empty git
+  repository.
 - The operator was Claude Code in operator mode, wired to Atlas's chat. It saw only what reached
   the chat and the files it read itself.
 - The user's side was a second agent driving the browser through a script. It typed the messages
@@ -30,6 +31,7 @@ How the run was set up:
 
 | Step | The user wrote or pressed | Skill the agent used |
 |---|---|---|
+| [0. Install and start Atlas](#0-install-and-start-atlas) | `npx skills add …`, then "start atlas" | atlas, atlas-operator |
 | [1. An empty vault](#1-an-empty-vault) | nothing yet | |
 | [2. Research the landscape](#2-research-the-landscape) | "Research the current roguelike landscape…" | atlas-learn |
 | [3. Research the craft](#3-research-the-craft) | "Now research roguelike game-design best practice…" | atlas-learn |
@@ -43,6 +45,29 @@ How the run was set up:
 | [11. Build the first slice](#11-build-the-first-slice) | "Let's work on Terrain Only…" | atlas-project |
 | [12. Close the session](#12-close-the-session) | `/close` | atlas-project |
 | [13. A bug report](#13-a-bug-report) | "Bug in Terrain Only: … nothing happens" | atlas-project |
+
+## 0. Install and start Atlas
+
+Atlas installs as one skill for every agent harness on the machine:
+
+```bash
+npx skills add a-ratz/atlas -g -s atlas
+```
+
+Then the user asks their agent to start it. In Codex, `$atlas` names the skill:
+
+![Codex with the atlas skill: "$atlas Pleas start atlas"](assets/guided-run/00-start-atlas.webp)
+
+In Claude Code or another harness, "start atlas" is enough. The first time, the skill asks
+where Atlas should live (default `~/atlas`), installs it there and offers the demo vault. Then
+it starts the web app at http://localhost:8765 and listens to its chat.
+
+This step was not part of the recorded run. The test harness installed that run's Atlas with
+the same skill command and installer (`ci/smoke/run.py`); the screenshot shows a separate start
+in Codex.
+
+**Take away:** one sentence in the harness you already use starts Atlas, and the agent you
+asked is the one that answers in its chat.
 
 ## 1. An empty vault
 
