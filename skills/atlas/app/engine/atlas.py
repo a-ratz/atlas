@@ -2500,7 +2500,8 @@ def _set_front_path(path: Path, machine: str, target: str) -> None:
         head, front, tail = "---\n", "", "\n---\n" + ("" if text.startswith("\n") else "\n") + text
     nl = "\r\n" if head.endswith("\r\n") else "\n"
     try:
-        meta, span = yaml.safe_load(front) or {}, _top_value_span(list(yaml.parse(front)), "paths")
+        events = list(yaml.parse(front))
+        meta, span = yaml.safe_load(front) or {}, _top_value_span(events, "paths")
     except yaml.YAMLError as err:
         sys.exit(f"{path.name}: the frontmatter is not valid YAML; fix it first ({err})")
     paths = meta.get("paths") if isinstance(meta, dict) else None
@@ -2517,17 +2518,24 @@ def _set_front_path(path: Path, machine: str, target: str) -> None:
             start, column = line + front[line:start].index("?"), front[line:start].index("?")
         while end > start and front[end - 1] in " \t\r\n":
             end -= 1  # a block scalar (`|-`) ends after its newline; the line break stays outside
-        new = front[:start] + (nl + " " * column).join(block) + front[end:]
-    else:
-        new = front + nl + nl.join(block) if front.strip() else nl.join(block)
-    try:  # the file is the truth: write only what reads back as the old frontmatter plus this one path
-        ok = yaml.safe_load(new) == {**meta, "paths": want}
-    except yaml.YAMLError:
-        ok = False
-    if not ok:
-        sys.exit(f"{path.name}: could not set paths.{machine} without touching other lines; set `{machine}: {target}` "
-                 "under `paths:` by hand")
-    path.write_text(head + new + tail, encoding="utf-8", newline="")
+        candidates = [front[:start] + (nl + " " * column).join(block) + front[end:]]
+    elif not front.strip():
+        candidates = [nl.join(block)]
+    else:  # a new key: last, at the root's indentation; first if appending would change the value above it
+        first = events[3] if len(events) > 3 and isinstance(events[2], yaml.MappingStartEvent) else None
+        column = first.start_mark.column if isinstance(first, yaml.ScalarEvent) else 0
+        entry = nl.join(" " * column + b for b in block)
+        line = front.rfind("\n", 0, first.start_mark.index) + 1 if first else 0
+        candidates = [front + nl + entry, front[:line] + entry + nl + front[line:]]
+    for new in candidates:  # the file is the truth: write only what reads back as the old frontmatter plus this path
+        try:
+            if yaml.safe_load(new) == {**meta, "paths": want}:
+                path.write_text(head + new + tail, encoding="utf-8", newline="")
+                return
+        except yaml.YAMLError:
+            pass
+    sys.exit(f"{path.name}: could not set paths.{machine} without touching other lines; set `{machine}: {target}` "
+             "under `paths:` by hand")
 
 
 def cmd_map_path(args) -> None:

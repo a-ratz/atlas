@@ -177,3 +177,16 @@ def test_map_path_writes_nothing_it_cannot_read_back(engine, vault, monkeypatch)
     with pytest.raises(SystemExit, match="without touching other lines"):
         engine._set_front_path(note, "laptop", "/code/terrain")
     assert note.read_bytes() == before
+
+
+@pytest.mark.parametrize("front, expected", [
+    # final pass on #30: a last key with a block scalar, a root mapping indented by two spaces
+    ("status: active\ndescription: |\n  Two lines\n  of text", "paths:\n  laptop: /code/terrain\nstatus: active\ndescription: |\n  Two lines\n  of text"),
+    ("  status: active\n  repo: x", "  status: active\n  repo: x\n  paths:\n    laptop: /code/terrain"),
+])
+def test_map_path_adds_paths_where_it_reads_back(engine, vault, front, expected):
+    note = vault / "projects/private/terrain/project.md"
+    note.parent.mkdir(parents=True)
+    note.write_text(f"---\n{front}\n---\n\n# terrain\n", encoding="utf-8")
+    engine._set_front_path(note, "laptop", "/code/terrain")
+    assert note.read_text(encoding="utf-8") == f"---\n{expected}\n---\n\n# terrain\n"
