@@ -48,3 +48,60 @@ def test_the_idea_skills_answer_what_the_operators_asked():
     assert "the rules they test" in spec and "prior art, not a question" in spec
     assert "when prior art exists" not in spec  # the hand-over follows the same rule (#25, review round 1)
     assert "No code yet" in proj
+
+
+def test_log_lines_carry_their_links(engine, vault):
+    # "Where we left off" showed [[when-an-effect-reaches-along-a-line-check-the-whole-line]] as written (#27)
+    (vault / "insights" / "Ice reaches along a line.md").write_text("---\ndescription: d\n---\n\n# Ice reaches along a line\n",
+                                                                     encoding="utf-8")
+    folder = vault / "projects" / "private" / "terrain" / "threads"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "slice.md").write_text("---\nstatus: open\n---\n\n# Slice\n\n## Log\n"
+                                     "- 2026-10-14 (claude): stop rule fired, see [[Ice reaches along a line]].\n", encoding="utf-8")
+    index = engine.Index()
+    line = engine.thread_log(index.entities["projects/private/terrain/threads/slice.md"], index)[0]
+    assert line["links"] == {"Ice reaches along a line": {"id": "insights/Ice reaches along a line.md",
+                                                          "title": "Ice reaches along a line"}}
+
+
+def run_inline(*cases) -> list[str]:
+    """inline() from app.js, run in node on (text, links) pairs."""
+    import re
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    js = (APP / "engine" / "static" / "app.js").read_text(encoding="utf-8")
+    pieces = [re.search(p, js, re.S).group(0) for p in (
+        r"const esc = .*?;\n", r"const enc = .*?;\n", r"const inlineText = .*?;\n(?=//)",
+        r"const resolved = .*?;", r"function inline\(s, links\) \{.*?\n\}")]
+    probe = "\n".join(pieces) + "\n" + "\n".join(
+        f"console.log(inline({json.dumps(t)}, {json.dumps(links)}));" for t, links in cases)
+    return subprocess.run([node, "-e", probe], capture_output=True, text=True, encoding="utf-8").stdout.splitlines()
+
+
+def test_inline_keeps_code_and_ignores_inherited_names():
+    # review round 1 on #28: `[[note]]` in a code span lost its formatting; [[constructor]] became an empty link
+    out = run_inline(("Use `[[note]]` in the file", None),
+                     ("see [[constructor]] and [[toString]]", {}),
+                     ("see [[A note]], **now**", {"A note": {"id": "insights/a.md", "title": "A note"}}))
+    assert out[0] == "Use <code>[[note]]</code> in the file"
+    assert out[1] == "see constructor and toString"
+    assert out[2] == 'see <a href="#/e/insights%2Fa.md">A note</a>, <b>now</b>'
+
+
+def test_inline_links_with_backticks_and_bold_around_code():
+    # review round 2 on #28: backticks inside a link split it; bold around a code span lost its delimiters
+    links = {"Prefer `uv run` over bare Python": {"id": "insights/uv.md", "title": "Prefer `uv run` over bare Python"}}
+    out = run_inline(("see [[Prefer `uv run` over bare Python]]", links),
+                     ("**Use `git status` before continuing**", None),
+                     ("`[[note]]` and [[note]]", {}),
+                     ("https://x.test/[[note]] \u00010\u0002", {}),
+                     ("`**/*.py` and **run tests**, `https://x.test`", None))
+    assert out[0] == 'see <a href="#/e/insights%2Fuv.md">Prefer `uv run` over bare Python</a>'
+    assert out[1] == "<b>Use <code>git status</code> before continuing</b>"
+    assert out[2] == "<code>[[note]]</code> and note"
+    assert out[3] == '<a href="https://x.test/" target="_blank" rel="noopener">https://x.test/</a>note 0'
+    # round 3: code stays literal; bold and URLs do not reach inside it
+    assert out[4] == "<code>**/*.py</code> and <b>run tests</b>, <code>https://x.test</code>"

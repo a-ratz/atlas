@@ -99,6 +99,7 @@ def checks(page, base: str, scheme: str) -> None:
     slow_view_stays_behind(page, base, scheme)
     project_pages(page, base, scheme)
     card_facts(page, base, scheme)
+    log_links(page, base, scheme)
     page.goto(f"{base}/#/chat")
     page.wait_for_selector(".op-bar", timeout=15000)
     if not page.query_selector("#op-title"):
@@ -142,6 +143,15 @@ def checks(page, base: str, scheme: str) -> None:
             failures.append(f"[{scheme}] a pressed move leaves the other buttons on (#10)")
     except Exception:
         failures.append(f"[{scheme}] pressing Later shows nothing on the page, only a toast (#10)")
+
+
+def log_links(page, base: str, scheme: str) -> None:
+    """Thread log lines on a project page show links, not [[wiki]] syntax (#27)."""
+    page.goto(f"{base}/#/e/{urllib.parse.quote('projects/private/nightlight/project.md', safe='')}")
+    page.wait_for_selector(".side-col .path:has-text('projects/private/nightlight/project.md')", timeout=15000)
+    head = page.inner_text(".left-off") if page.query_selector(".left-off") else ""
+    if "[[" in head or not page.query_selector(".left-off a[href*='insights']"):
+        failures.append(f"[{scheme}] 'Where we left off' shows {head[:120]!r} instead of a linked title (#27)")
 
 
 def card_facts(page, base: str, scheme: str) -> None:

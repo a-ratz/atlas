@@ -147,7 +147,7 @@ def test_fact_links_resolve_before_escaping():
     if not node:
         pytest.skip("node is not installed")
     js = (APP / "engine" / "static" / "app.js").read_text(encoding="utf-8")
-    pieces = [re.search(p, js, re.S).group(0) for p in (r"const esc = .*?;\n", r"const enc = .*?;\n",
+    pieces = [re.search(p, js, re.S).group(0) for p in (r"const esc = .*?;\n", r"const enc = .*?;\n", r"const resolved = .*?;",
                                                           r"function factValue\(e, text\) \{.*?\n\}")]
     probe = "\n".join(pieces) + """
 const e = {fact_links: {"Latency < 1 ms": {id: "insights/latency.md", title: "Latency < 1 ms"}}};
