@@ -197,3 +197,63 @@ def test_map_path_adds_paths_where_it_reads_back(engine, vault, front, expected)
     note.write_text(f"---\n{front}\n---\n\n# terrain\n", encoding="utf-8")
     engine._set_front_path(note, "laptop", "/code/terrain")
     assert note.read_text(encoding="utf-8") == f"---\n{expected}\n---\n\n# terrain\n"
+
+
+def thread(vault, slug: str, name: str, meta: str) -> None:
+    folder = vault / "projects" / "private" / slug / "threads"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{name}.md").write_text(f"---\n{meta}---\n\n# {name}\n", encoding="utf-8")
+
+
+def test_next_offers_open_threads_before_upkeep(engine, vault):
+    # during project work, `next` suggested distilling and cards, and never the blocked thread (#32)
+    project(vault, "terrain", "status: active\n")
+    thread(vault, "terrain", "first-slice", "status: open\nnext: step 5\nblocked: needs five testers\n")
+    thread(vault, "terrain", "sound", "status: open\nnext: pick a sound set\n")
+    thread(vault, "terrain", "old", "status: closed\nnext: nothing\n")
+    (vault / "captures").mkdir(exist_ok=True)
+    (vault / "captures" / "c.md").write_text("---\nkind: research\n---\n\n# c\n", encoding="utf-8")
+    tips = engine.suggestions(engine.Index())
+    threads = [t for t in tips if t.startswith("Thread ")]
+    assert len(threads) == 2 and not any('"old"' in t for t in threads)
+    assert any("(terrain) is blocked: needs five testers. Ask the user" in t for t in threads)
+    assert any("(terrain) is open, next: pick a sound set. Offer to continue it" in t for t in threads)
+    assert tips.index(threads[-1]) < next(i for i, t in enumerate(tips) if "capture(s) waiting" in t)
+
+
+def test_next_lists_three_threads_and_counts_the_rest(engine, vault):
+    project(vault, "terrain", "status: active\n")
+    for n in range(5):
+        thread(vault, "terrain", f"t{n}", "status: open\n")
+    tips = engine.suggestions(engine.Index())
+    assert sum(t.startswith("Thread ") for t in tips) == 3
+    assert "2 more open thread(s)" in " ".join(tips)
+
+
+def test_the_build_skills_answer_what_the_operator_asked():
+    # the build phase's operator had to guess these (#32)
+    skills = APP / ".agents" / "skills"
+    op = (skills / "atlas-operator" / "SKILL.md").read_text(encoding="utf-8")
+    proj = (skills / "atlas-project" / "SKILL.md").read_text(encoding="utf-8")
+    agents = (APP / "AGENTS.md").read_text(encoding="utf-8")
+    assert "exit 143" in op and "restart it only if you started it" in op
+    assert "(`[via choice]: /close`) runs that command" in op and "runs that command too" in agents
+    assert "would be revisited together are one decision" in proj and "add a dated note that links the decision" in proj
+    assert "what was verified and how" in proj and "does not count" in proj and "`boot` prints it as text" in proj
+    distill = (skills / "atlas-distill" / "SKILL.md").read_text(encoding="utf-8")
+    # the bug phase's operator: promoting a lesson, a first insight on a new topic, bug threads, corrections
+    assert "write a short capture with the lesson's evidence" in proj and 'do not force one: set `unconnected: "<why>"`' in distill
+    assert "A bug gets its own\nthread" in proj and "add a dated correction that names it" in proj
+
+
+def test_an_insight_with_no_neighbour_yet_can_say_so(engine, vault):
+    # the first insight on a new topic: no honest link exists, and atlas-map needs five insights (#33 review round 2)
+    (vault / "insights").mkdir(exist_ok=True)
+    def insight(name, extra=""):
+        (vault / "insights" / f"{name}.md").write_text(
+            f"---\ndescription: d\nconfidence: working\n{extra}---\n\n# {name}\n", encoding="utf-8")
+    insight("Levels feel varied when players perceive it")
+    insight("Synthetic clicks miss a page that changes under the pointer")
+    assert engine.health(engine.Index())["orphans"] == 2
+    insight("Synthetic clicks miss a page that changes under the pointer", 'unconnected: "first note on software testing"\n')
+    assert engine.health(engine.Index())["orphans"] == 1  # the other one still counts

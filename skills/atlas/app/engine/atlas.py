@@ -2094,7 +2094,7 @@ def health(index: Index) -> dict:
     if len(insights) >= 2:  # the first insight of a vault has nothing to link to yet
         for e in insights:
             linked = [i for i in e.links + index.backlinks.get(e.id, []) if index.entities.get(i) and index.entities[i].type in knowledge]
-            if not linked:
+            if not linked and not e.meta.get("unconnected"):  # `unconnected: "<why>"`: nothing related exists yet
                 orphans.append(e)
     checked = {tid for tid, spec in index.types.items() if "checks" in spec}  # types that declare checks (even `checks: {}`)
     agents = known_agents(index)
@@ -2146,6 +2146,17 @@ def suggestions(index: Index) -> list[str]:
     out = []
     if notes:
         out.append(f"{len(notes)} new note(s) from the user in you/notes/: read and handle them, then set status: done")
+    threads = sorted((e for e in ents if e.type == "thread" and str(e.status) == "open"),
+                     key=lambda e: (index.touched.get(e.id) or "", e.mtime), reverse=True)
+    for t in threads[:3]:  # project work first: what the user is most likely in the middle of
+        where = f" ({t.project})" if t.project else ""
+        if t.meta.get("blocked"):
+            out.append(f"Thread \"{t.title}\"{where} is blocked: {_plain(t.meta['blocked'])}. Ask the user about it")
+        else:
+            step = f", next: {_plain(t.meta['next'])}" if t.meta.get("next") else ""
+            out.append(f"Thread \"{t.title}\"{where} is open{step}. Offer to continue it (skill atlas-project)")
+    if len(threads) > 3:
+        out.append(f"{len(threads) - 3} more open thread(s): `engine/atlas.py boot <project>` lists a project's threads")
     if captures:
         out.append(f"{len(captures)} capture(s) waiting: offer to distill them into insights (skill atlas-distill)")
     if operational:
