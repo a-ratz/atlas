@@ -2590,7 +2590,12 @@ def qmd_index() -> str | None:
 def qmd_areas_for(paths: list[str], types: dict) -> list[str]:
     """Which areas the vault-relative paths belong to, by the registry's globs."""
     return sorted({a for p in paths for a, globs in qmd_globs(types).items()
-                   if any(fnmatch.fnmatch(p.replace("\\", "/"), g) for g in globs)})
+                   if any(glob_match(p.replace("\\", "/"), g) for g in globs)})
+
+
+def glob_match(path: str, glob: str) -> bool:
+    """Whether a registry glob names this path, as Path.glob finds it: `**/` may also stand for no folder."""
+    return fnmatch.fnmatch(path, glob) or ("**/" in glob and fnmatch.fnmatch(path, glob.replace("**/", "")))
 
 
 def _try_lock(name: str):

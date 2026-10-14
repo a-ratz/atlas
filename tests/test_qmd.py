@@ -333,3 +333,10 @@ def test_a_setup_that_times_out_stays_off(engine, vault, fake):
     engine.qmd_set(enabled="on")
     ok, msg = engine.qmd_sync()
     assert not ok and "took longer than" in msg
+
+
+def test_notes_right_in_a_recursive_folder_refresh_their_area(engine, vault):
+    # `sources/**/*.md` did not match `sources/a.md` with fnmatch, so no refresh started (#15, review round 5)
+    types = engine.Index().types
+    assert engine.qmd_areas_for(["sources/a.md", "specs/a.md"], types) == ["ideas", "sources"]
+    assert engine.qmd_areas_for(["research/sleep/run-1/brief.md"], types) == ["sources"]
