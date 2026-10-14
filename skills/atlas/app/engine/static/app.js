@@ -746,14 +746,22 @@ function renderFrames(t, groups) {
 async function viewSearch(params) {
   const q = params.get("q") || "", mode = params.get("mode") || "fast";
   $("#search-input").value = q;
+  const token = state.routeToken;
+  state.meta = await api("/api/meta");  // whether search by meaning can answer; setup changes no note, so no event says so
+  if (token !== state.routeToken) return;
   main.innerHTML = `<section class="hero"><div class="kicker">${mode === "deep" ? "semantic search through QMD" : "instant title and text match"}</div><h1 class="page">“${esc(q)}”</h1></section>
-    <div class="toolbar"><div class="seg" role="group" aria-label="Search mode"><a class="btn ghost${mode === "fast" ? " on" : ""}" href="#/search?q=${enc(q)}" aria-pressed="${mode === "fast"}">Instant</a><a class="btn ghost${mode === "deep" ? " on" : ""}" href="#/search?q=${enc(q)}&mode=deep" aria-pressed="${mode === "deep"}">Deep (QMD)</a></div></div>
-    <div class="list" id="results"><div class="loading">${mode === "deep" ? "Asking QMD; this can take a few seconds…" : "Searching…"}</div></div>`;
+    <div class="toolbar"><div class="seg" role="group" aria-label="Search mode"><a class="btn ghost${mode === "fast" ? " on" : ""}" href="#/search?q=${enc(q)}" aria-pressed="${mode === "fast"}">By words</a>${state.meta.qmd || mode === "deep" ? `<a class="btn ghost${mode === "deep" ? " on" : ""}" href="#/search?q=${enc(q)}&mode=deep" aria-pressed="${mode === "deep"}">By meaning</a>` : ""}</div></div>
+    <div class="list" id="results"><div class="loading">${mode === "deep" ? "Searching by meaning (QMD); this can take a few seconds…" : "Searching…"}</div></div>`;
   const data = await api(`/api/search?q=${enc(q)}&mode=${mode}`);
+  if (token !== state.routeToken) return;  // the reader moved on while it searched
+  if (mode === "fast" && !data.results.length && state.meta.qmd) {  // the words found nothing; their meaning may
+    location.replace(`#/search?q=${enc(q)}&mode=deep`);
+    return;
+  }
   if (data.note) toast(data.note);
   $("#results").innerHTML = data.results.length ? data.results.map((e) => e.id ? card(e, e.snippet ? `<div class="card-desc mono" style="font-size:12.5px">${esc(e.snippet)}</div>` : "")
     : `<div class="card" data-t="external"><div class="card-title">${esc(e.title)}</div><div class="card-desc">${esc(e.description)}</div><div class="path">${esc(e.path)}</div></div>`).join("")
-    : `<div class="empty">No results.${mode === "fast" ? ` Try <a href="#/search?q=${enc(q)}&mode=deep">deep search</a>.` : ""}</div>`;
+    : `<div class="empty">No results.${mode === "fast" && !state.meta.qmd ? " Search by meaning needs QMD (ask your agent to turn it on)." : ""}</div>`;
 }
 
 function viewMissing(name) {
@@ -936,10 +944,42 @@ function marginHtml(e) {
   return parts.join("");
 }
 
+async function entityOrMoved(id) {  // a note the agent moved keeps its file name; the engine says where it went
+  const res = await fetch(`/api/entity?id=${enc(id)}`, { headers: { "x-atlas": "1" } }).catch(() => null);
+  if (!res) return {};
+  if (res.ok) return { e: await res.json() };
+  return { movedTo: (await res.json().catch(() => ({}))).moved_to };
+}
+
+// The vault changed (an agent wrote, moved or finished a note): an open note follows it, keeping the scroll
+// position. The composer lives in the dock, outside the page, so a draft stays.
+async function refreshOpenView() {
+  const [path, qs] = (location.hash || "#/").slice(1).split("?");
+  if (!path.startsWith("/e/") || !state.current) return;
+  const token = state.routeToken, id = state.current.id;
+  const { e } = await entityOrMoved(id);
+  if (token !== state.routeToken || (e && e.rev === state.current.rev)) return;  // moved on, or another note changed
+  state.keepScroll = { id, y: scrollY };
+  disposeView();  // a tour's key handlers
+  await viewEntity(decodeURIComponent(path.slice(3)), new URLSearchParams(qs || ""));  // follows a moved note
+}
+// The scroll position a re-rendered (or moved) note keeps; any other page opens at the top.
+function keptScroll(id) {
+  const k = state.keepScroll;
+  state.keepScroll = null;
+  return k?.id === id ? k.y : 0;
+}
+
 async function viewEntity(id, params = new URLSearchParams()) {
   const token = state.routeToken;
-  const e = await api(`/api/entity?id=${enc(id)}`).catch(() => null);
+  const { e, movedTo } = await entityOrMoved(id);
   if (token !== state.routeToken) return;  // the reader moved on while this page loaded
+  if (!e && movedTo) {
+    if (state.keepScroll?.id === id) state.keepScroll.id = movedTo;
+    toast(`Moved to ${movedTo.split("/")[0]}/`);
+    location.replace(`#/e/${enc(movedTo)}`);
+    return;
+  }
   if (!e) { main.innerHTML = `<div class="empty">Not found: ${esc(id)}</div>`; return; }
   remember([e, ...(e.outlinks || []), ...(e.backlinks || []), ...(e.maps || [])]);
   state.current = e;
@@ -958,7 +998,7 @@ async function viewEntity(id, params = new URLSearchParams()) {
     </div></article>
     <aside class="margin" aria-label="About this note">${marginHtml(e)}</aside></div>`;
   $("#copy-path").onclick = () => navigator.clipboard?.writeText(e.path).then(() => toast("Path copied"));
-  window.scrollTo(0, 0);
+  window.scrollTo(0, keptScroll(e.id));
 }
 
 // ------------------------------------------------------------------ views: projects
@@ -1144,7 +1184,7 @@ function renderProject(e) {
         <section><h3 class="kicker" style="margin:0 0 8px">File</h3><div class="path">${esc(e.path)}</div></section>
       </aside>
     </div>`;
-  window.scrollTo(0, 0);
+  window.scrollTo(0, keptScroll(e.id));
 }
 
 // ------------------------------------------------------------------ views: a tour
@@ -1231,7 +1271,7 @@ function renderTour(e, params) {
   document.addEventListener("keydown", keys);
   state.destroyView = () => document.removeEventListener("keydown", keys);
   go(i);
-  window.scrollTo(0, 0);
+  window.scrollTo(0, keptScroll(e.id));
 }
 
 // ------------------------------------------------------------------ chat: blocks and messages
@@ -1791,7 +1831,7 @@ async function palQuery(q) {
   const projects = lower ? (state.meta.projects || []).filter((p) => hit(p.title)).slice(0, 5).map((p) => ({ section: "Projects", ico: g("project"), t: "project", label: p.title, run: go(`#/e/${enc(p.id)}`) })) : [];
   const recent = lower ? [] : recentNotes().map((e) => ({ section: "Recent", ico: g(e.type), t: e.type, label: e.title, sub: typeLabel(e.type), run: go(`#/e/${enc(e.id)}`) }));
   const search = lower ? [{ section: "Search", ico: svg("arrow"), html: `Search the vault for <b>“${esc(query)}”</b>`, run: go(`#/search?q=${enc(query)}`) },
-    ...(state.meta.qmd ? [{ section: "Search", ico: svg("arrow"), html: `Deep search (QMD) for <b>“${esc(query)}”</b>`, sub: "Shift+↵", deep: true, run: go(`#/search?q=${enc(query)}&mode=deep`) }] : [])] : [];
+    ...(state.meta.qmd ? [{ section: "Search", ico: svg("arrow"), html: `Search by meaning for <b>“${esc(query)}”</b>`, sub: "Shift+↵", deep: true, run: go(`#/search?q=${enc(query)}&mode=deep`) }] : [])] : [];
   pal.notes = [];
   const build = () => {  // notes arrive late and go on top: a row the reader moved to stays selected
     const cur = pal.items[pal.sel];
@@ -1866,6 +1906,9 @@ function wireDrop() {
 }
 
 // ------------------------------------------------------------------ router, stream, boot
+function disposeView() {  // what the open view installed outside main (key handlers, the graph's loop)
+  if (state.destroyView) { try { state.destroyView(); } catch {} state.destroyView = null; }
+}
 async function route() {
   const hash = location.hash || "#/";
   const [path, qs] = hash.slice(1).split("?");
@@ -1874,7 +1917,8 @@ async function route() {
   $("#nav-toggle").setAttribute("aria-expanded", "false");
   hideHover(); $("#quote-bar").hidden = true; closePalette();
   state.routeToken = (state.routeToken || 0) + 1;
-  if (state.destroyView) { try { state.destroyView(); } catch {} state.destroyView = null; }
+  disposeView();
+  if (state.keepScroll && decodeURIComponent(path.slice(3)) !== state.keepScroll.id) state.keepScroll = null;  // the reader left a refresh
   main.classList.remove("bleed");
   if (!path.startsWith("/e/")) { state.current = null; updateComposers(); }
   const wasReading = reading();
@@ -1923,6 +1967,7 @@ function connectStream() {
     state.meta = await api("/api/meta");
     renderNav();
     if (onChatPage() && state.wbEntity) renderWorkbench();
+    else refreshOpenView();
   });
 }
 

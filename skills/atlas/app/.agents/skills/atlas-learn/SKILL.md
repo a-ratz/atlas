@@ -12,7 +12,7 @@ or GitHub CLIs) only if they are installed and the user wants them.
 
 ## 1. Check what the vault already knows
 
-Search `vault/` for the topic (grep, or `curl -s "localhost:8765/api/search?q=<words>"`
+Search `vault/` for the topic (with QMD on, `atlas-qmd` on the insights and sources collections; otherwise grep, or `curl -s "localhost:8765/api/search?q=<words>"`
 while Atlas runs). If notes exist, read them and build on them instead of
 starting over. Say what was already known.
 

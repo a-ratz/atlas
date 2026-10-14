@@ -49,7 +49,8 @@ user's and is never overwritten.
    change another agent's identity file.
 6. **No third-party tools are required.** Use your harness's own web search and
    file tools. Extras (QMD, social-media CLIs, GitHub CLI) are optional: use
-   them only if installed and the user wants them.
+   them only if installed and the user wants them. With QMD on for this vault
+   (`qmd.enabled: on` in `atlas.yaml`), search through `atlas-qmd`.
 7. **Ask before anything outward-facing or destructive:** publishing, pushing,
    deleting, exposing Atlas beyond localhost.
 8. Keep chat answers short; put substance in files and open them for the user.
@@ -170,6 +171,7 @@ The current state in a few sentences. Rewrite it when something changes.
 | says "I have an idea…", or asks for ideas ("give me ideas for…") | `.agents/skills/atlas-sketch/SKILL.md` |
 | wants a sketch worked out ("turn this into a spec", `/spec`) | `.agents/skills/atlas-spec/SKILL.md` |
 | wants a card for a person or organization, asks to look someone up, or to expand cards | `.agents/skills/atlas-cabinet/SKILL.md` |
+| looks for notes by meaning, or wants QMD turned on, off or repaired | `.agents/skills/atlas-qmd/SKILL.md` |
 | names a project to work on, "new project", closes a session | `.agents/skills/atlas-project/SKILL.md` |
 | wants the demo notes gone ("clean the demo", "start fresh") | `.agents/skills/atlas-clean-demo/SKILL.md`; to load them: `engine/atlas.py demo` |
 

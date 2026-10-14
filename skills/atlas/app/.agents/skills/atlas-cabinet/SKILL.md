@@ -13,8 +13,8 @@ optional enrichment from LinkedIn.
 
 ## 1. Create or update a card
 
-1. Search first: `uv run --no-project engine/atlas.py mentions "<name>"` and the
-   aliases of existing cards. Update a card rather than creating a second one.
+1. Search first: `uv run --no-project engine/atlas.py mentions "<name>"`, the
+   aliases of existing cards, and with QMD on the cabinet collection (`atlas-qmd`). Update a card rather than creating a second one.
 2. Fill what the user or a source in the vault says. Leave unknown fields empty.
    Never guess an email address, a surname or a title.
 3. Add a timeline entry with a date and a source for every new fact.
