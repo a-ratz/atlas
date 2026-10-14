@@ -71,6 +71,7 @@ def main() -> None:
                 if scheme == "light":  # the last pass: it edits and moves a demo note
                     follows_changes(ctx, srv, vault)
                     move_waits_for_its_own_answer(ctx, srv, vault)
+                    move_ignores_late_history(ctx, srv, vault)
                     moves_release(ctx, srv, vault)
                 ctx.close()
             browser.close()
@@ -256,6 +257,43 @@ def move_waits_for_its_own_answer(ctx, srv: Server, vault: Path) -> None:
         page.wait_for_selector(".moves-bar.sent", state="detached", timeout=10000)
     except Exception:
         failures.append("a sent move stays locked after the answer of the agent it went to (#18, review round 2)")
+    page.evaluate("localStorage.removeItem('atlas.to')")
+    page.close()
+
+
+def move_ignores_late_history(ctx, srv: Server, vault: Path) -> None:
+    """An answer written before the move but loaded after it (a slow chat request) does not free the move
+    (#18, review round 3)."""
+    import os
+    import time
+    beat = vault / ".atlas" / "agents" / "claude.beat"
+    beat.touch()
+    os.utime(beat, (time.time() + 600, time.time() + 600))  # claude listens
+    page = ctx.new_page()
+    page.goto(f"{srv.base}/#/e/{urllib.parse.quote('questions/do-cues-disturb-sleep.md', safe='')}")
+    page.wait_for_selector(".moves-bar", timeout=15000)
+    page.evaluate("localStorage.setItem('atlas.to', JSON.stringify('claude'))")
+    page.wait_for_timeout(2500)
+    held, holding = [], [True]
+    page.route("**/api/chat", lambda r: held.append(r) if holding[0] and r.request.method == "GET" else r.continue_())
+    atlas(vault, "say", "An answer from before the move.", "--agent", "claude")
+    page.wait_for_timeout(2200)  # the click lands in a later second than that answer
+    page.click(".moves-bar [data-via='move']:has-text('Research this')")
+    page.wait_for_selector(".moves-bar.sent", timeout=5000)
+    holding[0] = False
+    for r in held:  # the history arrives now, the earlier answer in it
+        r.continue_()
+    page.wait_for_timeout(3500)
+    page.unroute("**/api/chat")
+    if not held:
+        failures.append("the late-history check held no chat request (#18, review round 3)")
+    elif not page.query_selector(".moves-bar.sent"):
+        failures.append("an answer from before the move, loaded late, freed it (#18, review round 3)")
+    atlas(vault, "say", "On it.", "--agent", "claude")
+    try:
+        page.wait_for_selector(".moves-bar.sent", state="detached", timeout=10000)
+    except Exception:
+        failures.append("a sent move stays locked after its agent's answer (#18, review round 3)")
     page.evaluate("localStorage.removeItem('atlas.to')")
     page.close()
 

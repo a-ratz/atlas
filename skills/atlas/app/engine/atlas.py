@@ -1686,7 +1686,7 @@ def make_app(index: Index):
             if to:  # for one named agent; without it, every listening agent receives the message
                 record["to"] = to
             append_jsonl(INBOX, record)
-            return JSONResponse({"ok": True, "delivered": "agent"})
+            return JSONResponse({"ok": True, "delivered": "agent", "ts": record["ts"]})
         path = write_note("note", context, f"[via {via}] {text}" if via else text, index)
         return JSONResponse({"ok": True, "delivered": "note", "note": path})
 

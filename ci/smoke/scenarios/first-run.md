@@ -17,9 +17,12 @@ A person installed Atlas a minute ago and opens it for the first time, with no n
 
 ## Must be observable
 
-- The empty Home tells a newcomer what to do first; nothing on it is broken or blank.
-- The agent answers in the chat within a minute; the pill shows it working, then listening.
-- The note is findable (search or the notes list).
+- The empty Home tells a newcomer what to do first; nothing on it is broken or blank. A suggestion
+  puts a whole question into the box, with the part to make your own selected.
+- Before the agent listens, the pill says it is starting, not offline. The agent answers in the chat
+  within a minute; the pill shows it working, then listening.
+- "What can you do" gets a short list of what the agent does here.
+- The reminder is kept and shows on Home under "Needs you".
 
 ## Screenshots
 
