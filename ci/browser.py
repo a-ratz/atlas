@@ -111,8 +111,13 @@ def checks(page, base: str, scheme: str) -> None:
     if "…" in box[0] or not box[1]:
         failures.append(f"[{scheme}] a Home chip put {box[0]!r} in the box, selecting {box[1]!r} (#10)")
     page.goto(f"{base}/#/e/{urllib.parse.quote('questions/can-tmr-work-without-eeg.md', safe='')}")
-    page.wait_for_selector(".reader-main h1:has-text('Can cueing work')", timeout=15000)  # this page, not the last
-    row = page.inner_text(".reader-main .meta-row", timeout=15000)
+    try:
+        page.wait_for_selector(".reader-main h1:has-text('Can cueing work')", timeout=15000)  # this page, not the last
+        row = page.inner_text(".reader-main .meta-row", timeout=15000)
+    except Exception as err:  # say what the page showed instead of stopping the run
+        failures.append(f"[{scheme}] the question page did not settle ({type(err).__name__}): "
+                        f"{page.evaluate('location.hash')} {page.inner_html('#main')[:600]!r}")
+        return
     if "[[" in row or "raised_count" in row or not page.query_selector(".reader-main .meta-row a[href^='#/e/insights']"):
         failures.append(f"[{scheme}] the facts line shows {row!r} instead of a linked title (#10)")
     if scheme != "light":  # pressing a move writes to the chat, which the next pass expects empty

@@ -1697,14 +1697,15 @@ def make_app(index: Index):
         if not text:
             return JSONResponse({"ok": False}, status_code=400)
         if operator_state()["mode"] == "operator":
+            outbox_at = len(read_jsonl(OUTBOX))  # before the message exists: an answer to it cannot come earlier
             record = {"ts": now_iso(), "role": "user", "kind": "message", "text": text, "context": context}
             if via:
                 record["via"] = via
             if to:  # for one named agent; without it, every listening agent receives the message
                 record["to"] = to
             append_jsonl(INBOX, record)
-            # outbox_at: how many answers there were when the message arrived; one numbered from it on came after
-            return JSONResponse({"ok": True, "delivered": "agent", "ts": record["ts"], "outbox_at": len(read_jsonl(OUTBOX))})
+            # outbox_at: how many answers there were before the message; one numbered from it on came after
+            return JSONResponse({"ok": True, "delivered": "agent", "ts": record["ts"], "outbox_at": outbox_at})
         path = write_note("note", context, f"[via {via}] {text}" if via else text, index)
         return JSONResponse({"ok": True, "delivered": "note", "note": path})
 
@@ -2895,7 +2896,10 @@ def serving(url: str | None) -> bool:
     except (OSError, ValueError):
         return False
     path = meta.get("vault_path") if isinstance(meta, dict) else None  # another service may answer on the port
-    return isinstance(path, str) and bool(path) and Path(path).resolve() == VAULT.resolve()
+    try:
+        return isinstance(path, str) and bool(path) and Path(path).resolve() == VAULT.resolve()
+    except (OSError, ValueError):  # a path no file system takes ("\0")
+        return False
 
 
 def cmd_expose(args) -> None:

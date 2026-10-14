@@ -124,7 +124,7 @@ def test_status_survives_another_service_on_the_port(engine, vault, capsys):
     # a service answering `[]` or `{"vault_path": null}` on the saved port crashed `status` (#18, round 5)
     import http.server
     import threading
-    for body in (b"[]", b'{"vault_path": null}'):
+    for body in (b"[]", b'{"vault_path": null}', b'{"vault_path": "\\u0000"}'):  # the last: review round 6
         handler = type("H", (http.server.BaseHTTPRequestHandler,), {
             "do_GET": lambda self, b=body: (self.send_response(200), self.end_headers(), self.wfile.write(b)),
             "log_message": lambda *a: None})
@@ -154,3 +154,20 @@ const e = {fact_links: {"Latency < 1 ms": {id: "insights/latency.md", title: "La
 console.log(factValue(e, "[[Latency < 1 ms]] and <b>"));"""
     out = subprocess.run([node, "-e", probe], capture_output=True, text=True, encoding="utf-8").stdout.strip()
     assert out == '<a href="#/e/insights%2Flatency.md">Latency &lt; 1 ms</a> and &lt;b&gt;', out
+
+
+def test_an_answer_right_after_the_move_counts_as_after(engine, vault, monkeypatch):
+    # an answer written between the inbox append and the outbox count was counted as earlier (#18, round 6)
+    from starlette.testclient import TestClient
+    start_session(engine, minutes_ago=1)
+    real = engine.append_jsonl
+
+    def append_and_answer(path, record):
+        real(path, record)
+        if path == engine.INBOX:  # the agent answers at once
+            real(engine.OUTBOX, {"ts": record["ts"], "role": "agent", "agent": "claude", "text": "Done."})
+    monkeypatch.setattr(engine, "append_jsonl", append_and_answer)
+    client = TestClient(engine.make_app(engine.Index()), base_url="http://127.0.0.1")
+    res = client.post("/api/chat", json={"text": "Set this to dormant", "via": "move"}, headers={"x-atlas": "1"}).json()
+    answer = next(m for m in client.get("/api/chat").json()["messages"] if m.get("role") == "agent")
+    assert answer["n"] >= res["outbox_at"]
