@@ -59,6 +59,64 @@ def teams_demo(page, base: str, scheme: str) -> None:
         failures.append(f"[{scheme}] teams addon demo: {e}")
 
 
+def teams_races(page, base: str, scheme: str) -> None:
+    """Review round 1 on #60: a double click sends once; an answer that comes back after the reader opened
+    another chat stays out of it; leaving the page while it starts leaves the next page alone. Each race is
+    made certain by holding the request in question until the reader has moved on."""
+    held = []
+
+    def hold_posts(route):
+        if route.request.method == "POST":
+            held.append(route)
+        else:
+            route.continue_()
+
+    def release():
+        while held:
+            held.pop().continue_()
+
+    try:
+        page.goto(f"{base}/#/addon/teams")
+        page.wait_for_selector(".tm-row", timeout=10000)
+        page.click(".tm-row")
+        page.wait_for_selector(".tm-msg", timeout=10000)
+        page.route("**/api/addons/teams/chats/*/messages", hold_posts)
+        page.evaluate("""t => { document.querySelector('#tm-text').value = t;
+            const b = document.querySelector('.tm-compose button'); b.click(); b.click(); }""", f"once ({scheme})")
+        page.wait_for_timeout(400)
+        if len(held) != 1:
+            failures.append(f"[{scheme}] teams: a double click sent {len(held)} messages")
+        release()
+        page.wait_for_timeout(600)
+        page.evaluate("t => { document.querySelector('#tm-text').value = t; document.querySelector('.tm-compose button').click(); }",
+                      f"switching ({scheme})")
+        page.wait_for_timeout(300)
+        page.locator(".tm-row").nth(1).click()  # the send is still out
+        page.wait_for_timeout(600)
+        release()
+        page.wait_for_timeout(400)
+        if page.locator(".tm-msg", has_text=f"switching ({scheme})").count():
+            failures.append(f"[{scheme}] teams: a send's answer was shown under the chat opened meanwhile")
+        page.unroute("**/api/addons/teams/chats/*/messages")
+
+        page.goto(f"{base}/#/")
+        page.wait_for_function("document.querySelector('#main, main')?.children.length > 0", timeout=15000)
+        page.route("**/api/addons/teams/state", lambda route: held.append(route))
+        page.evaluate("() => { location.hash = '#/addon/teams'; }")
+        page.wait_for_timeout(500)  # the view waits for its state
+        page.evaluate("() => { location.hash = '#/'; }")
+        page.wait_for_timeout(500)
+        release()
+        page.unroute("**/api/addons/teams/state")
+        page.wait_for_timeout(800)
+        if page.query_selector(".tm") or page.query_selector("text=Could not load this view"):
+            failures.append(f"[{scheme}] teams: a view left while starting wrote over the next page")
+    except Exception as e:  # noqa: BLE001 - any failure here is a finding, not a crash of the run
+        failures.append(f"[{scheme}] teams races: {e}")
+    finally:
+        release()
+
+
 def main() -> None:
     for stream in (sys.stdout, sys.stderr):  # a Windows console or pipe would refuse "→" and "×" as cp1252
         if hasattr(stream, "reconfigure"):
@@ -87,6 +145,7 @@ def main() -> None:
                         failures.append(f"[{scheme}] {route}: {e}")
                 checks(page, srv.base, scheme)
                 teams_demo(page, srv.base, scheme)
+                teams_races(page, srv.base, scheme)
                 if scheme == "light":  # the last pass: it edits and moves a demo note
                     follows_changes(ctx, srv, vault)
                     move_waits_for_its_own_answer(ctx, srv, vault)

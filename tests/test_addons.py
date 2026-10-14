@@ -204,3 +204,108 @@ def test_the_token_file_is_never_world_readable_even_when_replaced(teams_module,
     os.chmod(store.path, 0o644)
     store.save({"access_token": "b"})
     assert store.path.stat().st_mode & 0o777 == 0o600
+
+
+# ------------------------------------------------------------------ review round 1 on #60, one test per finding
+
+def fake_teams_app(teams_module, tmp_path, graph, settings=None):
+    """The Teams routes over a fake Graph: `graph(method, path, body)` answers or raises."""
+    from starlette.applications import Starlette
+    from starlette.routing import Mount
+
+    class Ctx:
+        pass
+    ctx = Ctx()
+    ctx.name, ctx.data_dir = "teams", tmp_path / "data"
+    ctx.settings = settings or {"client_id": "id", "tenant": "t", "channel_messages": True}
+    teams_module.Account.graph = lambda self, method, path, body=None: graph(method, path, body)
+    app = Starlette(routes=[Mount("/api/addons/teams", routes=teams_module.register(ctx))])
+    return TestClient(app, base_url="http://127.0.0.1")
+
+
+def test_the_registered_redirect_uri_is_the_one_sign_in_uses(engine, vault, addon_data):
+    switch_on(vault, "  teams:\n    client_id: id\n    tenant: t\n")
+    target = client(engine).get("/api/addons/teams/login", follow_redirects=False).headers["location"]
+    assert "redirect_uri=http%3A%2F%2Flocalhost%3A" in target and "%2Fapi%2Faddons%2Fteams%2Fcallback" in target
+    registered = "http://localhost/api/addons/teams/callback"  # Entra ignores the port for localhost, not the path
+    for doc in ("README.md", "static/view.js"):
+        assert registered in (APP / "addons" / "teams" / doc).read_text(encoding="utf-8"), doc
+
+
+def test_a_refused_channel_post_is_an_error_not_a_consent_notice(teams_module, tmp_path):
+    def graph(method, path, body):
+        if method == "POST":
+            raise teams_module.GraphError(403, "Forbidden", "posting is limited to moderators")
+        return {"value": []}
+    c = fake_teams_app(teams_module, tmp_path, graph)
+    r = c.post("/api/addons/teams/channels/t1/c1/messages", json={"text": "hello"})
+    assert r.status_code == 403 and r.json()["error"] == "post_refused"
+
+
+def test_an_accepted_message_stays_sent_when_the_refresh_after_it_fails(teams_module, tmp_path):
+    def graph(method, path, body):
+        if method == "POST":
+            return {"id": "new"}
+        raise teams_module.Throttled(5)
+    c = fake_teams_app(teams_module, tmp_path, graph)
+    for url in ("/api/addons/teams/chats/19%3Aa%40thread.v2/messages", "/api/addons/teams/channels/t1/c1/messages"):
+        r = c.post(url, json={"text": "hello"})
+        assert r.status_code == 200 and r.json() == {"sent": True, "messages": None}, url
+
+
+def test_sign_out_waits_for_a_refresh_in_flight_and_wins(teams_module, tmp_path):
+    import threading
+    import time as clock
+    started, go = threading.Event(), threading.Event()
+
+    def post_form(url, fields):
+        started.set()
+        go.wait(5)
+        return {"access_token": "fresh", "refresh_token": "r", "expires_in": 3600}
+
+    account = teams_module.Account({"client_id": "id"}, tmp_path, post_form=post_form)
+    account.store.save({"access_token": "old", "refresh_token": "r", "expires_at": 0})
+    refresh = threading.Thread(target=account.access_token)
+    refresh.start()
+    started.wait(5)
+    out = threading.Thread(target=account.sign_out)
+    out.start()
+    clock.sleep(0.1)
+    go.set()
+    refresh.join(5)
+    out.join(5)
+    assert not account.store.path.exists()  # signed out stays signed out
+
+
+def test_saves_that_overlap_do_not_trip_over_one_temporary_file(teams_module, tmp_path):
+    import threading
+    store, errors = teams_module.TokenStore(tmp_path), []
+
+    def save(i):
+        try:
+            for _ in range(50):
+                store.save({"access_token": str(i)})
+        except OSError as e:
+            errors.append(e)
+    threads = [threading.Thread(target=save, args=(i,)) for i in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == [] and store.load()["access_token"] in {"0", "1", "2", "3"}
+
+
+def test_a_busy_token_endpoint_keeps_the_refresh_token_a_revoked_one_does_not(teams_module, tmp_path):
+    answers = [teams_module.GraphError(503, "temporarily_unavailable", ""), teams_module.GraphError(0, "network", ""),
+               teams_module.GraphError(400, "invalid_grant", "")]
+
+    def post_form(url, fields):
+        raise answers.pop(0)
+
+    account = teams_module.Account({"client_id": "id"}, tmp_path, post_form=post_form)
+    account.store.save({"access_token": "old", "refresh_token": "r", "expires_at": 0})
+    for _ in range(2):
+        with pytest.raises(teams_module.Throttled):
+            account.access_token()
+        assert account.store.load()["refresh_token"] == "r"
+    assert account.access_token() is None and account.store.load() is None

@@ -23,6 +23,8 @@ import json
 import os
 import re
 import secrets
+import tempfile
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -43,6 +45,8 @@ SCOPES = ["openid", "profile", "offline_access", "User.Read", "Chat.Read", "Chat
           "Team.ReadBasic.All", "Channel.ReadBasic.All", "ChannelMessage.Send"]
 CHANNEL_READ = "ChannelMessage.Read.All"
 PENDING_SECONDS = 600  # how long a started sign-in waits for its callback
+CALLBACK = "/api/addons/teams/callback"  # register http://localhost + this path: Entra ignores the port, not the path
+RETRYABLE = {0, 408, 429, 500, 502, 503, 504}  # the token endpoint is down or busy: keep the refresh token
 
 
 class Throttled(Exception):
@@ -128,8 +132,7 @@ class TokenStore:
 
     def save(self, token: dict) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(".tmp")
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        fd, tmp = tempfile.mkstemp(dir=self.path.parent, prefix=".token-", suffix=".tmp")  # 0600, its own name
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(token, f)
         os.replace(tmp, self.path)
@@ -155,6 +158,8 @@ def _post_form(url: str, fields: dict) -> dict:
             err = {}
         # the error code and its description only: never the request, which holds the code
         raise GraphError(e.code, err.get("error", "sign_in_failed"), err.get("error_description", "").split("\r\n")[0])
+    except (urllib.error.URLError, TimeoutError) as e:
+        raise GraphError(0, "network", str(getattr(e, "reason", e)))
 
 
 class Account:
@@ -169,6 +174,8 @@ class Account:
         self.opener = opener or urllib.request.urlopen
         self.pending: dict[str, tuple[str, str, float]] = {}  # state -> (verifier, redirect_uri, started)
         self.blocked_until = 0.0
+        # one at a time: a refresh, a save, a sign-out (polls overlap, and a sign-out must not be undone)
+        self.lock = threading.Lock()
 
     @property
     def configured(self) -> bool:
@@ -196,7 +203,8 @@ class Account:
             "client_id": self.client_id, "grant_type": "authorization_code", "code": code,
             "redirect_uri": redirect_uri, "code_verifier": verifier, "scope": " ".join(self.scopes),
         })
-        self._keep(token)
+        with self.lock:
+            self._keep(token)
 
     def _keep(self, token: dict, previous: dict | None = None) -> None:
         self.store.save({
@@ -207,26 +215,35 @@ class Account:
         })
 
     def sign_out(self) -> None:
-        self.store.clear()
+        with self.lock:  # waits for a refresh in flight, so the refresh cannot sign the user back in
+            self.store.clear()
 
     def access_token(self) -> str | None:
+        """A valid access token, refreshed when it is about to expire; None when signed out.
+        Raises Throttled while the token endpoint is down or busy: the refresh token stays."""
         token = self.store.load()
-        if not token:
-            return None
-        if token.get("expires_at", 0) - time.time() > 300:
+        if token and token.get("expires_at", 0) - time.time() > 300:
             return token["access_token"]
-        if not token.get("refresh_token"):
-            return None
-        try:
-            fresh = self.post_form(f"{LOGIN}/{self.tenant}/oauth2/v2.0/token", {
-                "client_id": self.client_id, "grant_type": "refresh_token",
-                "refresh_token": token["refresh_token"], "scope": " ".join(self.scopes),
-            })
-        except GraphError:
-            self.store.clear()  # the refresh token was revoked or expired: sign in again
-            return None
-        self._keep(fresh, token)
-        return fresh["access_token"]
+        with self.lock:
+            token = self.store.load()  # again: another request may have refreshed it, or signed out
+            if not token:
+                return None
+            if token.get("expires_at", 0) - time.time() > 300:
+                return token["access_token"]
+            if not token.get("refresh_token"):
+                return None
+            try:
+                fresh = self.post_form(f"{LOGIN}/{self.tenant}/oauth2/v2.0/token", {
+                    "client_id": self.client_id, "grant_type": "refresh_token",
+                    "refresh_token": token["refresh_token"], "scope": " ".join(self.scopes),
+                })
+            except GraphError as e:
+                if e.status in RETRYABLE:
+                    raise Throttled(30)
+                self.store.clear()  # the refresh token was revoked or expired: sign in again
+                return None
+            self._keep(fresh, token)
+            return fresh["access_token"]
 
     def signed_in(self) -> bool:
         return self.store.load() is not None
@@ -381,6 +398,15 @@ def _error(e: Exception) -> JSONResponse:
     raise e
 
 
+async def _read_after_write(read) -> list[dict] | None:
+    """The conversation after a message went out, or None: a failed refresh never turns a sent message into
+    a failed send (the view would offer to send it again)."""
+    try:
+        return await run_in_threadpool(read)
+    except (GraphError, Throttled):
+        return None
+
+
 async def _text_of(request: Request) -> str | None:
     try:
         text = str((await request.json()).get("text") or "").strip()
@@ -418,7 +444,7 @@ def register(ctx) -> list[Route]:
             return RedirectResponse(BACK)
         port = request.url.port or (443 if request.url.scheme == "https" else 80)
         # Entra matches http://localhost on any port for a public client; 127.0.0.1 would need its own entry
-        return RedirectResponse(account.login_url(f"http://localhost:{port}/api/addons/teams/callback"))
+        return RedirectResponse(account.login_url(f"http://localhost:{port}{CALLBACK}"))
 
     async def callback(request: Request):
         params = request.query_params
@@ -466,17 +492,24 @@ def register(ctx) -> list[Route]:
                 if text is None:
                     return JSONResponse({"error": "empty"}, status_code=400)
                 demo.send_chat(cid, text)
+                return JSONResponse({"sent": True, "messages": demo.chat_messages(cid)})
             return JSONResponse({"messages": demo.chat_messages(cid)})
-        try:
-            if request.method == "POST":
-                text = await _text_of(request)
-                if text is None:
-                    return JSONResponse({"error": "empty"}, status_code=400)
+        def read():
+            raw = account.graph("GET", f"/me/chats/{_q(cid)}/messages?$top=50")
+            return sorted((message_view(m) for m in raw.get("value", [])), key=lambda m: m["at"])
+
+        if request.method == "POST":
+            text = await _text_of(request)
+            if text is None:
+                return JSONResponse({"error": "empty"}, status_code=400)
+            try:
                 await run_in_threadpool(account.graph, "POST", f"/chats/{_q(cid)}/messages",
                                         {"body": {"contentType": "text", "content": text}})
-            raw = await run_in_threadpool(account.graph, "GET", f"/me/chats/{_q(cid)}/messages?$top=50")
-            items = sorted((message_view(m) for m in raw.get("value", [])), key=lambda m: m["at"])
-            return JSONResponse({"messages": items})
+            except (GraphError, Throttled) as e:
+                return _error(e)
+            return JSONResponse({"sent": True, "messages": await _read_after_write(read)})
+        try:
+            return JSONResponse({"messages": await run_in_threadpool(read)})
         except (GraphError, Throttled) as e:
             return _error(e)
 
@@ -506,21 +539,34 @@ def register(ctx) -> list[Route]:
                     if text is None:
                         return JSONResponse({"error": "empty"}, status_code=400)
                     demo.post_channel(tid, chid, text)
+                    return JSONResponse({"sent": True, "messages": demo.channel_posts(tid, chid)})
                 return JSONResponse({"messages": demo.channel_posts(tid, chid)})
             except StopIteration:
                 return JSONResponse({"error": "not_found"}, status_code=404)
         base = f"/teams/{_q(tid)}/channels/{_q(chid)}/messages"
-        try:
-            if request.method == "POST":
-                text = await _text_of(request)
-                if text is None:
-                    return JSONResponse({"error": "empty"}, status_code=400)
+
+        def read():
+            raw = account.graph("GET", base + "?$top=20&$expand=replies")
+            return sorted((message_view(m) for m in raw.get("value", [])), key=lambda m: m["at"])
+
+        if request.method == "POST":
+            text = await _text_of(request)
+            if text is None:
+                return JSONResponse({"error": "empty"}, status_code=400)
+            try:
                 await run_in_threadpool(account.graph, "POST", base, {"body": {"contentType": "text", "content": text}})
-            if CHANNEL_READ not in account.scopes:
-                return JSONResponse({"error": "consent", "needs": CHANNEL_READ}, status_code=403)
-            raw = await run_in_threadpool(account.graph, "GET", base + "?$top=20&$expand=replies")
-            items = sorted((message_view(m) for m in raw.get("value", [])), key=lambda m: m["at"])
-            return JSONResponse({"messages": items})
+            except GraphError as e:
+                if e.status == 403:  # this channel does not take your posts (a write refused, not a missing read consent)
+                    return JSONResponse({"error": "post_refused", "message": e.message}, status_code=403)
+                return _error(e)
+            except Throttled as e:
+                return _error(e)
+            readable = CHANNEL_READ in account.scopes
+            return JSONResponse({"sent": True, "messages": await _read_after_write(read) if readable else None})
+        if CHANNEL_READ not in account.scopes:
+            return JSONResponse({"error": "consent", "needs": CHANNEL_READ}, status_code=403)
+        try:
+            return JSONResponse({"messages": await run_in_threadpool(read)})
         except GraphError as e:
             if e.status == 403:
                 return JSONResponse({"error": "consent", "needs": CHANNEL_READ}, status_code=403)

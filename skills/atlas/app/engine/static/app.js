@@ -2022,9 +2022,12 @@ async function viewAddon(name, params) {
   if (!addon) { main.innerHTML = `<div class="empty">No addon called ${esc(name)} is switched on in atlas.yaml.</div>`; return; }
   if (addon.error || !addon.view) { main.innerHTML = `<div class="empty">The ${esc(addon.title)} addon could not start: ${esc(addon.error || "it has no view")}</div>`; return; }
   const token = state.routeToken;
+  const current = () => token === state.routeToken && (location.hash || "").startsWith(`#/addon/${enc(name)}`);
   const mod = await import(addon.view);
-  const destroy = await mod.view(main, { esc, enc, toast, params, base: `/api/addons/${enc(name)}` });
-  if (token === state.routeToken && (location.hash || "").startsWith(`#/addon/${enc(name)}`)) state.destroyView = destroy || null;
+  if (!current()) return;  // the reader went elsewhere while the module loaded
+  // `current` lets the view stop while it starts: it must not touch main once another view owns it
+  const destroy = await mod.view(main, { esc, enc, toast, params, current, base: `/api/addons/${enc(name)}` });
+  if (current()) state.destroyView = destroy || null;
   else if (destroy) destroy();
 }
 function disposeView() {  // what the open view installed outside main (key handlers, the graph's loop)

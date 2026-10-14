@@ -37,8 +37,9 @@ apps, ask your admin to do these steps.
    choose **New registration**. Name it, for example, *Atlas*. Supported account types: *Accounts in
    this organizational directory only*.
 2. Under **Authentication**, add the platform **Mobile and desktop applications** with the redirect URI
-   `http://localhost`. Atlas sends you back to `http://localhost:<port>/api/addons/teams/callback`;
-   Entra accepts any port for `http://localhost`. Open Atlas at `localhost`, not `127.0.0.1`.
+   `http://localhost/api/addons/teams/callback`. Atlas sends you back to
+   `http://localhost:<port>/api/addons/teams/callback`; Entra ignores the port for `http://localhost`,
+   but not the path. Open Atlas at `localhost`, not `127.0.0.1`.
 3. Under **API permissions**, add these **delegated** Microsoft Graph permissions:
 
    | Permission | For | Admin consent |

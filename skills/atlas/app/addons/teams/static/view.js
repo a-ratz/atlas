@@ -44,7 +44,9 @@ export async function view(main, ctx) {
     return node;
   };
 
-  let alive = true, tab = "chats", open = null, timers = [], backoff = 0;
+  let alive = true, tab = "chats", open = null, timers = [], backoff = 0, sending = false;
+  // still on screen: not cleaned up, and the reader has not navigated away while this view was starting
+  const live = () => alive && (!ctx.current || ctx.current());
   const call = async (path, opts = {}) => {
     const res = await fetch(ctx.base + path, { ...opts, headers: { ...(opts.headers || {}), "x-atlas": "1" } });
     let data = {};
@@ -63,6 +65,7 @@ export async function view(main, ctx) {
 
   // ---------------------------------------------------------------- states before a conversation
   const state = (await call("/state")).data;
+  if (!live()) { destroy(); return destroy; }
   if (!state.configured) {
     setup();
     return destroy;
@@ -99,7 +102,7 @@ export async function view(main, ctx) {
 
   async function loadChats() {
     const { status, data } = await call("/chats");
-    if (!alive || tab !== "chats") return;
+    if (!live() || tab !== "chats") return;
     if (status !== 200) return listError(status, data);
     const list = $(".tm-list");
     list.replaceChildren();
@@ -118,7 +121,7 @@ export async function view(main, ctx) {
 
   async function loadTeams() {
     const { status, data } = await call("/teams");
-    if (!alive || tab !== "channels") return;
+    if (!live() || tab !== "channels") return;
     if (status !== 200) return listError(status, data);
     const list = $(".tm-list");
     list.replaceChildren();
@@ -144,8 +147,8 @@ export async function view(main, ctx) {
   }
 
   // ---------------------------------------------------------------- a conversation
-  const path = () => open.kind === "chat" ? `/chats/${encodeURIComponent(open.id)}/messages`
-    : `/channels/${encodeURIComponent(open.team)}/${encodeURIComponent(open.id)}/messages`;
+  const pathOf = (conv) => conv.kind === "chat" ? `/chats/${encodeURIComponent(conv.id)}/messages`
+    : `/channels/${encodeURIComponent(conv.team)}/${encodeURIComponent(conv.id)}/messages`;
 
   function clearConv() {
     $(".tm-conv-head h2").textContent = tab === "chats" ? "Pick a chat" : "Pick a channel";
@@ -170,8 +173,8 @@ export async function view(main, ctx) {
   async function loadMessages(scroll) {
     if (!open) return;
     const asked = open;
-    const { status, data } = await call(path());
-    if (!alive || asked !== open) return;
+    const { status, data } = await call(pathOf(asked));
+    if (!live() || asked !== open) return;
     const note = $(".tm-note");
     if (status === 403 && data.error === "consent") {
       note.hidden = false;
@@ -208,16 +211,24 @@ export async function view(main, ctx) {
   }
 
   async function send() {
-    const area = $("#tm-text");
+    const area = $("#tm-text"), button = $(".tm-compose button");
     const text = area.value.trim();
-    if (!text || !open) return;
-    area.disabled = true;
-    const { status, data } = await call(path(), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) });
-    area.disabled = false;
-    if (status === 200) { area.value = ""; renderMessages(data.messages, true); }
-    else if (status === 403 && data.error === "consent") { area.value = ""; loadMessages(true); ctx.toast("Posted. Reading the channel needs an admin's consent."); }
+    if (sending || !text || !open) return;  // one message in flight at a time: a double click sends once
+    const target = open;
+    sending = true;
+    area.disabled = button.disabled = true;
+    const { status, data } = await call(pathOf(target), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) });
+    sending = false;
+    area.disabled = button.disabled = false;
+    if (!live()) return;
+    if (status === 200 && data.sent) {
+      if (area.value.trim() === text) area.value = "";
+      if (target !== open) ctx.toast(`Sent to ${target.title}.`);  // the reader moved on: the answer is not this conversation's
+      else if (data.messages) renderMessages(data.messages, true);
+      else loadMessages(true);
+    } else if (status === 403 && data.error === "post_refused") ctx.toast("Not sent: this channel does not take your posts.");
     else ctx.toast(status === 429 ? "Microsoft asks to slow down; try again in a moment." : `Not sent: Teams answered ${status}.`);
-    area.focus();
+    if (target === open) area.focus();
   }
 
   // ---------------------------------------------------------------- staying current
@@ -234,6 +245,7 @@ export async function view(main, ctx) {
   every(OPEN_EVERY, () => loadMessages(false));
   every(LISTS_EVERY, () => (tab === "chats" ? loadChats() : loadTeams()));
   await showTab();
+  if (!live()) destroy();
   return destroy;
 
   // ---------------------------------------------------------------- setup, and leaving
@@ -241,7 +253,8 @@ export async function view(main, ctx) {
     const box = el("div", "tm-empty tm-setup");
     box.append(el("h2", "", "Connect Teams"),
       el("p", "", "Register an app in Microsoft Entra ID (your admin may have to): App registrations, New registration, "
-        + "single tenant; platform “Mobile and desktop applications” with the redirect URI http://localhost; "
+        + "single tenant; platform “Mobile and desktop applications” with the redirect URI "
+        + "http://localhost/api/addons/teams/callback; "
         + "delegated permissions as the addon's README lists them. Then put its IDs into the vault's atlas.yaml and restart Atlas:"),
       el("pre", "", "addons:\n  teams:\n    client_id: <Application (client) ID>\n    tenant: <Directory (tenant) ID>"),
       el("p", "tm-quiet", "Or try it with made-up people first: demo: true instead of the two IDs."));
