@@ -2451,15 +2451,92 @@ def cmd_machine(args) -> None:
     print("(the key of `paths:` in project.md; set $ATLAS_MACHINE to name this machine differently)", file=sys.stderr)
 
 
-def _frontmatter_write(path: Path, update) -> None:
-    """Rewrite only the frontmatter of a note through a dict update; the body stays byte-identical."""
+def _top_value_span(events: list, key: str) -> tuple[int, int, int, bool] | None:
+    """Where a top-level `key:` and its value sit in the YAML text, from PyYAML parse events: (start of the
+    key, end of the value's content, the key's column, whether the value holds an anchor or alias).
+    A block value ends at its last scalar, so comments after it stay; the last duplicate key wins, as in PyYAML."""
     import yaml
-    text = path.read_text(encoding="utf-8")
+
+    def node(i: int) -> tuple[int, int, bool]:  # one node from events[i]: next index, end of content, anchored
+        ev = events[i]
+        anchored = getattr(ev, "anchor", None) is not None
+        if not isinstance(ev, (yaml.MappingStartEvent, yaml.SequenceStartEvent)):
+            return i + 1, ev.end_mark.index, anchored
+        flows, last, i = [ev.flow_style], ev.end_mark.index, i + 1
+        while flows:
+            ev = events[i]
+            anchored |= getattr(ev, "anchor", None) is not None
+            if isinstance(ev, (yaml.MappingStartEvent, yaml.SequenceStartEvent)):
+                flows.append(ev.flow_style)
+            elif isinstance(ev, (yaml.MappingEndEvent, yaml.SequenceEndEvent)):
+                if flows.pop():
+                    last = ev.end_mark.index  # a flow collection ends at its bracket
+            else:
+                last = ev.end_mark.index
+            i += 1
+        return i, last, anchored
+
+    if len(events) < 3 or not isinstance(events[2], yaml.MappingStartEvent):
+        return None
+    found, i = None, 3
+    while not isinstance(events[i], yaml.MappingEndEvent):
+        k = events[i]
+        i, _, key_anchored = node(i)
+        i, end, anchored = node(i)
+        if isinstance(k, yaml.ScalarEvent) and k.value == key:
+            found = (k.start_mark.index, end, k.start_mark.column, anchored or key_anchored)
+    return found
+
+
+def _set_front_path(path: Path, machine: str, target: str) -> None:
+    """Set `paths.<machine>` in a note's frontmatter. Only the `paths:` value is rewritten; every other
+    line, the line endings and the body stay byte-identical (a YAML round trip restyled the whole file, #29)."""
+    import yaml
+    text = path.read_bytes().decode("utf-8")  # read_text would turn \r\n into \n
     m = FRONT.match(text)
-    meta = (yaml.safe_load(m.group(1)) or {}) if m else {}
-    update(meta)
-    front = yaml.safe_dump(meta, sort_keys=False, allow_unicode=True, width=1000).strip()
-    path.write_text(f"---\n{front}\n---\n" + (text[m.end():] if m else "\n" + text), encoding="utf-8")
+    if m:
+        head, front, tail = text[:m.start(1)], m.group(1), text[m.end(1):]
+    else:
+        head, front, tail = "---\n", "", "\n---\n" + ("" if text.startswith("\n") else "\n") + text
+    nl = "\r\n" if head.endswith("\r\n") else "\n"
+    try:
+        events = list(yaml.parse(front))
+        meta, span = yaml.safe_load(front) or {}, _top_value_span(events, "paths")
+    except yaml.YAMLError as err:
+        sys.exit(f"{path.name}: the frontmatter is not valid YAML; fix it first ({err})")
+    paths = meta.get("paths") if isinstance(meta, dict) else None
+    if not isinstance(meta, dict) or (paths is not None and not isinstance(paths, dict)):
+        sys.exit(f"{path.name}: `paths:` is not a mapping of machine: folder; fix it by hand first")
+    want = {**(paths or {}), machine: target}
+    block = yaml.safe_dump({"paths": want}, sort_keys=False, allow_unicode=True, width=1000).splitlines()
+    if span and span[3]:
+        sys.exit(f"{path.name}: `paths:` uses a YAML anchor or alias; set `{machine}: {target}` under it by hand")
+    if span:
+        start, end, column, _ = span
+        line = front.rfind("\n", 0, start) + 1
+        if front[line:start].strip() == "?":  # an explicit key (`? paths`): the indicator goes too
+            start, column = line + front[line:start].index("?"), front[line:start].index("?")
+        while end > start and front[end - 1] in " \t\r\n":
+            end -= 1  # a block scalar (`|-`) ends after its newline; the line break stays outside
+        candidates = [front[:start] + (nl + " " * column).join(block) + front[end:]]
+    elif not meta:  # nothing but blank lines or comments
+        candidates = [front + nl + nl.join(block) if front.strip() else nl.join(block)]
+    else:  # a new key: try the layouts the root could have, last first; the read-back below picks
+        root, first = events[2], events[3]  # a mapping with at least one key: `meta` is a non-empty dict
+        columns = dict.fromkeys((root.start_mark.column, first.start_mark.column, 0))  # `?`, anchors, indents
+        entry = lambda c: nl.join(" " * c + b for b in block)
+        starts = dict.fromkeys(front.rfind("\n", 0, m.index) + 1 for m in (root.start_mark, first.start_mark))
+        candidates = ([front + nl + entry(c) for c in columns]  # last, the usual place
+                      + [front[:s] + entry(c) + nl + front[s:] for s in starts for c in columns])  # or first
+    for new in candidates:  # the file is the truth: write only what reads back as the old frontmatter plus this path
+        try:
+            if yaml.safe_load(new) == {**meta, "paths": want}:
+                path.write_text(head + new + tail, encoding="utf-8", newline="")
+                return
+        except yaml.YAMLError:
+            pass
+    sys.exit(f"{path.name}: could not set paths.{machine} without touching other lines; set `{machine}: {target}` "
+             "under `paths:` by hand")
 
 
 def cmd_map_path(args) -> None:
@@ -2472,7 +2549,7 @@ def cmd_map_path(args) -> None:
     if probe["status"] != "ok":
         sys.exit(f"not mapped: {probe['hint']}")
     machine = machine_id()
-    _frontmatter_write(VAULT / project.id, lambda meta: meta.update(paths={**(meta.get("paths") or {}), machine: target}))
+    _set_front_path(VAULT / project.id, machine, target)
     print(f"{project.id}: paths.{machine} = {target} (branch {probe['branch']} @ {probe['head']})")
 
 

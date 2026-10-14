@@ -105,3 +105,95 @@ def test_inline_links_with_backticks_and_bold_around_code():
     assert out[3] == '<a href="https://x.test/" target="_blank" rel="noopener">https://x.test/</a>note 0'
     # round 3: code stays literal; bold and URLs do not reach inside it
     assert out[4] == "<code>**/*.py</code> and <b>run tests</b>, <code>https://x.test</code>"
+
+
+@pytest.mark.parametrize("before, after", [
+    ("", "paths:\n  laptop: /code/terrain\n"),
+    ("paths:\n", "paths:\n  laptop: /code/terrain\n"),
+    ("paths: {}\n", "paths:\n  laptop: /code/terrain\n"),
+    ("paths: {desk: /d/terrain}\n", "paths:\n  desk: /d/terrain\n  laptop: /code/terrain\n"),
+    ("paths:\n  desk: /d/terrain\n  laptop: /old\n\n", "paths:\n  desk: /d/terrain\n  laptop: /code/terrain\n\n"),
+])
+def test_map_path_changes_only_the_paths_entry(engine, vault, before, after):
+    # map-path dumped the whole frontmatter back through YAML: flow lists became blocks, quotes changed (#29)
+    keep_top = 'status: active\ntags: [game, roguelike]\nsource: "[[terrain-only-spec]]"\n'
+    keep_end = "next: 'step 5'  # a comment\n"
+    project(vault, "terrain", keep_top + before + keep_end)
+    note = vault / "projects/private/terrain/project.md"
+    front = keep_top + keep_end + after if not before else keep_top + after + keep_end  # a new key goes last
+    engine._set_front_path(note, "laptop", "/code/terrain")
+    assert note.read_text(encoding="utf-8") == f"---\n{front}---\n\n# terrain\n"
+    engine._set_front_path(note, "laptop", "/code/terrain")  # mapping again changes nothing
+    assert note.read_text(encoding="utf-8") == f"---\n{front}---\n\n# terrain\n"
+
+
+def test_map_path_keeps_crlf_and_refuses_a_paths_that_is_not_a_mapping(engine, vault):
+    note = vault / "projects/private/terrain/project.md"
+    note.parent.mkdir(parents=True)
+    note.write_bytes(b"---\r\nstatus: active\r\ntags: [game]\r\n---\r\n\r\n# terrain\r\n")
+    engine._set_front_path(note, "laptop", "/code/terrain")
+    assert note.read_bytes() == b"---\r\nstatus: active\r\ntags: [game]\r\npaths:\r\n  laptop: /code/terrain\r\n---\r\n\r\n# terrain\r\n"
+    note.write_text("---\npaths: /code/terrain\n---\n", encoding="utf-8")
+    with pytest.raises(SystemExit, match="not a mapping"):
+        engine._set_front_path(note, "laptop", "/code/terrain")
+
+
+@pytest.mark.parametrize("before, after", [
+    # review round 1 on #30: a quoted key, a comment between entries, a flow mapping over several lines
+    ('"paths": {desk: /d/terrain}\n', "paths:\n  desk: /d/terrain\n  laptop: /code/terrain\n"),
+    ("paths:\n  desk: /d/terrain\n# moved in May\n  laptop: /old\n", "paths:\n  desk: /d/terrain\n  laptop: /code/terrain\n"),
+    ("paths: {desk: /d/terrain,\n  laptop: /old\n}\n", "paths:\n  desk: /d/terrain\n  laptop: /code/terrain\n"),
+    ("paths:\n  desk: /d/terrain\n# about next\n", "paths:\n  desk: /d/terrain\n  laptop: /code/terrain\n# about next\n"),
+    # review round 2 on #30: a block scalar that ends after its newline, an explicit key
+    ("paths:\n  laptop: |-\n    /old\n", "paths:\n  laptop: /code/terrain\n"),
+    ("? paths\n: {desk: /d/terrain}\n", "paths:\n  desk: /d/terrain\n  laptop: /code/terrain\n"),
+])
+def test_map_path_finds_the_whole_paths_value(engine, vault, before, after):
+    project(vault, "terrain", "status: active\n" + before + "next: step 5\n")
+    note = vault / "projects/private/terrain/project.md"
+    engine._set_front_path(note, "laptop", "/code/terrain")
+    assert note.read_text(encoding="utf-8") == f"---\nstatus: active\n{after}next: step 5\n---\n\n# terrain\n"
+    assert engine.Index().entities["projects/private/terrain/project.md"].meta["paths"]["laptop"] == "/code/terrain"
+
+
+@pytest.mark.parametrize("front", ["paths: &where {desk: /d}\nalso: *where\n", "where: &w {desk: /d}\npaths: *w\n",
+                                   "paths:\n  desk: &d /d\nalso: *d\n"])
+def test_map_path_leaves_anchors_and_aliases_to_the_user(engine, vault, front):
+    # rewriting would drop an anchor that another key still uses, or expand an alias (#30 review round 1)
+    project(vault, "terrain", front)
+    note = vault / "projects/private/terrain/project.md"
+    before = note.read_bytes()
+    with pytest.raises(SystemExit, match="anchor or alias"):
+        engine._set_front_path(note, "laptop", "/code/terrain")
+    assert note.read_bytes() == before
+
+
+def test_map_path_writes_nothing_it_cannot_read_back(engine, vault, monkeypatch):
+    # the last guard: a span that would change another key is refused, and the file stays as it was (#30 round 2)
+    project(vault, "terrain", "status: active\npaths: {desk: /d}\nnext: step 5\n")
+    note = vault / "projects/private/terrain/project.md"
+    before = note.read_bytes()
+    monkeypatch.setattr(engine, "_top_value_span", lambda events, key: (0, 20, 0, False))  # also eats `status:`
+    with pytest.raises(SystemExit, match="without touching other lines"):
+        engine._set_front_path(note, "laptop", "/code/terrain")
+    assert note.read_bytes() == before
+
+
+@pytest.mark.parametrize("front, expected", [
+    # final pass on #30: a last key with a block scalar, a root mapping indented by two spaces
+    ("status: active\ndescription: |\n  Two lines\n  of text", "paths:\n  laptop: /code/terrain\nstatus: active\ndescription: |\n  Two lines\n  of text"),
+    ("  status: active\n  repo: x", "  status: active\n  repo: x\n  paths:\n    laptop: /code/terrain"),
+    # round 4 on #30: an explicit first key; the root starts at the `?`, not at the key
+    ("? status\n: active\nrepo: x", "? status\n: active\nrepo: x\npaths:\n  laptop: /code/terrain"),
+    # round 5: a root anchor on its own line; the keys below it set the indentation
+    ("&root\n  status: active\n  repo: x", "&root\n  status: active\n  repo: x\n  paths:\n    laptop: /code/terrain"),
+    # round 6: a `?` on its own line above the first key
+    ("?\n  status\n: active\nrepo: x", "?\n  status\n: active\nrepo: x\npaths:\n  laptop: /code/terrain"),
+    ("# nothing yet", "# nothing yet\npaths:\n  laptop: /code/terrain"),
+])
+def test_map_path_adds_paths_where_it_reads_back(engine, vault, front, expected):
+    note = vault / "projects/private/terrain/project.md"
+    note.parent.mkdir(parents=True)
+    note.write_text(f"---\n{front}\n---\n\n# terrain\n", encoding="utf-8")
+    engine._set_front_path(note, "laptop", "/code/terrain")
+    assert note.read_text(encoding="utf-8") == f"---\n{expected}\n---\n\n# terrain\n"
