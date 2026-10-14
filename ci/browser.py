@@ -55,6 +55,15 @@ def teams_demo(page, base: str, scheme: str) -> None:
         page.fill("#tm-text", f"sent from the {scheme} check")
         page.keyboard.press("Enter")
         page.wait_for_selector(f"text=sent from the {scheme} check", timeout=10000)
+        chat = page.inner_text(".tm-conv-head h2")
+        page.click("text=Channels")
+        page.wait_for_selector(".tm-channel", timeout=10000)
+        page.click(".tm-channel")
+        page.wait_for_selector(".tm-msg", timeout=10000)
+        page.click("text=Chats")
+        page.wait_for_timeout(600)
+        if page.inner_text(".tm-conv-head h2") != chat:  # smoke run on #60: a tab keeps its conversation
+            failures.append(f"[{scheme}] teams: back on Chats, the open chat was forgotten")
     except Exception as e:  # noqa: BLE001 - any failure here is a finding, not a crash of the run
         failures.append(f"[{scheme}] teams addon demo: {e}")
 

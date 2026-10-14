@@ -89,7 +89,15 @@ export async function view(main, ctx) {
     ctx.toast("Signed out of Microsoft");
     location.reload();
   };
-  for (const b of main.querySelectorAll(".tm-tabs button")) b.onclick = () => { tab = b.dataset.tab; open = null; showTab(); };
+  const openFor = {};  // each tab keeps the conversation it had open (smoke run on #60)
+  for (const b of main.querySelectorAll(".tm-tabs button")) b.onclick = () => {
+    if (b.dataset.tab === tab) return;
+    openFor[tab] = open;
+    tab = b.dataset.tab;
+    open = null;
+    showTab();
+    if (openFor[tab]) openConv(openFor[tab]);
+  };
   $(".tm-compose").onsubmit = (e) => { e.preventDefault(); send(); };
   $("#tm-text").onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } };
 
