@@ -89,7 +89,8 @@ def stage(home: Path, now: dt.datetime) -> Path:
         text = step.sub(lambda m: m.group(1) + (dt.datetime.combine(now.date(), dt.time.fromisoformat(m.group(2))) - shift).strftime("%H:%M") + m.group(3), text)
         demo.write_text(text, encoding="utf-8")
 
-    git = lambda *a: subprocess.run(["git", "-C", str(home), *a], check=True, capture_output=True, text=True)
+    git = lambda *a: subprocess.run(["git", "-C", str(home), *a], check=True, capture_output=True, text=True,
+                                    encoding="utf-8", errors="replace")  # Git speaks UTF-8 whatever the locale
     git("init", "-q")
     git("config", "user.name", "Ada")
     git("config", "user.email", "ada@example.org")
@@ -99,7 +100,7 @@ def stage(home: Path, now: dt.datetime) -> Path:
     git("commit", "-q", "-m", f"atlas: install {(APP / 'VERSION').read_text(encoding='utf-8').strip()}")
     vault = home / "vault"
     engine = lambda *a: subprocess.run([*UV, str(home / "engine" / "atlas.py"), "--vault", str(vault), *a],
-                                       check=True, capture_output=True, text=True, encoding="utf-8")
+                                       check=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
     engine("demo")
     engine("boot", "nightlight", "--agent", "codex")
 
