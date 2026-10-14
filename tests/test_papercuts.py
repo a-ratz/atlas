@@ -9,6 +9,7 @@ import re
 import subprocess
 import time
 from argparse import Namespace
+from pathlib import Path
 
 import pytest
 
@@ -189,3 +190,135 @@ def test_a_staged_rename_inside_a_named_folder_is_part_of_the_commit(engine, vau
     git("mv", "captures/moved.md", "sources/moved.md")
     engine.cmd_commit(Namespace(agent="gate", message="distill: moved", paths=[str(vault / "sources")]))
     assert "sources/moved.md" in git("show", "--name-only", "HEAD").stdout
+
+
+def drop_repo(vault, monkeypatch):
+    """The vault as the user's git repository, after the install commit; returns a git runner."""
+    for k, v in (("NAME", "Ada"), ("EMAIL", "ada@example.org")):
+        monkeypatch.setenv(f"GIT_AUTHOR_{k}", v)
+        monkeypatch.setenv(f"GIT_COMMITTER_{k}", v)
+    git = lambda *a: subprocess.run(["git", "-C", str(vault), *a], capture_output=True, text=True, encoding="utf-8",
+                                    check=True).stdout
+    git("init", "-q")
+    git("add", "-A")
+    git("commit", "-q", "--allow-empty", "-m", "atlas: install")
+    for folder in ("captures", "sources", "agents"):
+        (vault / folder).mkdir(exist_ok=True)
+    return git
+
+
+def test_a_dropped_note_is_committed_alone_in_the_users_name(engine, vault, monkeypatch):
+    # the distill's commit named the agent as the author of a capture the user had dropped (#42)
+    git = drop_repo(vault, monkeypatch)
+    (vault / "insights" / "Half done.md").write_text("---\ndescription: d\n---\n\n# Half done\n", encoding="utf-8")
+    git("add", "insights/Half done.md")  # someone else's staged work stays staged
+    drop = vault / "captures" / "notes-from-a-talk.md"
+    drop.write_text("---\nkind: research\n---\n\n# Notes from a talk\n", encoding="utf-8")
+    assert engine.commit_drop(drop, engine.Index().types)
+    assert git("log", "-1", "--format=%an|%s").strip() == "Ada|drop: notes-from-a-talk.md"
+    assert git("show", "--name-only", "--format=", "HEAD").split() == ["captures/notes-from-a-talk.md"]
+    assert git("diff", "--cached", "--name-only").splitlines() == ["insights/Half done.md"]
+
+
+def test_a_distilled_drop_does_not_name_the_agent_as_its_author(engine, vault, monkeypatch):
+    drop_repo(vault, monkeypatch)
+    (vault / "agents" / "claude.md").write_text("---\nname: Claude\n---\n\n# Claude\n", encoding="utf-8")
+    drop = vault / "captures" / "notes-from-a-talk.md"
+    drop.write_text("---\nkind: research\n---\n\n# Notes from a talk\n", encoding="utf-8")
+    assert engine.commit_drop(drop, engine.Index().types)
+    drop.rename(vault / "sources" / drop.name)  # the distill moves it, then commits both paths
+    engine.cmd_commit(Namespace(agent="claude", message="distill: notes-from-a-talk",
+                                paths=[str(drop), str(vault / "sources" / drop.name), str(vault / "agents" / "claude.md")]))
+    text = (vault / "sources" / drop.name).read_text(encoding="utf-8")
+    assert "created_by" not in text and "updated_by: claude" in text
+
+
+def test_a_drop_before_the_first_commit_just_waits(engine, vault, monkeypatch):
+    for k, v in (("NAME", "Ada"), ("EMAIL", "ada@example.org")):
+        monkeypatch.setenv(f"GIT_AUTHOR_{k}", v)
+    subprocess.run(["git", "-C", str(vault), "init", "-q"], check=True)
+    (vault / "captures").mkdir(exist_ok=True)
+    drop = vault / "captures" / "early.md"
+    drop.write_text("# Early\n", encoding="utf-8")
+    assert engine.commit_drop(drop, engine.Index().types) is False and drop.exists()
+
+
+def test_the_distill_rules_from_the_smoke_runs(engine):
+    # confidence counts evidence, revisits only for changing sources, organization kinds, hand-copied captures (#42)
+    skills = Path(__file__).resolve().parent.parent / "skills" / "atlas" / "app" / ".agents" / "skills"
+    distill = (skills / "atlas-distill" / "SKILL.md").read_text(encoding="utf-8")
+    cabinet = (skills / "atlas-cabinet" / "SKILL.md").read_text(encoding="utf-8")
+    assert "counts the evidence the note can point to" in distill and '"Well\n    known" alone is not `proven`' in distill
+    assert "only when the cited text can still change" in distill and "gets no `revisit_after`" in distill
+    assert "several\n  sources agree" not in distill and "set `revisit_after` for preprints" not in distill
+    kinds = "company, university, research lab,\n   nonprofit, public body, open-source project, media, other"
+    assert kinds in cabinet and "write `unknown`" in cabinet
+    assert "has no `created_by` gets\n   `created_by: user`" in distill and "A `created_by` it already has stays" in distill  # `user` passes check; a new sentinel would not (#43 review)
+
+
+def test_a_slow_commit_hook_does_not_cut_a_drop_short(engine, vault, monkeypatch):
+    # the drop committed through the 10-second query helper; a slow hook got killed and left .git/index.lock (#43 review)
+    git = drop_repo(vault, monkeypatch)
+
+    def query(*args, cwd=None):  # the query helper, its timeout shortened so the test stays fast
+        try:
+            r = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8",
+                               errors="replace", timeout=1)
+        except subprocess.TimeoutExpired:
+            return None
+        return r.stdout.strip() if r.returncode == 0 else None
+
+    monkeypatch.setattr(engine, "_git_out", query)
+    hook = vault / ".git" / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\nsleep 2\n", encoding="utf-8")
+    hook.chmod(0o755)
+    drop = vault / "captures" / "slow.md"
+    drop.write_text("# Slow\n", encoding="utf-8")
+    assert engine.commit_drop(drop, engine.Index().types)
+    assert git("log", "-1", "--format=%s").strip() == "drop: slow.md"
+    assert not (vault / ".git" / "index.lock").exists()
+
+
+def test_a_drop_a_hook_rejects_is_not_left_staged(engine, vault, monkeypatch):
+    # a refused drop commit left the file staged, and every later `commit` stopped at "unrelated changes" (#43 review)
+    git = drop_repo(vault, monkeypatch)
+    hook = vault / ".git" / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    hook.chmod(0o755)
+    drop = vault / "captures" / "refused.md"
+    drop.write_text("# Refused\n", encoding="utf-8")
+    assert engine.commit_drop(drop, engine.Index().types) is False and drop.exists()
+    assert git("diff", "--cached", "--name-only").strip() == ""
+    assert git("log", "-1", "--format=%s").strip() == "atlas: install"
+
+
+def test_a_committed_drop_refreshes_search_by_meaning(engine, vault, monkeypatch):
+    # the drop commit skipped the QMD refresh that `commit` starts, so the capture stayed out of the index (#43 review)
+    drop_repo(vault, monkeypatch)
+    started = []
+    monkeypatch.setattr(engine, "qmd_refresh_after_commit", lambda paths, types: started.append(paths))
+    drop = vault / "captures" / "indexed.md"
+    drop.write_text("# Indexed\n", encoding="utf-8")
+    assert engine.commit_drop(drop, engine.Index().types)
+    assert started == [["captures/indexed.md"]]
+
+
+def test_a_drop_commits_its_own_path_even_in_a_bracketed_folder(engine, tmp_path, monkeypatch):
+    # git read "vault[1]/captures/capture.md" as a pattern and committed vault1/captures/capture.md along with it (#43 review)
+    for k, v in (("NAME", "Ada"), ("EMAIL", "ada@example.org")):
+        monkeypatch.setenv(f"GIT_AUTHOR_{k}", v)
+        monkeypatch.setenv(f"GIT_COMMITTER_{k}", v)
+    outer = tmp_path / "outer"
+    git = lambda *a: subprocess.run(["git", "-C", str(outer), *a], capture_output=True, text=True, encoding="utf-8",
+                                    check=True).stdout
+    for name in ("vault[1]", "vault1"):
+        (outer / name / "captures").mkdir(parents=True)
+    git("init", "-q")
+    git("commit", "-q", "--allow-empty", "-m", "start")
+    (outer / "vault1" / "captures" / "capture.md").write_text("# Not this one\n", encoding="utf-8")
+    engine.set_vault(outer / "vault[1]")
+    drop = outer / "vault[1]" / "captures" / "capture.md"
+    drop.write_text("# This one\n", encoding="utf-8")
+    assert engine.commit_drop(drop, engine.Index().types)
+    assert git("show", "--name-only", "--format=", "HEAD").splitlines() == ["vault[1]/captures/capture.md"]
+    assert "vault1/" in git("status", "--porcelain", "--untracked-files=all")

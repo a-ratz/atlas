@@ -17,8 +17,11 @@ optional enrichment from LinkedIn.
    aliases of existing cards, and with QMD on the cabinet collection (`atlas-qmd`). Update a card rather than creating a second one.
 2. Fill what the user or a source in the vault says. Leave unknown fields empty.
    Never guess an email address, a surname or a title.
-3. Add a timeline entry with a date and a source for every new fact.
-4. Tell the user what you created or added.
+3. An organization's `kind:` is one of company, university, research lab,
+   nonprofit, public body, open-source project, media, other. Set it from what
+   a source says; until one does, write `unknown`.
+4. Add a timeline entry with a date and a source for every new fact.
+5. Tell the user what you created or added.
 
 When this is the first person card in the vault and `cabinet.enrich` in
 `vault/atlas.yaml` is `ask` or missing, ask the question in step 2 below once,
@@ -93,7 +96,7 @@ them. Expand only when the user asks; distill itself never searches.
 
 | Person | Organization |
 |---|---|
-| current role and organization; when the newest evidence is old, write "as of <year>" | what it does, in one line |
+| current role and organization; when the newest evidence is old, write "as of <year>" | what it does, in one line, and its `kind:` (section 1) |
 | up to 3 earlier roles or affiliations, with years (for researchers, the institutions their papers list) | headquarters region |
 | one line of expertise | size band (e.g. 50–200 people) |
 | up to 3 public works that matter to this vault, linked | website |
