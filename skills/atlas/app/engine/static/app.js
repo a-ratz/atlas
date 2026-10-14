@@ -351,24 +351,26 @@ document.addEventListener("click", async (ev) => {
   if (b.dataset.prefill !== undefined) return prefill(b.dataset.prefill, b.dataset.template !== undefined);
   if (b.dataset.act) return act(b.dataset.act, b.dataset.id);
   b.disabled = true;
-  const ok = await sendText(b.dataset.send, b.dataset.via || null, b.dataset.ctx || null);
+  const to = currentTo(), seen = replyKeys();  // the recipient of this move, and the answers already there
+  const ok = await sendText(b.dataset.send, b.dataset.via || null, b.dataset.ctx || null, to);
   if (ok && b.dataset.once !== undefined) { b.classList.add("chosen"); return; }
   b.disabled = false;
   if (ok && state.operator.mode === "operator") { toast(`Sent to ${agentName(currentTo())}`); if (!onChatPage()) openChat(); }
-  if (ok && state.operator.mode === "operator" && b.dataset.via === "move" && b.closest(".moves-bar")) markSent(b);
+  if (ok && state.operator.mode === "operator" && b.dataset.via === "move" && b.closest(".moves-bar")) markSent(b, to, seen);
 });
 
 // A move the user pressed stays visible on the page, its buttons off, until the note changes (the page
 // re-renders) or the agent is done without changing it: no second press on a note that is about to move.
-function markSent(b) {
+const replyKey = (m) => `${m.agent || ""}|${m.ts}|${m.text}`;
+const replyKeys = () => new Set((state.chatMessages || []).filter((m) => m.role === "agent").map(replyKey));
+function markSent(b, to, seen) {
   const bar = b.closest(".moves-bar");
   bar.classList.add("sent");
   bar.querySelectorAll("button").forEach((x) => (x.disabled = true));
   b.classList.add("chosen");
-  const to = currentTo();
   bar.insertAdjacentHTML("beforeend", `<span class="sent-note" role="status">Sent to ${esc(agentName(to))}. This page updates when the agent is done.</span>`);
   clearTimeout(state.sentMove?.timer);
-  state.sentMove = { to, at: Date.now(), sawWorking: false, timer: setTimeout(releaseSent, 31000) };
+  state.sentMove = { to, seen, at: Date.now(), sawWorking: false, timer: setTimeout(releaseSent, 31000) };
 }
 // Done: the recipient answered, or it worked and stopped, or it never picked the move up within 30 seconds.
 // Other agents' work does not count.
@@ -376,7 +378,7 @@ function releaseSent() {
   const s = state.sentMove;
   if (!s) return;
   const replied = (state.chatMessages || []).some((m) => m.role === "agent" && m.kind !== "progress"
-    && (!s.to || m.agent === s.to) && Date.parse(m.ts) > s.at - 1000);  // ts has whole seconds
+    && (!s.to || m.agent === s.to) && !s.seen.has(replyKey(m)));  // an answer that was not there before the move
   const working = liveAgents().find((a) => a.id === s.to)?.state === "working";
   if (working) s.sawWorking = true;
   if (!replied && (working || (!s.sawWorking && Date.now() - s.at < 30000))) return;
@@ -1674,11 +1676,11 @@ function attachCommands(input, form) {
   });
 }
 
-async function sendText(text, via = null, context = null) {
+async function sendText(text, via = null, context = null, to = currentTo()) {
   const command = via ? null : asCommand(text);
   if (command) { text = command; via = "command"; }
   try {
-    const res = await post("/api/chat", { text, context, via, to: currentTo() });
+    const res = await post("/api/chat", { text, context, via, to });
     if (res.delivered === "note") toast(`Kept as a note: ${res.note}`);
     loadChat();
     return true;

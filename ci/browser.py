@@ -70,6 +70,7 @@ def main() -> None:
                 checks(page, srv.base, scheme)
                 if scheme == "light":  # the last pass: it edits and moves a demo note
                     follows_changes(ctx, srv, vault)
+                    move_waits_for_its_own_answer(ctx, srv, vault)
                     moves_release(ctx, srv, vault)
                 ctx.close()
             browser.close()
@@ -211,6 +212,51 @@ def left_refresh(ctx, srv: Server, vault: Path, rel: str) -> None:
     if page.evaluate("scrollY") != 0:
         failures.append(f"a note opened at {page.evaluate('scrollY')}, the position of a refresh the reader left "
                         "(#14, review round 2)")
+    page.close()
+
+
+def move_waits_for_its_own_answer(ctx, srv: Server, vault: Path) -> None:
+    """A sent move waits for an answer that came after it, from the agent it went to (#18, review round 2):
+    not an answer that was already there (same second), and not the agent the user picks while it is sent."""
+    import datetime as dt
+    import json
+    import os
+    import time
+    presence = vault / ".atlas" / "agents"
+    presence.mkdir(parents=True, exist_ok=True)
+    for name in ("claude", "codex"):  # both listen
+        (presence / f"{name}.beat").touch()
+        os.utime(presence / f"{name}.beat", (time.time() + 600, time.time() + 600))
+    later = (dt.datetime.now().astimezone() + dt.timedelta(seconds=20)).isoformat(timespec="seconds")
+    with open(vault / ".atlas" / "outbox.jsonl", "a", encoding="utf-8") as f:  # an answer stamped after the press
+        f.write(json.dumps({"ts": later, "role": "agent", "agent": "claude", "text": "An answer from before"}) + "\n")
+    page = ctx.new_page()
+    page.goto(f"{srv.base}/#/e/{urllib.parse.quote('questions/can-tmr-work-without-eeg.md', safe='')}")
+    page.wait_for_selector(".moves-bar", timeout=15000)
+    page.evaluate("localStorage.setItem('atlas.to', JSON.stringify('claude'))")
+    page.wait_for_timeout(2500)  # presence and chat loaded
+    held = []
+    page.route("**/api/chat", lambda r: held.append(r) if r.request.method == "POST" else r.continue_())
+    page.click(".moves-bar [data-via='move']:has-text('Research this')")
+    for _ in range(50):
+        if held:
+            break
+        page.wait_for_timeout(100)
+    page.evaluate("localStorage.setItem('atlas.to', JSON.stringify('codex'))")  # the user picks codex meanwhile
+    if held:
+        held[0].continue_()
+    page.unroute("**/api/chat")
+    page.wait_for_selector(".moves-bar.sent", timeout=5000)
+    atlas(vault, "say", "Something else entirely.", "--agent", "codex")
+    page.wait_for_timeout(3500)
+    if not page.query_selector(".moves-bar.sent"):
+        failures.append("a sent move was freed by an earlier answer or another agent's (#18, review round 2)")
+    atlas(vault, "say", "Researching it.", "--agent", "claude")
+    try:
+        page.wait_for_selector(".moves-bar.sent", state="detached", timeout=10000)
+    except Exception:
+        failures.append("a sent move stays locked after the answer of the agent it went to (#18, review round 2)")
+    page.evaluate("localStorage.removeItem('atlas.to')")
     page.close()
 
 

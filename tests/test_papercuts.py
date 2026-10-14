@@ -112,8 +112,9 @@ def test_a_title_with_a_pipe_keeps_a_table_whole(engine, vault):
 def test_a_fact_naming_a_title_with_quotes_links_it(engine, vault):
     # JSON escaped the quotes of `affects: '[[What "working" means]]'`, so no link was found (#18, round 1)
     (vault / "questions").mkdir(exist_ok=True)
-    (vault / "insights" / 'What "working" means.md').write_text("---\ndescription: d\n---\n\n# W\n", encoding="utf-8")
+    (vault / "insights" / "what-working-means.md").write_text(  # quotes in the title, not in the file name (Windows)
+        "---\ntitle: 'What \"working\" means'\ndescription: d\n---\n\nBody\n", encoding="utf-8")
     (vault / "questions" / "q.md").write_text(
         "---\nstatus: open\nraised: 2026-10-01\naffects: '[[What \"working\" means]]'\n---\n\n# Q\n", encoding="utf-8")
     view = engine.entity_view(engine.Index(), "questions/q.md")
-    assert view["fact_links"]['What "working" means']["id"] == 'insights/What "working" means.md'
+    assert view["fact_links"]['What "working" means']["id"] == "insights/what-working-means.md"
