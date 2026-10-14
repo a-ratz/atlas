@@ -679,8 +679,8 @@ function tourCta(t, lastSeen) {
 }
 
 async function viewHome() {
+  const token = state.routeToken;  // every view below checks it after an await: a slow answer must not paint
   if (!(state.meta.content ?? state.meta.total)) {  // a fresh vault: the welcome, and the user's notes under it
-    const token = state.routeToken;
     viewEmpty();
     const notes = (await api("/api/home").catch(() => null))?.needs?.notes || [];
     if (notes.length && token === state.routeToken) $(".empty-hero")?.insertAdjacentHTML("beforeend",
@@ -688,6 +688,7 @@ async function viewHome() {
     return;
   }
   const data = await api("/api/home");
+  if (token !== state.routeToken) return;  // over the page the reader opened since
   const lastSeen = store.get("atlas.lastSeen", null);
   const needs = needsItems(data.needs);
   const recent = [...(data.recent.sketch || []).slice(0, 2), ...(data.recent.frame || []).slice(0, 1), ...(data.recent.spec || []).slice(0, 1)].slice(0, 4);
@@ -733,7 +734,9 @@ async function viewHome() {
 }
 
 async function viewRediscover() {
+  const token = state.routeToken;
   const r = (await api("/api/home")).rediscover;
+  if (token !== state.routeToken) return;
   main.innerHTML = `
     <section class="hero"><div class="kicker">picked fresh every day</div><h1 class="page">Rediscover</h1><p class="page-sub">Ideas that went quiet, and claims worth a second look.</p></section>
     <div class="sec-h"><h2>Longest-untouched sketches</h2></div><div class="grid">${r.forgotten_sketches.map((e) => card(e)).join("") || `<div class="empty">No sketches yet.</div>`}</div>
@@ -746,7 +749,9 @@ const facetVal = (e, k) => (k === "category" ? e.facts?.category : e[k]) || null
 async function viewList(type, params) {
   const t = typeOf(type);
   if (!t) { main.innerHTML = `<div class="empty">Unknown type.</div>`; return; }
+  const token = state.routeToken;
   const data = await api(`/api/list?type=${enc(type)}`);
+  if (token !== state.routeToken) return;
   markTypeSeen(type);
   if (data.groups) return renderFrames(t, data.groups);
   const items = remember(data.items);
@@ -1096,7 +1101,9 @@ function projectCard(p) {
 }
 
 async function viewProjects() {
+  const token = state.routeToken;
   const data = await api("/api/projects");
+  if (token !== state.routeToken) return;
   const projects = data.groups.flatMap((gr) => gr.projects);
   const working = new Set(projects.flatMap((p) => (p.here || []).map((a) => a.id)));
   remember([...data.decisions, ...data.lessons, ...data.blocked]);

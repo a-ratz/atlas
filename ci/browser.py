@@ -96,6 +96,7 @@ def checks(page, base: str, scheme: str) -> None:
     if not page.query_selector('.nav-link.active[data-t="question"]'):
         failures.append(f"[{scheme}] the sidebar does not mark a link with a query (#4, round 2)")
     deep_after_nothing(page, base, scheme)
+    slow_view_stays_behind(page, base, scheme)
     page.goto(f"{base}/#/chat")
     page.wait_for_selector(".op-bar", timeout=15000)
     if not page.query_selector("#op-title"):
@@ -139,6 +140,28 @@ def checks(page, base: str, scheme: str) -> None:
             failures.append(f"[{scheme}] a pressed move leaves the other buttons on (#10)")
     except Exception:
         failures.append(f"[{scheme}] pressing Later shows nothing on the page, only a toast (#10)")
+
+
+def slow_view_stays_behind(page, base: str, scheme: str) -> None:
+    """A view whose data comes late does not paint over the page the reader opened meanwhile (CI on #18: Home,
+    still loading after a reload, replaced an open question)."""
+    held = []
+    page.route("**/api/home", lambda r: held.append(r))
+    page.goto(f"{base}/#/")
+    for _ in range(100):
+        if held:
+            break
+        page.wait_for_timeout(100)
+    page.goto(f"{base}/#/e/{urllib.parse.quote('questions/can-tmr-work-without-eeg.md', safe='')}")
+    page.wait_for_selector(".reader-main h1:has-text('Can cueing work')", timeout=15000)
+    for r in held:
+        r.continue_()
+    page.wait_for_timeout(1500)
+    page.unroute("**/api/home")
+    if not held:
+        failures.append(f"[{scheme}] the slow-view check held no Home request")
+    elif not page.query_selector(".reader-main h1:has-text('Can cueing work')"):
+        failures.append(f"[{scheme}] a late Home answer painted over the open question (#18, CI)")
 
 
 def follows_changes(ctx, srv: Server, vault: Path) -> None:
