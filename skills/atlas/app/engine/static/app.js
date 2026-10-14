@@ -124,27 +124,24 @@ const stripEmoji = (s) => String(s || "").replace(/^[\p{Extended_Pictographic}ï¸
 const remember = (list) => { for (const e of list || []) if (e?.id) state.titles[e.id] = e.title; return list; };
 const titleOf = (id) => state.titles[id] || String(id || "").split("/").pop().replace(/\.md$/, "").replace(/[-_]/g, " ");
 const inlineText = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
-  .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+  .replace(/(https?:\/\/[^\s<\u0001]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
 // Short texts (a log line, a thread's next): wiki links become links with the note's title where the engine
 // resolved them (`links`), and plain words where it did not; never brackets.
 const resolved = (links, target) => (links && Object.hasOwn(links, target) ? links[target] : null);  // [[toString]] is no note
 function inline(s, links) {
-  const text = String(s ?? "");
-  let out = "", last = 0;
-  const words = (part) => {  // outside code spans: wiki links, then the usual formatting
-    let html = "", from = 0;
-    for (const m of part.matchAll(/\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g)) {
-      const hit = resolved(links, m[1]);
-      html += inlineText(part.slice(from, m.index)) + (hit ? `<a href="#/e/${enc(hit.id)}">${esc(m[2] || hit.title)}</a>` : esc(m[2] || m[1]));
-      from = m.index + m[0].length;
-    }
-    return html + inlineText(part.slice(from));
-  };
-  for (const m of text.matchAll(/`([^`]+)`/g)) {  // a code span keeps what it holds, [[â€¦]] included
-    out += words(text.slice(last, m.index)) + `<code>${esc(m[1])}</code>`;
-    last = m.index + m[0].length;
-  }
-  return out + words(text.slice(last));
+  const text = String(s ?? "").replace(/[\u0001\u0002]/g, "");  // the placeholder marks below
+  const wiki = /\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g;
+  // A link counts as quoted only when a code span holds all of it; backticks inside a link do not start one.
+  const masked = text.replace(wiki, (m) => "\0".repeat(m.length));
+  const quoted = [...masked.matchAll(/`[^`]+`/g)].map((m) => [m.index, m.index + m[0].length]);
+  const links_html = [];
+  const marked = text.replace(wiki, (m, target, alias, at) => {
+    if (quoted.some(([a, b]) => a < at && at + m.length <= b)) return m;  // `[[note]]` stays as written
+    const hit = resolved(links, target);
+    links_html.push(hit ? `<a href="#/e/${enc(hit.id)}">${esc(alias || hit.title)}</a>` : esc(alias || target));
+    return `\u0001${links_html.length - 1}\u0002`;  // a placeholder the formatting passes over
+  });
+  return inlineText(marked).replace(/\u0001(\d+)\u0002/g, (_, n) => links_html[+n]);  // one pass: bold may wrap code
 }
 
 // What a reader must know before trusting a page (polish must not make provisional material look accepted).

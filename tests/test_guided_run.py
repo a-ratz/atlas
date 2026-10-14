@@ -89,3 +89,16 @@ def test_inline_keeps_code_and_ignores_inherited_names():
     assert out[0] == "Use <code>[[note]]</code> in the file"
     assert out[1] == "see constructor and toString"
     assert out[2] == 'see <a href="#/e/insights%2Fa.md">A note</a>, <b>now</b>'
+
+
+def test_inline_links_with_backticks_and_bold_around_code():
+    # review round 2 on #28: backticks inside a link split it; bold around a code span lost its delimiters
+    links = {"Prefer `uv run` over bare Python": {"id": "insights/uv.md", "title": "Prefer `uv run` over bare Python"}}
+    out = run_inline(("see [[Prefer `uv run` over bare Python]]", links),
+                     ("**Use `git status` before continuing**", None),
+                     ("`[[note]]` and [[note]]", {}),
+                     ("https://x.test/[[note]] \u00010\u0002", {}))
+    assert out[0] == 'see <a href="#/e/insights%2Fuv.md">Prefer `uv run` over bare Python</a>'
+    assert out[1] == "<b>Use <code>git status</code> before continuing</b>"
+    assert out[2] == "<code>[[note]]</code> and note"
+    assert out[3] == '<a href="https://x.test/" target="_blank" rel="noopener">https://x.test/</a>note 0'
