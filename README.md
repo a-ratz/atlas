@@ -21,7 +21,9 @@ lands a capture, distills it into insights and links them into maps, while you
 read along in the browser. Projects get one shared memory that every agent
 loads, and Atlas keeps the page honest: every claim shows how far to trust it
 and where it came from. The files are the truth, git is the history, and there
-is no database and no account.
+is no account. Atlas needs no database; search by meaning uses an optional
+[QMD](https://github.com/tobi/qmd) index (recommended), which is built from the
+files and can be rebuilt any time.
 
 **[▶ Try the live demo](https://a-ratz.github.io/atlas/)**: the demo vault in your browser, nothing
 to install. No AI agent is connected there; the chat replays a recorded session, including one
