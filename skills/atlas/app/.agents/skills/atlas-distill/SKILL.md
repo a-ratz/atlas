@@ -19,25 +19,46 @@ commit each capture on its own.
 Read the capture completely. Read the `Insight candidates`, but judge every
 claim yourself: keep only claims the evidence supports.
 
-## 2. Check every figure against its source
+## 2. Read the primary, not the capture
 
-The most common error in a knowledge vault is not a source that changed later.
-It is a note that never matched its source: a number taken from a blog post
-about a paper and cited as the paper, a "always" the source never said, two
-percentages with different denominators compared as one. So, for every number,
-named result and strong word ("always", "monotonic", "doubles") in a claim:
+A capture is a short summary of research, and it has already lost detail. The
+most common error in a knowledge vault is not a source that changed later. It
+is a note that never matched its source: a qualifier the summary dropped, a
+number taken from a blog post about a paper and cited as the paper, an "always"
+the source never said, a reporter's paraphrase quoted as the speaker's words.
+The capture tells you what is worth keeping and where it is. The primary source
+it cites (the paper, the docs, the repository, the transcript) decides what the
+claim says. So, for each claim:
 
-- find the line in the source that says it, and keep a short quote of it in the
-  note (`> "…"` plus the source);
-- if only a secondary piece says it (a blog, press, a summary in the capture),
-  cite that piece, not the primary source;
-- if you cannot find it, drop or soften the claim.
+- open the primary at the passage the claim rests on, and read it. Read the
+  passages your claims rest on, not every source in full;
+- take every quote (the speaker's own words, in the original language), figure
+  (with its scope: sample, version, setting), attribution (who said or showed
+  it) and qualifier ("in two of five runs", "might") from there, and keep a
+  short quote of the deciding line in the note (`> "…"` plus the source). Do
+  not add words the source does not have;
+- where capture and primary differ, the primary wins. Name each difference in
+  your answer, and add a dated line under the capture's title:
+  `> Correction (YYYY-MM-DD): <what the primary says instead>`;
+- if only a secondary piece says it (a blog, press), cite that piece as itself,
+  not the primary source;
+- if only the capture says it, that is the capture's reading, not evidence:
+  find the passage, or drop or soften the claim.
+
+Two exceptions:
+
+- A capture that is itself the source (the user's own notes, a session, a
+  conversation) has nothing behind it to read.
+- A primary you cannot reach (a paywall, an error, a page that is gone; try an
+  archived copy first): say so in the note, and keep its confidence at
+  `speculative`.
 
 ## 3. Check for duplicates
 
 For each claim, search `insights/` (with QMD on, `atlas-qmd` finds it by meaning; otherwise grep on key terms, or the Atlas search API).
 If an existing insight already says it, extend that note with the new evidence
-instead of creating a second one.
+instead of creating a second one. The new evidence comes from the primary too
+(step 2).
 
 ## 4. Write one note per claim
 
