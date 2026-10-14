@@ -334,7 +334,7 @@ single-user, local-first and young.
 
 ## Status and roadmap
 
-Atlas 0.9.9 is the current release. Stable: the
+Atlas 0.9.10 is the current release. Stable: the
 engine and reader, the duplex chat with answer blocks, project memory with boot
 packets, ideas from sketch to project, cards, search by meaning, the checks,
 tours, the installer with upgrade and restore.
