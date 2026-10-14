@@ -360,7 +360,7 @@ pull request with Codex review rounds and regression tests, merged before this p
 | 8–10 | The idea skills left open what to do in four places, and a project without code warned about an unmapped checkout. A second Atlas on the same vault turned the first one standalone. | [#24](https://github.com/a-ratz/atlas/issues/24), [PR #25](https://github.com/a-ratz/atlas/pull/25) |
 | 9, 11 | Table cells broke words mid-word; thread log lines showed `[[wiki links]]` as raw text. | [#27](https://github.com/a-ratz/atlas/issues/27), [PR #28](https://github.com/a-ratz/atlas/pull/28) |
 | 11 | `map-path` rewrote the whole frontmatter of `project.md`. | [#29](https://github.com/a-ratz/atlas/issues/29), [PR #30](https://github.com/a-ratz/atlas/pull/30) |
-| 11–12 | `next` ignored open threads during project work, and the project and operator skills left eight questions open (decision size, spec edits, verification notes, a server that went away). | [#32](https://github.com/a-ratz/atlas/issues/32), [PR #33](https://github.com/a-ratz/atlas/pull/33) |
+| 11–13 | `next` ignored open threads during project work, and the skills left twelve questions open (decision size, spec edits, verification notes, bug threads, promoting a lesson to an insight). | [#32](https://github.com/a-ratz/atlas/issues/32), [PR #33](https://github.com/a-ratz/atlas/pull/33) |
 
 The idea skills themselves, atlas-sketch's generate mode and atlas-spec, came in just before
 the run ([#16](https://github.com/a-ratz/atlas/issues/16),
