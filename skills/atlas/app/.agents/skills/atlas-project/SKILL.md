@@ -96,7 +96,10 @@ What this thread is about.
 
 Whoever works a thread updates its `next` and `blocked`. Add log lines; never
 rewrite another agent's lines. Update a thread when you get blocked or
-interrupted, not only at the end.
+interrupted, not only at the end. A log line says what was verified and how
+(the command, how many checks), and what was not; longer evidence goes into a
+file in the repository, and the line points to it. A `[[link]]` in `next:` or
+`blocked:` shows as a link on the project page; `boot` prints it as text.
 
 **Decisions:** `decisions/<slug>.md`. Frontmatter:
 
@@ -107,7 +110,10 @@ interrupted, not only at the end.
 
 The body gives the decision, why it was taken (and what was rejected), and its
 consequences. An accepted decision is a constraint on every later session,
-whatever its age. Supersede it; never delete it.
+whatever its age. Supersede it; never delete it. Choices made together that
+would be revisited together are one decision; a choice that can change on its
+own gets its own file. When a decision changes the spec the project came from,
+edit the spec where it changes and add a dated note that links the decision.
 
 **Lessons:** `lessons/<slug>.md`. The title is the lesson, "When X, do Y".
 Frontmatter:
@@ -118,7 +124,8 @@ Frontmatter:
 - `branch`, only when it holds on one branch.
 
 A new lesson is provisional. It becomes validated after a later successful use
-or an explicit check; add a log line saying which. A lesson for the whole group
+or an explicit check; add a log line saying which. Evidence from the session
+that produced the lesson does not count. A lesson for the whole group
 gets a link in `_group.md` under "Lessons for the whole group". A lesson that
 holds everywhere is worth an insight: offer to distill it, and set
 `promoted_to:`.

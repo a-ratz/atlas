@@ -74,6 +74,10 @@ the user can address you when several agents listen. You receive the messages
 addressed to you and those addressed to nobody. Only one `wait` per agent can
 listen at a time; a second one exits with a notice.
 
+If `wait` exits without a message or a notice (exit 143, say), run
+`uv run --no-project engine/atlas.py status`. When the server is down, say so in
+the terminal and stop listening; restart it only if you started it.
+
 When a message arrives:
 
 1. Read it: `USER [viewing: <path>] [via …]: text`. Open the viewed file first.
@@ -82,7 +86,8 @@ When a message arrives:
    one, add it to their card's timeline (`atlas-cabinet`), and tell the user what
    you added.
    `[via command]` is a `/command` the user picked from the chat's list; AGENTS.md
-   maps each one to its workflow.
+   maps each one to its workflow. A choice or move whose text starts with `/`
+   (`[via choice]: /close`) runs that command the same way.
 2. Do the work. Use the workflow skills (`atlas-learn`, `atlas-distill`,
    `atlas-map`, `atlas-sketch`, `atlas-spec`, `atlas-project`, `atlas-cabinet`). Atlas re-reads the vault within ~10 seconds,
    so new files show up by themselves. If it takes more than a minute, keep
@@ -110,7 +115,8 @@ When a message arrives:
    `--open` shows that page to the user (in the workbench next to the chat, or
    as the page they are on).
 4. Run `uv run --no-project engine/atlas.py next` and offer what it suggests
-   as a `choices` block (captures to distill, maps to build, notes to read).
+   as a `choices` block (open threads, captures to distill, maps to build,
+   notes to read).
 5. Listen again. Forgetting this leaves the user talking to "Agent busy".
 
 ## Answer blocks

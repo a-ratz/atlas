@@ -96,7 +96,8 @@ followed by a `CABINET` line for each person or organization it names (see Cabin
 `viewing` is the page the user had open; read it before answering. `via move`
 means the user pressed a "Your move" button on that page (Distill, Next research
 avenues, …); the text says what they want. `via command` means they typed a
-`/command` from the chat's list (table below). When the work takes more than a
+`/command` from the chat's list (table below); a choice or move whose text starts with `/`
+runs that command too. When the work takes more than a
 minute, post short progress lines with `say --agent <id> --progress "…"` as you go, and
 give the first one a title (`--title "Researching loop engineering"`): Atlas shows it above the
 conversation. After
