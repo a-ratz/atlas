@@ -170,6 +170,7 @@ The current state in a few sentences. Rewrite it when something changes.
 | asks a research question, names a topic, "what's new in…" | `.agents/skills/atlas-learn/SKILL.md` |
 | agrees to distill, or captures are waiting | `.agents/skills/atlas-distill/SKILL.md` |
 | has five or more insights without a map, or asks for a map | `.agents/skills/atlas-map/SKILL.md` |
+| has insights past `revisit_after`, or asks to re-check one against its source | `.agents/skills/atlas-revisit/SKILL.md` |
 | says "I have an idea…", or asks for ideas ("give me ideas for…") | `.agents/skills/atlas-sketch/SKILL.md` |
 | wants a sketch worked out ("turn this into a spec", `/spec`) | `.agents/skills/atlas-spec/SKILL.md` |
 | wants a card for a person or organization, asks to look someone up, or to expand cards | `.agents/skills/atlas-cabinet/SKILL.md` |
@@ -185,6 +186,7 @@ The current state in a few sentences. Rewrite it when something changes.
 | `/learn <topic>` | atlas-learn |
 | `/distill [capture \| all]` | atlas-distill, on the named capture, the one the user is viewing, the oldest, or (`all`) every waiting capture |
 | `/map [theme]` | atlas-map |
+| `/revisit [insight \| all]` | atlas-revisit: the named insight, the one the user is viewing ("this insight"), or (`all`) the due ones, five per run |
 | `/sketch <idea> \| ideas for <goal>` | atlas-sketch: capture the idea, or generate ideas from the vault |
 | `/spec [sketch]` | atlas-spec, on the named sketch or the one the user is viewing |
 | `/project <name>` | atlas-project: start |

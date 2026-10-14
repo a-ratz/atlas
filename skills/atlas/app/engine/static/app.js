@@ -522,7 +522,7 @@ function needsItems(n) {
   }
   const r = n.revisits?.[0];
   if (n.revisits_total && r) items.push({ key: "revisits", sig: n.sigs?.revisits ?? String(n.revisits_total), ico: svg("clock"), t: n.revisits_total > 1 ? `${n.revisits_total} revisits due` : "Revisit due",
-    s: `${esc(r.title)}${r.status ? ` · ${esc(r.status)}` : ""}${r.facts?.revisit_after ? ` · due ${esc(r.facts.revisit_after)}` : ""}`, acts: `<a class="btn" href="#/e/${enc(r.id)}">Open</a>` });
+    s: `${esc(r.title)}${r.status ? ` · ${esc(r.status)}` : ""}${r.facts?.revisit_after ? ` · due ${esc(r.facts.revisit_after)}` : ""}`, acts: `<button class="btn primary" data-send="${n.revisits_total > 1 ? "/revisit all" : "/revisit this insight"}" data-via="move" data-ctx="${esc(r.id)}">Revisit</button><a class="btn" href="#/e/${enc(r.id)}">Open</a>` });
   const f = n.fixes?.[0];
   if (n.fixes_total && f) items.push({ key: "fixes", sig: n.sigs?.fixes ?? String(n.fixes_total), ico: `<span style="color:var(--bad);display:inline-flex">${svg("link")}</span>`, t: `${n.fixes_total} note${n.fixes_total > 1 ? "s need" : " needs"} a fix`,
     s: `${esc(f.title)}: ${esc(String(f.issues?.[0] || "").replace(/[`*]/g, ""))}`, acts: `<button class="btn mono" data-send="/check" data-via="command">/check</button>` });

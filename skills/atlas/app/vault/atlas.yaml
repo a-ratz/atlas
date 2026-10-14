@@ -41,6 +41,7 @@ commands:
   - {name: learn, args: "<topic or question>", help: "Research it and land the result as a capture", send: "/learn {args}"}
   - {name: distill, args: "[capture | all]", help: "Turn a capture into insights (the open one, the oldest, or all)", send: "/distill {args}"}
   - {name: map, args: "[theme]", help: "Build or update a map over insights that belong together", send: "/map {args}"}
+  - {name: revisit, args: "[insight | all]", help: "Re-check insights whose revisit date has come against their sources", send: "/revisit {args}"}
   - {name: sketch, args: "<idea> | ideas for <goal>", help: "Write down an idea, or ask for ideas from what the vault knows", send: "/sketch {args}"}
   - {name: spec, args: "[sketch]", help: "Turn a sketch into a spec grounded in the vault", send: "/spec {args}"}
   - {name: project, args: "<name>", help: "Start working on a project: load its memory, rules and checkout", send: "/project {args}"}
@@ -77,6 +78,7 @@ types:
       - {label: "🔗 Find connections", send: "Find notes this insight should link to, and link them"}
       - {label: "⚔️ Challenge it", send: "Look for counter-evidence to this insight and tell me whether it still holds"}
       - {label: "🧭 Next research avenues", send: "Recommend next research avenues that start from this insight"}
+      - {label: "🔁 Revisit its source", send: "/revisit this insight"}
 
   - id: map
     label: Map

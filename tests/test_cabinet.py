@@ -36,7 +36,7 @@ def test_a_registry_from_0_6_learns_depth_and_expand(engine, vault):
     start, end = text.index("  - id: person"), text.index("  - id: org")
     text = text[:start] + old_person + text[end:]
     text = "\n".join(line for line in text.splitlines()  # the commands 0.6 shipped
-                     if "name: expand-cards" not in line and "name: spec," not in line) + "\n"
+                     if "name: expand-cards" not in line and "name: spec," not in line and "name: revisit," not in line) + "\n"
     reg.write_text(text, encoding="utf-8")
     index = engine.Index()
     person = index.types["person"]
@@ -46,6 +46,7 @@ def test_a_registry_from_0_6_learns_depth_and_expand(engine, vault):
     assert person["moves"][1]["send"] == "Update this card, my way"  # the vault's own move stays as it was
     assert any(c.get("name") == "expand-cards" for c in index.commands)
     assert any(c.get("name") == "spec" for c in index.commands)  # and then what 0.9 added (#16)
+    assert any(c.get("name") == "revisit" for c in index.commands)  # and what 0.10 added (#52)
 
 
 def test_explicit_cabinet_customizations_stay(engine, vault):

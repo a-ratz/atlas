@@ -29,7 +29,7 @@ def as_07(vault):
     text = replace_type(text, "sketch", "spec", OLD_SKETCH)
     text = replace_type(text, "spec", "project", OLD_SPEC)
     text = replace_type(text, "project", "thread", OLD_PROJECT)
-    text = "\n".join(line for line in text.splitlines() if "name: spec," not in line) + "\n"
+    text = "\n".join(line for line in text.splitlines() if "name: spec," not in line and "name: revisit," not in line) + "\n"
     reg.write_text(text, encoding="utf-8")
 
 

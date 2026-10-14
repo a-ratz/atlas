@@ -277,6 +277,7 @@ Atlas ships the workflows as skills that every harness reads from
 | agree to distill | `atlas-distill`: one claim per insight, every claim checked against its primary source |
 | want to search by meaning | `atlas-qmd`: set up QMD and search the vault by meaning |
 | have a cluster of insights | `atlas-map`: group them into a map |
+| see "Revisit due", or doubt a source has moved | `atlas-revisit`: re-check the claim against the source as it stands now, and record what changed |
 | say "I have an idea…", or ask for ideas | `atlas-sketch`: write it down, or generate candidates from the vault and keep the survivors |
 | want a sketch worked out | `atlas-spec`: a spec grounded in your insights, with a first slice; then a project |
 | want a card for someone, or ask to look them up | `atlas-cabinet`: create and update cards, optionally from LinkedIn |
@@ -284,8 +285,8 @@ Atlas ships the workflows as skills that every harness reads from
 | want the demo gone | `atlas-clean-demo` |
 
 In the chat, `/` lists the commands (`/learn`, `/distill`, `/map`, `/sketch`, `/spec`,
-`/project`, `/close`, `/expand-cards`, `/remember`, `/check`, `/next`, `/tour`); add
-your own in `vault/atlas.yaml`.
+`/project`, `/close`, `/expand-cards`, `/revisit`, `/remember`, `/check`, `/next`, `/tour`);
+add your own in `vault/atlas.yaml`.
 
 ---
 
@@ -334,7 +335,7 @@ single-user, local-first and young.
 
 ## Status and roadmap
 
-Atlas 0.9.10 is the current release. Stable: the
+Atlas 0.10.0 is the current release. Stable: the
 engine and reader, the duplex chat with answer blocks, project memory with boot
 packets, ideas from sketch to project, cards, search by meaning, the checks,
 tours, the installer with upgrade and restore.
@@ -344,7 +345,7 @@ Open:
 - Listening in the foreground (Codex, pi) is not yet verified end to end.
 - One vault per server; "since you were last here" is kept per browser.
 - Not built yet, by decision: packs (heavier knowledge-graph machinery as an
-  opt-in), hard enforcement of group rules, an `atlas-revisit` workflow.
+  opt-in) and hard enforcement of group rules.
 
 ---
 

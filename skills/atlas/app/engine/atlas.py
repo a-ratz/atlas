@@ -369,6 +369,14 @@ class Index:
                 at = next(i for i, c in enumerate(self.commands) if c.get("name") == "sketch") + 1
                 self.commands = [*self.commands[:at], *(c for c in default_reg.get("commands") or [] if c.get("name") == "spec"),
                                  *self.commands[at:]]
+            if self.commands is not None and {c.get("name") for c in self.commands} == old_commands | {"expand-cards", "spec"}:
+                at = next(i for i, c in enumerate(self.commands) if c.get("name") == "map") + 1  # 0.9 learns /revisit (#52)
+                self.commands = [*self.commands[:at], *(c for c in default_reg.get("commands") or [] if c.get("name") == "revisit"),
+                                 *self.commands[at:]]
+            ins = self.types.get("insight")
+            if ins and [m.get("label") for m in ins.get("moves") or []] == ["🔗 Find connections", "⚔️ Challenge it", "🧭 Next research avenues"]:
+                ins["moves"] = [*ins["moves"], *(m for m in defaults.get("insight", {}).get("moves", [])
+                                                 if m.get("label") == "🔁 Revisit its source")]
             q = self.types.get("question")
             if q and [m.get("label") for m in q.get("moves") or []] == ["🔎 Research this"]:  # copied before 0.6.4
                 q["moves"] = [*q["moves"], *(m for m in defaults.get("question", {}).get("moves", [])
@@ -2193,7 +2201,7 @@ def suggestions(index: Index) -> list[str]:
     if len(unmapped) >= 5:
         out.append(f"{len(unmapped)} insight(s) belong to no map: offer to build the first map(s) (skill atlas-map)")
     if due:
-        out.append(f"{len(due)} insight(s) past revisit_after: offer to re-check their sources")
+        out.append(f"{len(due)} insight(s) past revisit_after: offer /revisit (skill atlas-revisit)")
     h = health(index)
     if h["total"]:
         parts = [f"{n} {label}" for n, label in ((h["frontmatter"], "with frontmatter problems"),
