@@ -201,8 +201,10 @@ due: <YYYY-MM-DD, only if the user gave a day>
 <the user's words>
 ```
 
-Commit it and say where it is: Home lists it under "Needs you" until it is
-done (a note: until the user or you mark it `seen`). A fact about the user
+Commit it as the user's, since the words are theirs
+(`engine/atlas.py commit --agent user -m "note: <slug>" <path>`), and say where
+it is: Home lists it under "Needs you" until it is done (a note: until the
+user or you mark it `seen`). A fact about the user
 ("I prefer short answers") goes to `vault/you/profile.md` (`/remember`); a
 goal to `vault/you/goals.md`.
 

@@ -682,7 +682,14 @@ function tourCta(t, lastSeen) {
 }
 
 async function viewHome() {
-  if (!(state.meta.content ?? state.meta.total)) return viewEmpty();
+  if (!(state.meta.content ?? state.meta.total)) {  // a fresh vault: the welcome, and the user's notes under it
+    const token = state.routeToken;
+    viewEmpty();
+    const notes = (await api("/api/home").catch(() => null))?.needs?.notes || [];
+    if (notes.length && token === state.routeToken) $(".empty-hero")?.insertAdjacentHTML("beforeend",
+      `<section class="empty-needs"><div class="kicker">Needs you</div><div class="list">${notes.map((e) => card(e)).join("")}</div></section>`);
+    return;
+  }
   const data = await api("/api/home");
   const lastSeen = store.get("atlas.lastSeen", null);
   const needs = needsItems(data.needs);

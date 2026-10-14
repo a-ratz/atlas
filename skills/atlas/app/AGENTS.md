@@ -18,7 +18,8 @@ vault/               the user's knowledge. Plain Markdown files are the truth.
   sketches/  specs/  ideas: rough (sketch) and worked out (spec)
   projects/<group>/  projects in groups (private is the default); _group.md holds the group's rules
     <slug>/          project.md + threads/ decisions/ lessons/: one memory, shared by every agent
-  you/               the user: goals.md, profile.md (what agents learned), notes/ (from: user)
+  you/               the user: goals.md, profile.md (what agents learned; both written when there is
+                     something to put in them), notes/ (from: user)
   agents/            one identity file per agent (claude.md, codex.md, …); yours is yours
   cabinet/           who is who: people/ and orgs/, one card per person or organization (see Cabinet)
   tours/             guided tours through what changed, written by agents for the user

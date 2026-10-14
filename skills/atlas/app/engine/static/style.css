@@ -860,3 +860,4 @@ body.reading.chat-open .dock { position: fixed; right: 0; top: 60px; width: min(
 .men-group .mini-list { margin: 0 0 10px 22px; }
 .moves-bar .sent-note { font-size: 13px; color: var(--soft); }
 .moves-bar .btn.chosen:disabled { opacity: 1; box-shadow: inset 0 0 0 1px var(--acc); }
+.empty-needs { width: 100%; margin-top: 28px; text-align: left; display: flex; flex-direction: column; gap: 10px; }

@@ -74,6 +74,7 @@ def main() -> None:
                     move_ignores_late_history(ctx, srv, vault)
                     moves_release(ctx, srv, vault)
                 ctx.close()
+            empty_home_lists_notes(browser, Path(tmp))
             browser.close()
             print(f"{len(pages)} pages × 2 color schemes opened")
     for f in failures:
@@ -214,6 +215,29 @@ def left_refresh(ctx, srv: Server, vault: Path, rel: str) -> None:
         failures.append(f"a note opened at {page.evaluate('scrollY')}, the position of a refresh the reader left "
                         "(#14, review round 2)")
     page.close()
+
+
+def empty_home_lists_notes(browser, tmp: Path) -> None:
+    """A fresh vault keeps its welcome, and a reminder the agent wrote shows under it as "Needs you"
+    (#18, smoke run first-run)."""
+    import shutil
+    from gate import APP
+    vault = tmp / "fresh" / "vault"
+    shutil.copytree(APP / "vault", vault, ignore=shutil.ignore_patterns(".atlas"))
+    (vault / "you" / "notes").mkdir(parents=True, exist_ok=True)
+    (vault / "you" / "notes" / "2026-10-14-000000-remind-spaced-repetition.md").write_text(
+        "---\nfrom: user\naction: remind\ncreated: 2026-10-14T00:00:00+00:00\nstatus: new\n---\n\n"
+        "Remember to look into spaced repetition\n", encoding="utf-8")
+    with Server(vault, operator=True) as srv:
+        page = browser.new_page()
+        page.goto(f"{srv.base}/#/")
+        try:
+            page.wait_for_selector(".empty-hero .empty-needs", timeout=10000)
+            if "spaced repetition" not in page.inner_text(".empty-needs"):
+                failures.append("the empty Home's Needs you does not show the reminder (#18)")
+        except Exception:
+            failures.append("a fresh vault's Home does not show a new reminder under Needs you (#18)")
+        page.close()
 
 
 def move_waits_for_its_own_answer(ctx, srv: Server, vault: Path) -> None:

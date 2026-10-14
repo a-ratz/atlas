@@ -2033,7 +2033,7 @@ def suggestions(index: Index) -> list[str]:
     notes = [e for e in ents if e.type == "note" and str(e.meta.get("status")) == "new"]
     out = []
     if notes:
-        out.append(f"{len(notes)} new note(s) from the user in inbox/: read and handle them, then set status: done")
+        out.append(f"{len(notes)} new note(s) from the user in you/notes/: read and handle them, then set status: done")
     if captures:
         out.append(f"{len(captures)} capture(s) waiting: offer to distill them into insights (skill atlas-distill)")
     if operational:
