@@ -212,21 +212,25 @@ def deep_after_nothing(page, base: str, scheme: str) -> None:
     held = []
     page.route("**/api/search?*q=yyqxwv*", lambda r: held.append(r))
     page.goto(f"{base}/#/search?q=yyqxwv")
-    for _ in range(50):
+    for _ in range(150):  # the search waits for the meta first; a slow runner takes its time
         if held:
             break
         page.wait_for_timeout(100)
     page.goto(f"{base}/#/projects")
     page.wait_for_timeout(300)
-    if held:
-        held[0].fulfill(json={"mode": "fast", "results": []})
+    if not held:
+        failures.append(f"[{scheme}] the late-answer check never saw its search request (#15)")
+    for r in held:  # every held request gets its answer, so nothing hangs into the next check
+        r.fulfill(json={"mode": "fast", "results": []})
     page.wait_for_timeout(800)
-    if not page.evaluate("location.hash").startswith("#/projects"):
+    if held and not page.evaluate("location.hash").startswith("#/projects"):
         failures.append(f"[{scheme}] a late search answer took the reader away from the page they opened (#15)")
     page.unroute("**/api/search?*q=yyqxwv*")
     page.unroute("**/api/meta")
     page.unroute("**/api/search?*mode=deep*")
+    page.goto(f"{base}/#/")
     page.reload()  # the faked meta stays in the app until it loads again
+    page.wait_for_selector("#main > *", timeout=15000)
 
 if __name__ == "__main__":
     main()
