@@ -1184,16 +1184,23 @@ def deep_collections() -> tuple[str | None, dict]:
                                                      if c["path"].resolve() == VAULT or VAULT in c["path"].resolve().parents}
 
 
-def snippet_text(snippet: str, ent: "Entity | None") -> str:
-    """QMD's snippet without its diff header and without frontmatter (a hit near the top of a note starts in
-    it); nothing left: the note's description."""
+FRONT_LINE = re.compile(r"^\s*([\w-]+:|- |---$|$)")  # what a frontmatter line looks like
+
+
+def snippet_text(snippet: str) -> str:
+    """QMD's snippet as the body text it found: without its diff header, without the frontmatter a hit near
+    the top of a note starts in (opened or closed inside the snippet, or both), and without the title heading,
+    which the result card shows already. Nothing left: empty, and the card shows its description."""
     lines = re.sub(r"^@@.*?\n", "", snippet or "", flags=re.S).splitlines()
     dashes = [i for i, line in enumerate(lines) if line.strip() == "---"]
-    if dashes:
-        cut = dashes[1] if lines[0].strip() == "---" and len(dashes) > 1 else dashes[0]
-        if all(re.match(r"^\s*([\w-]+:|- |---$|$)", line) for line in lines[:cut]):
-            lines = lines[cut + 1:]
-    return "\n".join(lines).strip()[:300] or (ent.description if ent else "")
+    if lines and lines[0].strip() == "---":  # opens in the snippet: up to its end, or all of it that is there
+        end = dashes[1] if len(dashes) > 1 else next((i for i, ln in enumerate(lines) if not FRONT_LINE.match(ln)), len(lines)) - 1
+        lines = lines[end + 1:]
+    elif dashes and all(FRONT_LINE.match(line) for line in lines[:dashes[0]]):  # starts inside it
+        lines = lines[dashes[0] + 1:]
+    while lines and (not lines[0].strip() or lines[0].lstrip().startswith("# ")):
+        lines = lines[1:]
+    return "\n".join(lines).strip()[:300]
 
 
 def deep_search(index: Index, q: str) -> list[dict]:
@@ -1221,7 +1228,7 @@ def deep_search(index: Index, q: str) -> list[dict]:
             continue
         seen.add(rel)
         e = index.entities.get(rel) if rel else None
-        snippet = snippet_text(h.get("snippet", ""), e)
+        snippet = snippet_text(h.get("snippet", ""))
         if e:
             out.append({**e.card(index), "snippet": snippet, "score": h.get("score")})
         else:
@@ -1606,7 +1613,7 @@ def make_app(index: Index):
             results = await run_in_threadpool(deep_search, index, q)
             if not results:
                 note = ("Search by meaning is off for this vault; showing instant results." if qmd_state() == "off" else
-                        "Deep search needs QMD (github.com/tobi/qmd) and its collections for this vault: "
+                        "Search by meaning needs QMD (github.com/tobi/qmd) and its collections for this vault: "
                         "`engine/atlas.py qmd setup` (skill atlas-qmd); showing instant results.")
                 return JSONResponse({"mode": "fast", "note": note, "results": fast_search(index, q, tid)})
             return JSONResponse({"mode": "deep", "results": results})
@@ -2652,7 +2659,7 @@ def qmd_refresh_after_commit(paths: list[str], types: dict) -> str | None:
 def cmd_qmd(args) -> None:
     if args.action == "off":
         qmd_set(enabled="off")
-        print("qmd is off for this vault: deep search uses instant search. The index and QMD's models stay on "
+        print("qmd is off for this vault: search goes by words only. The index and QMD's models stay on "
               "this machine (`qmd --index <name> collection list` shows the index; `qmd setup` turns it on again)")
         return
     if args.action == "sync":

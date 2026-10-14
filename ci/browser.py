@@ -194,8 +194,10 @@ def deep_after_nothing(page, base: str, scheme: str) -> None:
     """With QMD on, an instant search that finds nothing goes on by meaning (smoke run on #15), also when QMD
     was set up after the page loaded (review round 4). The browser smoke has no QMD: the meta and the deep
     answer are faked; the switch is the app's."""
-    page.goto(f"{base}/#/")
-    page.wait_for_selector("#main > *", timeout=15000)  # loaded with the real meta: no QMD
+    page.goto(f"{base}/#/search?q=memory")
+    page.wait_for_selector("#results .card, #results .empty", timeout=15000)  # loaded with the real meta: no QMD
+    if page.query_selector(".seg a:has-text('By meaning')"):
+        failures.append(f"[{scheme}] the search offers 'By meaning' without QMD (#15, second smoke run)")
 
     def meta(route):
         route.fulfill(json={**route.fetch().json(), "qmd": True})

@@ -16,8 +16,9 @@ note becomes findable without anyone running an index by hand.
 2. When the agent is done, open the search and look for a paraphrase of a demo note, not its words
    (for the sleep demo: "being woken by sounds at night").
 3. Ask the agent: "What do we know about waking people gently?"
-4. Tell the agent an idea: "I have an idea: a cue that ramps up from silence." Wait a minute after it
-   is written down, then search for it by meaning ("start the sound quietly").
+4. Tell the agent an idea the vault has nothing on yet: "I have an idea: a weekly email that lists the
+   words I keep forgetting." Wait a minute after it is written down, then search for it by meaning
+   ("a digest of vocabulary I lose").
 5. Ask the agent to turn search by meaning off, then search again with words from a note's title.
 
 ## Must be observable

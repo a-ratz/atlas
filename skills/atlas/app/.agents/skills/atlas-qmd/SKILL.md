@@ -56,8 +56,10 @@ Search with `grep -ril "<words>" vault/<folder>` or, while Atlas runs,
   `engine/atlas.py qmd setup`: it creates the index with the five
   collections, a context line each, and embeds them. When embedding fails, it
   says why and leaves search by meaning off.
-- **Off:** `engine/atlas.py qmd off`. Deep search falls back to instant
-  search; the index and QMD's models (about 2 GB) stay on the machine.
+- **Off:** `engine/atlas.py qmd off`. Atlas searches by words only; the
+  index and QMD's models (about 2 GB) stay on the machine.
+- After setup or off, commit the setting:
+  `engine/atlas.py commit --agent <id> -m "qmd: on" vault/atlas.yaml`.
 - **Repair:** `qmd status` lists what is missing; `qmd setup` again adds it.
 
 Never remove or change a QMD collection outside the vault's index.

@@ -283,11 +283,12 @@ def test_the_operator_gets_the_whole_isolation(tmp_path, monkeypatch):
 
 def test_snippets_leave_the_frontmatter_out(engine):
     # deep search showed "created_by: codex updated_by: codex ---" as a note's snippet (#10, smoke run on #15)
-    e = type("E", (), {"description": "Two of five testers woke"})()
-    assert engine.snippet_text("@@ -1,4 @@\nevidence: woke\ncreated_by: codex\n---\n\n# Cue volume\nThe body", e) == "# Cue volume\nThe body"
-    assert engine.snippet_text("---\ndescription: d\ncategory: sleep\n---\n# Title", e) == "# Title"
-    assert engine.snippet_text("A body line\n---\nmore", e) == "A body line\n---\nmore"  # a rule in the body stays
-    assert engine.snippet_text("@@ -1,2 @@\n---\ndescription: d\n---\n", e) == "Two of five testers woke"
+    assert engine.snippet_text("@@ -1,4 @@\nevidence: woke\ncreated_by: codex\n---\n\n# Cue volume\nThe body") == "The body"
+    assert engine.snippet_text("---\ndescription: d\ncategory: sleep\n---\n# Title\nText") == "Text"
+    assert engine.snippet_text("A body line\n---\nmore") == "A body line\n---\nmore"  # a rule in the body stays
+    # the second smoke run: frontmatter that opens in the snippet and does not close there, then nothing
+    assert engine.snippet_text("@@ -1,5 @@\n---\ndescription: d\ncategory: sleep\nconfidence: working") == ""
+    assert engine.snippet_text("@@ -1,2 @@\n---\ndescription: d\n---\n") == ""  # the card shows its description
 
 
 def test_meta_offers_deep_search_only_where_it_can_answer(engine, vault, fake):
