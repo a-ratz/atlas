@@ -122,7 +122,16 @@ def checks(page, base: str, scheme: str) -> None:
         failures.append(f"[{scheme}] the facts line shows {row!r} instead of a linked title (#10)")
     if scheme != "light":  # pressing a move writes to the chat, which the next pass expects empty
         return
-    page.click(".moves-bar [data-via='move']:has-text('Later')")
+    churn = page.evaluate("""new Promise((done) => { let n = 0;
+      const o = new MutationObserver(() => n++); o.observe(document.querySelector('#main'), {childList: true});
+      setTimeout(() => { o.disconnect(); done(n); }, 3000); })""")
+    try:
+        page.click(".moves-bar [data-via='move']:has-text('Later')", timeout=15000)
+    except Exception as err:  # say what the page was doing instead of stopping the run
+        state = page.evaluate("""[...document.querySelectorAll('.moves-bar button')].map((b) => b.textContent + (b.disabled ? ':off' : ''))""")
+        failures.append(f"[{scheme}] could not press Later ({type(err).__name__}): main re-rendered {churn}x in 3 s; "
+                        f"buttons {state}; presence {page.inner_text('#presence')!r}; {page.evaluate('location.hash')}")
+        return
     try:
         page.wait_for_selector(".moves-bar.sent .sent-note", timeout=5000)
         if page.eval_on_selector_all(".moves-bar button", "bs => bs.some((b) => !b.disabled)"):
