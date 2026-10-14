@@ -25,7 +25,7 @@ import urllib.parse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from gate import Server, demo_vault  # noqa: E402
+from gate import Server, atlas, demo_vault  # noqa: E402
 
 from playwright.sync_api import sync_playwright  # noqa: E402
 
@@ -70,6 +70,7 @@ def main() -> None:
                 checks(page, srv.base, scheme)
                 if scheme == "light":  # the last pass: it edits and moves a demo note
                     follows_changes(ctx, srv, vault)
+                    moves_release(ctx, srv, vault)
                 ctx.close()
             browser.close()
             print(f"{len(pages)} pages × 2 color schemes opened")
@@ -211,6 +212,53 @@ def left_refresh(ctx, srv: Server, vault: Path, rel: str) -> None:
         failures.append(f"a note opened at {page.evaluate('scrollY')}, the position of a refresh the reader left "
                         "(#14, review round 2)")
     page.close()
+
+
+def moves_release(ctx, srv: Server, vault: Path) -> None:
+    """A pressed move frees its bar when its agent answers, whatever another agent is doing; standalone Atlas
+    locks nothing; a quoted passage stays as it is (#18, review round 1)."""
+    import datetime as dt
+    import json
+    import os
+    import time
+    presence = vault / ".atlas" / "agents"
+    presence.mkdir(parents=True, exist_ok=True)
+    now = time.time()
+    for name, at in (("claude", now + 600), ("codex", now - 60)):  # claude listens; codex listened a minute ago
+        (presence / f"{name}.beat").touch()
+        os.utime(presence / f"{name}.beat", (at, at))
+    with open(vault / ".atlas" / "inbox.jsonl", "a", encoding="utf-8") as f:  # ... and works on a request of its own
+        f.write(json.dumps({"ts": dt.datetime.now().astimezone().isoformat(timespec="seconds"), "role": "user",
+                            "kind": "message", "text": "Research something else", "to": "codex"}) + "\n")
+    question = f"#/e/{urllib.parse.quote('questions/do-cues-disturb-sleep.md', safe='')}"
+    page = ctx.new_page()
+    page.goto(f"{srv.base}/{question}")
+    page.wait_for_selector(".moves-bar", timeout=15000)
+    page.wait_for_timeout(2500)  # the presence stream names both agents
+    page.click(".moves-bar [data-via='move']:has-text('Later')")
+    page.wait_for_selector(".moves-bar.sent", timeout=5000)
+    atlas(vault, "say", "Set to dormant.", "--agent", "claude")
+    try:
+        page.wait_for_selector(".moves-bar.sent", state="detached", timeout=10000)
+    except Exception:
+        failures.append("a move stays locked after its agent answered, while another agent works (#18, round 1)")
+    page.evaluate("""document.body.insertAdjacentHTML('beforeend', '<button id="quote" data-prefill="A passage with ‹working› in it">q</button>');
+                     document.getElementById('quote').click()""")
+    page.wait_for_timeout(300)
+    box = page.evaluate("(() => { const i = document.activeElement; return [i.value, i.selectionStart === i.value.length && i.selectionEnd === i.value.length]; })()")
+    if box != ["A passage with ‹working› in it", True]:  # the text as it was, the cursor at its end
+        failures.append(f"a quoted passage changed in the box: {box} (#18, review round 1)")
+    page.close()
+    with Server(vault) as alone:
+        page = ctx.new_page()
+        page.goto(f"{alone.base}/{question}")
+        page.wait_for_selector(".moves-bar", timeout=15000)
+        page.click(".moves-bar [data-via='move']:has-text('Later')")
+        page.wait_for_timeout(800)
+        if page.query_selector(".moves-bar.sent"):
+            failures.append("standalone Atlas locks a move that only saved a note (#18, review round 1)")
+        page.close()
+
 
 if __name__ == "__main__":
     main()

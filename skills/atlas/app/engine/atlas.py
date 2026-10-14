@@ -767,7 +767,7 @@ def render_md(index: Index, text: str, base: str = "") -> str:
         target, alias = m.group(1), m.group(2)
         hit = index.resolve(target)
         label = alias or (index.entities[hit].title if hit else target)  # a source's title, not its file name
-        label = re.sub(r"([\\\[\]*_`<])", r"\\\1", label)
+        label = re.sub(r"([\\\[\]*_`<|])", r"\\\1", label)  # | too: a link in a table cell
         return f"[{label}](#/e/{quote(hit)})" if hit else f"[{label}](#/missing/{quote(target.strip())})"
 
     md = MarkdownIt("commonmark", {"html": False, "linkify": False}).enable(["table", "strikethrough"])
@@ -904,10 +904,12 @@ def fact_links(index: Index, ent: Entity) -> dict:
     """Where the wiki links in a note's facts point (`affects: [[…]]`), so the reader shows them as links."""
     out = {}
     for k in index.types[ent.type].get("fields", []):
-        for target, _ in WIKI.findall(json.dumps(_plain(ent.meta.get(k)), ensure_ascii=False)):
-            hit = index.resolve(target)
-            if hit:
-                out[target] = {"id": hit, "title": index.entities[hit].title}
+        val = _plain(ent.meta.get(k))
+        for item in val if isinstance(val, list) else [val]:  # the values as written: JSON would escape quotes
+            for target, _ in WIKI.findall(item) if isinstance(item, str) else []:
+                hit = index.resolve(target)
+                if hit:
+                    out[target] = {"id": hit, "title": index.entities[hit].title}
     return out
 
 

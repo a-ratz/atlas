@@ -348,14 +348,14 @@ document.addEventListener("click", async (ev) => {
   if (!b || b.disabled || b.closest("iframe")) return;
   ev.preventDefault();
   if (b.dataset.to) store.set("atlas.to", b.dataset.to);
-  if (b.dataset.prefill !== undefined) return prefill(b.dataset.prefill);
+  if (b.dataset.prefill !== undefined) return prefill(b.dataset.prefill, b.dataset.template !== undefined);
   if (b.dataset.act) return act(b.dataset.act, b.dataset.id);
   b.disabled = true;
   const ok = await sendText(b.dataset.send, b.dataset.via || null, b.dataset.ctx || null);
   if (ok && b.dataset.once !== undefined) { b.classList.add("chosen"); return; }
   b.disabled = false;
   if (ok && state.operator.mode === "operator") { toast(`Sent to ${agentName(currentTo())}`); if (!onChatPage()) openChat(); }
-  if (ok && b.dataset.via === "move" && b.closest(".moves-bar")) markSent(b);
+  if (ok && state.operator.mode === "operator" && b.dataset.via === "move" && b.closest(".moves-bar")) markSent(b);
 });
 
 // A move the user pressed stays visible on the page, its buttons off, until the note changes (the page
@@ -365,14 +365,22 @@ function markSent(b) {
   bar.classList.add("sent");
   bar.querySelectorAll("button").forEach((x) => (x.disabled = true));
   b.classList.add("chosen");
-  bar.insertAdjacentHTML("beforeend", `<span class="sent-note" role="status">Sent to ${esc(agentName(currentTo()))}. This page updates when the agent is done.</span>`);
-  state.sentMove = { at: Date.now(), sawWorking: false };
+  const to = currentTo();
+  bar.insertAdjacentHTML("beforeend", `<span class="sent-note" role="status">Sent to ${esc(agentName(to))}. This page updates when the agent is done.</span>`);
+  clearTimeout(state.sentMove?.timer);
+  state.sentMove = { to, at: Date.now(), sawWorking: false, timer: setTimeout(releaseSent, 31000) };
 }
+// Done: the recipient answered, or it worked and stopped, or it never picked the move up within 30 seconds.
+// Other agents' work does not count.
 function releaseSent() {
   const s = state.sentMove;
   if (!s) return;
-  if (liveAgents().some((a) => a.state === "working")) { s.sawWorking = true; return; }
-  if (!s.sawWorking && Date.now() - s.at < 30000) return;  // not picked up yet
+  const replied = (state.chatMessages || []).some((m) => m.role === "agent" && m.kind !== "progress"
+    && (!s.to || m.agent === s.to) && Date.parse(m.ts) > s.at - 1000);  // ts has whole seconds
+  const working = liveAgents().find((a) => a.id === s.to)?.state === "working";
+  if (working) s.sawWorking = true;
+  if (!replied && (working || (!s.sawWorking && Date.now() - s.at < 30000))) return;
+  clearTimeout(s.timer);
   state.sentMove = null;
   const bar = $(".moves-bar.sent");
   if (!bar) return;
@@ -382,22 +390,22 @@ function releaseSent() {
   bar.querySelector(".chosen")?.classList.remove("chosen");
 }
 
-function prefill(text) {
+function prefill(text, template = false) {
   const mobile = matchMedia("(max-width: 760px)").matches;
   if (mobile || onChatPage()) {
-    state.prefill = text;
+    state.prefill = text; state.prefillTemplate = template;
     if (onChatPage()) applyPrefill(); else location.hash = "#/chat";
     return;
   }
   openChat();
-  fillAndSelect($("#dock-input"), text);
+  fillAndSelect($("#dock-input"), text, template);
 }
 // the composer grows with its text (a quoted passage must be readable before it is sent)
 const fit = (i) => { i.style.height = "auto"; i.style.height = `${Math.min(i.scrollHeight + 2, 200)}px`; };
 function applyPrefill() {
   const i = $("#page-input");
   if (!i || state.prefill == null) return;
-  fillAndSelect(i, state.prefill); state.prefill = null;
+  fillAndSelect(i, state.prefill, state.prefillTemplate); state.prefill = null;
 }
 
 const ACT_LABEL = { star: "Kept", kill: "Let go", note: "Note" };
@@ -428,15 +436,15 @@ function viewEmpty() {
       <div class="chips">${HERO_CHIPS.map(([label, fill]) => `<button class="facet" data-fill="${esc(fill)}">${esc(label)}</button>`).join("")}</div>
     </div>`;
   wireComposer("hero", () => null, () => { location.hash = "#/chat"; });
-  $$("[data-fill]").forEach((b) => b.onclick = () => fillAndSelect($("#hero-input"), b.dataset.fill));
+  $$("[data-fill]").forEach((b) => b.onclick = () => fillAndSelect($("#hero-input"), b.dataset.fill, true));
 }
 // A chip puts a whole question in the box; the ‹part› to make your own arrives selected, so typing replaces it.
 const HERO_CHIPS = [["What is the state of research on…", "What is the state of research on ‹sleep and memory›?"],
   ["Explain the landscape of… tools", "Explain the landscape of ‹note-taking› tools"],
   ["I have an idea for…", "I have an idea: ‹a timer that adapts to how focused I am›"]];
-function fillAndSelect(i, text) {
-  const m = /‹([^›]*)›/.exec(text);
-  i.value = text.replace(/[‹›]/g, ""); fit(i); i.focus();
+function fillAndSelect(i, text, template = false) {  // only a chip's own text is a template; a quote stays as it is
+  const m = template ? /‹([^›]*)›/.exec(text) : null;
+  i.value = template ? text.replace(/[‹›]/g, "") : text; fit(i); i.focus();
   const [from, to] = m ? [m.index, m.index + m[1].length] : [i.value.length, i.value.length];
   i.setSelectionRange(from, to);
 }
@@ -1590,7 +1598,7 @@ const SUGGESTIONS = [["Research what's new in a topic I care about", "Research w
   ["What do I already know about…?", "What do I already know about ‹sleep and memory›?"], ["What should we do next?", "What should we do next?"]];
 const chatWelcome = () => `<div class="chat-welcome empty-hero" style="margin:auto;text-align:center;align-items:center"><h1 style="font-size:40px">Ask your knowledge graph</h1>
   <p>${state.operator.mode === "operator" ? "Your agents answer here with notes you can unfold, charts, choices and live mockups. What they open lands in the workbench." : "No agent is attached. Open Claude Code or Codex in this folder and say “start atlas”; until then your messages are kept as notes."}</p>
-  <div class="chips" style="justify-content:center">${SUGGESTIONS.map(([label, fill]) => `<button class="facet" data-prefill="${esc(fill)}">${esc(label)}</button>`).join("")}</div>
+  <div class="chips" style="justify-content:center">${SUGGESTIONS.map(([label, fill]) => `<button class="facet" data-prefill="${esc(fill)}" data-template>${esc(label)}</button>`).join("")}</div>
   ${commandList().length ? `<p style="font-size:13px">Type <b>/</b> for commands: ${commandList().slice(0, 6).map((c) => `<code class="mono">/${esc(c.name)}</code>`).join(" ")}…</p>` : ""}</div>`;
 
 // ------------------------------------------------------------------ composer and commands
@@ -1989,6 +1997,7 @@ function connectStream() {
   es.addEventListener("chat", async () => {  // also fired on (re)connect, so missed replies show up
     const fresh = await loadChat().catch(() => false);
     if (fresh && !chatVisible()) toast("New message from your agent");
+    releaseSent();
   });
   es.addEventListener("operator", (ev) => {
     state.operator = JSON.parse(ev.data);

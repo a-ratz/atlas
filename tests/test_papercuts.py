@@ -99,3 +99,21 @@ def test_say_opens_the_note_however_the_path_was_written(engine, vault, monkeypa
     engine.cmd_say(Namespace(text="Here it is.", progress=False, title=None, open=path, agent=None))
     last = engine.read_jsonl(engine.OUTBOX)[-1]
     assert last["open"] == "captures/a-note.md"
+
+
+def test_a_title_with_a_pipe_keeps_a_table_whole(engine, vault):
+    # a linked title "Alpha | Beta" split the table cell and lost the status column (#18, review round 1)
+    (vault / "sources").mkdir(exist_ok=True)
+    (vault / "sources" / "source-slug.md").write_text("---\ntitle: Alpha | Beta\n---\n\nBody\n", encoding="utf-8")
+    html = engine.render_md(engine.Index(), "| Source | Status |\n|---|---|\n| [[source-slug]] | used |\n")
+    assert "Alpha | Beta</a></td>" in html and "<td>used</td>" in html
+
+
+def test_a_fact_naming_a_title_with_quotes_links_it(engine, vault):
+    # JSON escaped the quotes of `affects: '[[What "working" means]]'`, so no link was found (#18, round 1)
+    (vault / "questions").mkdir(exist_ok=True)
+    (vault / "insights" / 'What "working" means.md').write_text("---\ndescription: d\n---\n\n# W\n", encoding="utf-8")
+    (vault / "questions" / "q.md").write_text(
+        "---\nstatus: open\nraised: 2026-10-01\naffects: '[[What \"working\" means]]'\n---\n\n# Q\n", encoding="utf-8")
+    view = engine.entity_view(engine.Index(), "questions/q.md")
+    assert view["fact_links"]['What "working" means']["id"] == 'insights/What "working" means.md'
