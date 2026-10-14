@@ -253,4 +253,27 @@ def test_the_distill_rules_from_the_smoke_runs(engine):
     assert "several\n  sources agree" not in distill and "set `revisit_after` for preprints" not in distill
     kinds = "company, university, research lab,\n   nonprofit, public body, open-source project, media, other"
     assert kinds in cabinet and "write `unknown`" in cabinet
-    assert "gets `created_by: unknown` in its frontmatter" in distill
+    assert "gets `created_by: user` in its frontmatter" in distill  # `user` passes check; a new sentinel would not (#43 review)
+
+
+def test_a_slow_commit_hook_does_not_cut_a_drop_short(engine, vault, monkeypatch):
+    # the drop committed through the 10-second query helper; a slow hook got killed and left .git/index.lock (#43 review)
+    git = drop_repo(vault, monkeypatch)
+
+    def query(*args, cwd=None):  # the query helper, its timeout shortened so the test stays fast
+        try:
+            r = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8",
+                               errors="replace", timeout=1)
+        except subprocess.TimeoutExpired:
+            return None
+        return r.stdout.strip() if r.returncode == 0 else None
+
+    monkeypatch.setattr(engine, "_git_out", query)
+    hook = vault / ".git" / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\nsleep 2\n", encoding="utf-8")
+    hook.chmod(0o755)
+    drop = vault / "captures" / "slow.md"
+    drop.write_text("# Slow\n", encoding="utf-8")
+    assert engine.commit_drop(drop)
+    assert git("log", "-1", "--format=%s").strip() == "drop: slow.md"
+    assert not (vault / ".git" / "index.lock").exists()

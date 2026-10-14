@@ -2591,9 +2591,13 @@ def commit_drop(path: Path) -> bool:
         lock = _lock("git.lock")
     except SystemExit:  # an agent is committing right now; the file stays uncommitted, as before
         return False
+    # No timeout, as in `commit`: a slow commit hook must finish, not be killed and leave .git/index.lock behind.
+    run = lambda *a: subprocess.run(["git", *a], cwd=top, capture_output=True, text=True, encoding="utf-8",
+                                    errors="replace").returncode == 0
     try:  # `commit -- <path>` commits this file only, whatever else is staged
-        return (_git_out("add", "--", rel, cwd=top) is not None
-                and _git_out("commit", "-q", "-m", f"drop: {path.name}", "--", rel, cwd=top) is not None)
+        return run("add", "--", rel) and run("commit", "-q", "-m", f"drop: {path.name}", "--", rel)
+    except OSError:
+        return False
     finally:
         lock.close()
 

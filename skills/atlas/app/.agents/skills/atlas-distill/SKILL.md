@@ -245,7 +245,7 @@ that is only mentioned ("as Netflix does") gets no card.
    insights without a map, offer to build one (`atlas-map`).
 6. Commit what you wrote, including the capture's old path (it moved). A
    capture that git does not know yet and that you did not write (the user
-   copied it into `captures/`) gets `created_by: unknown` in its frontmatter
+   copied it into `captures/`) gets `created_by: user` in its frontmatter
    first, so the commit does not name you as its author. Run it
    from the Atlas folder; paths are relative to it (`vault/captures/<file>.md`,
    `vault/sources/<file>.md`, …):
