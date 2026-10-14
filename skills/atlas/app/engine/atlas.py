@@ -1914,6 +1914,11 @@ def cmd_serve(args) -> None:
         sys.exit(f"port {args.port} is busy: another Atlas (or something else) runs there. "
                  f"Check `curl -s localhost:{args.port}/api/meta` (vault_path) or pass --port.")
     ensure_state()
+    other = session()
+    if other.get("port") and other.get("port") != args.port and serving(f"http://localhost:{other['port']}"):
+        # one Atlas per vault: a second one would overwrite the session, and the first would turn standalone
+        sys.exit(f"Atlas already runs for this vault at http://localhost:{other['port']} "
+                 f"({other.get('mode', '?')}). Open that one, or stop it first.")
     mode = "operator" if args.operator else "standalone"
     SESSION.write_text(json.dumps({"mode": mode, "started": now_iso(), "port": args.port, "pid": os.getpid()}), encoding="utf-8")
     if args.operator and not CURSOR.exists():
@@ -2210,6 +2215,9 @@ def resolve_checkout(ent: "Entity", override: str | None = None) -> dict:
     machine = machine_id()
     paths = ent.meta.get("paths") if isinstance(ent.meta.get("paths"), dict) else {}
     raw = override or paths.get(machine)
+    if not raw and not paths and not str(ent.meta.get("repo") or "").strip():  # nothing to check out yet
+        return {"status": "no code", "machine": machine,
+                "hint": f"no code yet: once a repository exists, `engine/atlas.py map-path {ent.project} <dir>`"}
     if not raw:
         return {"status": "unmapped", "machine": machine,
                 "hint": f"no path for machine `{machine}`: ask the user where the checkout is, then "
@@ -2315,6 +2323,8 @@ def boot_packet(index: Index, project: "Entity | None", agent: str, budget: int,
     S["project"].append(f"group: `{project.group}` · status: {project.status or 'not set'}")
     if co["status"] == "ok":
         S["project"].append(f"checkout: {co['path']} · branch `{branch}` @ {co['head']}")
+    elif co["status"] == "no code":  # nothing is missing: the project has no repository yet
+        S["project"].append(f"checkout: {co['hint']}.")
     else:
         S["project"].append(f"checkout: UNRESOLVED ({co['status']}). {co['hint']}. You can read the memory; "
                             "do not touch code until the checkout is resolved.")

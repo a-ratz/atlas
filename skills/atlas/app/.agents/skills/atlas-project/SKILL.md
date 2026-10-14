@@ -68,7 +68,10 @@ first step. If the spec asks build or adopt, write that as a decision with
 line project → spec → sketch in the project's margin.
 
 If there is a checkout on this machine, record it with `map-path`, not by
-hand. A new group is just a new folder with a `_group.md`.
+hand. No code yet (a project from a spec, say): leave out `repo:` and say so
+in a sentence of `project.md`; boot then reports "no code yet" instead of an
+unmapped checkout. Once a repository exists, `map-path` records it. A new group
+is just a new folder with a `_group.md`.
 
 ## While you work
 

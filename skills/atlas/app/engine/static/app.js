@@ -1077,6 +1077,7 @@ function checkoutText(co) {
   if (!co) return "";
   if (co.status === "ok") return `<span class="co">${svg("check", "sm ok")}<span>${esc(co.path.replace(/^\/home\/[^/]+/, "~"))} · ${esc(co.branch || "")}</span></span>`;
   if (co.status === "unmapped") return `<span class="co warn">${svg("warn", "sm")}<span>no checkout on this machine</span></span>`;
+  if (co.status === "no code") return `<span class="co"><span>no code yet</span></span>`;
   return `<span class="co warn">${svg("warn", "sm")}<span>${esc(co.status)}</span></span>`;
 }
 const statusBadge = (s) => !s ? "" : s === "active" ? `<span class="badge ok"><span class="status-dot"></span>active</span>` : `<span class="badge">${esc(s)}</span>`;
@@ -1167,6 +1168,7 @@ function renderProject(e) {
   const ls = pv.last_session;
   const checkout = pv.checkout?.status === "ok"
     ? `<span>${svg("check", "sm ok")}${esc(pv.checkout.path.replace(/^\/home\/[^/]+/, "~"))} · remote matches</span><span>branch ${esc(pv.checkout.branch || "?")} @ ${esc(pv.checkout.head || "")}</span>`
+    : pv.checkout?.status === "no code" ? `<span>no code yet</span>`
     : `<span>${svg("warn", "sm")}${esc(pv.checkout?.status || "no checkout")} on ${esc(pv.checkout?.machine || "this machine")}</span>`;
   main.innerHTML = `
     <div class="crumbs"><a href="#/projects">Projects</a><span aria-hidden="true">/</span><span>${esc(e.group || "")}</span><span aria-hidden="true">/</span><span style="color:var(--text)">${esc(e.title)}</span></div>

@@ -454,7 +454,10 @@ def moves_release(ctx, srv: Server, vault: Path) -> None:
     if box != ["A passage with ‹working› in it", True]:  # the text as it was, the cursor at its end
         failures.append(f"a quoted passage changed in the box: {box} (#18, review round 1)")
     page.close()
-    with Server(vault) as alone:
+    import shutil
+    alone_vault = vault.parent / "alone" / "vault"  # one Atlas per vault (#24): the standalone one gets a copy
+    shutil.copytree(vault, alone_vault, ignore=shutil.ignore_patterns(".atlas"))
+    with Server(alone_vault) as alone:
         page = ctx.new_page()
         page.goto(f"{alone.base}/{question}")
         page.wait_for_selector(".moves-bar", timeout=15000)
