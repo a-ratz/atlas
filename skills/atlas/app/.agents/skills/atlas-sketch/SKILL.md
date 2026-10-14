@@ -21,11 +21,14 @@ out. Two modes write the same file:
 2. **Check for a duplicate** in `sketches/`, `specs/` and every
    `projects/*/*/project.md` (search the titles and one-liners; with QMD, the
    `atlas-ideas` and `atlas-projects` collections, skill `atlas-qmd`). Found:
-   - the same idea: add the new angle to it, dated, instead of a new file. If
-     that sketch is already `specified`, the angle goes to its spec instead
-     (under "Open questions", dated) and you say so;
-   - an extension of a project: it goes to that project (a thread or a note,
-     skill `atlas-project`), not into a sketch.
+   - the same idea: add the new angle to it under `## Angles`, as a dated
+     bullet, instead of a new file. If that sketch is already `specified`, the
+     angle goes to its spec instead (under "Open questions", dated) and you say so;
+   - a small addition to a project the user is working on (a detail, a fix):
+     it goes to that project (a thread, skill `atlas-project`). An idea for a
+     new feature of a project is a sketch of its own: link the project by its
+     path (`[Nightlight](../projects/private/nightlight/project.md)`), since
+     `[[name]]` finds a sketch of the same name first.
 3. **Link 2 to 5 insights** the idea touches (search `insights/`), one line each
    on how it relates.
 4. **Write and show it** (below), with `origin: user`.
@@ -42,7 +45,8 @@ Restate the goal in three lines:
 
 - **Target:** what the idea must be (e.g. "a roguelike one developer can
   prototype in a month").
-- **Constraints:** what it must respect (from the user and `you/goals.md`).
+- **Constraints:** what it must respect (from the user, `you/goals.md` if it
+  exists, and the accepted decisions of a project the idea is for).
 - **Dead if:** what kills a candidate (e.g. "a shipped game already has this
   core loop").
 
