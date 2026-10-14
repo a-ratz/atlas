@@ -35,7 +35,7 @@ named result and strong word ("always", "monotonic", "doubles") in a claim:
 
 ## 3. Check for duplicates
 
-For each claim, search `insights/` (grep on key terms, or the Atlas search API).
+For each claim, search `insights/` (with QMD on, `atlas-qmd` finds it by meaning; otherwise grep on key terms, or the Atlas search API).
 If an existing insight already says it, extend that note with the new evidence
 instead of creating a second one.
 

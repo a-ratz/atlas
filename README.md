@@ -191,7 +191,7 @@ unless you use LinkedIn's private mode.
 - **Undo:** keep, let go, notes and snoozes wait five seconds before they reach
   your agent.
 - **Drop a file or a link** on Atlas: it lands in `captures/`, ready for your agent.
-- **Search:** instant text match, or semantic search through QMD.
+- **Search:** instant text match, or search by meaning through [QMD](https://github.com/tobi/qmd): the installer offers it, `engine/atlas.py qmd setup` indexes the cabinet, projects, ideas, insights and sources as five collections, and every commit keeps them fresh in the background.
 - **Paper and Pocket:** a light theme for daylight, and a phone layout with a
   tab bar; `atlas.py expose` prints the Tailscale command to reach it on your
   tailnet.
@@ -310,7 +310,7 @@ single-user, local-first and young.
 
 ## Status and roadmap
 
-Atlas 0.7.2 is the current release. Stable: the
+Atlas 0.8.1 is the current release. Stable: the
 engine and reader, the duplex chat with answer blocks, project memory with boot
 packets, the checks, tours, the installer with upgrade and restore.
 

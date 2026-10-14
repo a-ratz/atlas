@@ -800,14 +800,22 @@ function renderFrames(t, groups) {
 async function viewSearch(params) {
   const q = params.get("q") || "", mode = params.get("mode") || "fast";
   $("#search-input").value = q;
+  const token = state.routeToken;
+  state.meta = await api("/api/meta");  // whether search by meaning can answer; setup changes no note, so no event says so
+  if (token !== state.routeToken) return;
   main.innerHTML = `<section class="hero"><div class="kicker">${mode === "deep" ? "semantic search through QMD" : "instant title and text match"}</div><h1 class="page">“${esc(q)}”</h1></section>
-    <div class="toolbar"><div class="seg" role="group" aria-label="Search mode"><a class="btn ghost${mode === "fast" ? " on" : ""}" href="#/search?q=${enc(q)}" aria-pressed="${mode === "fast"}">Instant</a><a class="btn ghost${mode === "deep" ? " on" : ""}" href="#/search?q=${enc(q)}&mode=deep" aria-pressed="${mode === "deep"}">Deep (QMD)</a></div></div>
-    <div class="list" id="results"><div class="loading">${mode === "deep" ? "Asking QMD; this can take a few seconds…" : "Searching…"}</div></div>`;
+    <div class="toolbar"><div class="seg" role="group" aria-label="Search mode"><a class="btn ghost${mode === "fast" ? " on" : ""}" href="#/search?q=${enc(q)}" aria-pressed="${mode === "fast"}">By words</a>${state.meta.qmd || mode === "deep" ? `<a class="btn ghost${mode === "deep" ? " on" : ""}" href="#/search?q=${enc(q)}&mode=deep" aria-pressed="${mode === "deep"}">By meaning</a>` : ""}</div></div>
+    <div class="list" id="results"><div class="loading">${mode === "deep" ? "Searching by meaning (QMD); this can take a few seconds…" : "Searching…"}</div></div>`;
   const data = await api(`/api/search?q=${enc(q)}&mode=${mode}`);
+  if (token !== state.routeToken) return;  // the reader moved on while it searched
+  if (mode === "fast" && !data.results.length && state.meta.qmd) {  // the words found nothing; their meaning may
+    location.replace(`#/search?q=${enc(q)}&mode=deep`);
+    return;
+  }
   if (data.note) toast(data.note);
   $("#results").innerHTML = data.results.length ? data.results.map((e) => e.id ? card(e, e.snippet ? `<div class="card-desc mono" style="font-size:12.5px">${esc(e.snippet)}</div>` : "")
     : `<div class="card" data-t="external"><div class="card-title">${esc(e.title)}</div><div class="card-desc">${esc(e.description)}</div><div class="path">${esc(e.path)}</div></div>`).join("")
-    : `<div class="empty">No results.${mode === "fast" ? ` Try <a href="#/search?q=${enc(q)}&mode=deep">deep search</a>.` : ""}</div>`;
+    : `<div class="empty">No results.${mode === "fast" && !state.meta.qmd ? " Search by meaning needs QMD (ask your agent to turn it on)." : ""}</div>`;
 }
 
 function viewMissing(name) {
@@ -1883,7 +1891,7 @@ async function palQuery(q) {
   const projects = lower ? (state.meta.projects || []).filter((p) => hit(p.title)).slice(0, 5).map((p) => ({ section: "Projects", ico: g("project"), t: "project", label: p.title, run: go(`#/e/${enc(p.id)}`) })) : [];
   const recent = lower ? [] : recentNotes().map((e) => ({ section: "Recent", ico: g(e.type), t: e.type, label: e.title, sub: typeLabel(e.type), run: go(`#/e/${enc(e.id)}`) }));
   const search = lower ? [{ section: "Search", ico: svg("arrow"), html: `Search the vault for <b>“${esc(query)}”</b>`, run: go(`#/search?q=${enc(query)}`) },
-    ...(state.meta.qmd ? [{ section: "Search", ico: svg("arrow"), html: `Deep search (QMD) for <b>“${esc(query)}”</b>`, sub: "Shift+↵", deep: true, run: go(`#/search?q=${enc(query)}&mode=deep`) }] : [])] : [];
+    ...(state.meta.qmd ? [{ section: "Search", ico: svg("arrow"), html: `Search by meaning for <b>“${esc(query)}”</b>`, sub: "Shift+↵", deep: true, run: go(`#/search?q=${enc(query)}&mode=deep`) }] : [])] : [];
   pal.notes = [];
   const build = () => {  // notes arrive late and go on top: a row the reader moved to stays selected
     const cur = pal.items[pal.sel];
