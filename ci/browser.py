@@ -130,7 +130,8 @@ def checks(page, base: str, scheme: str) -> None:
     except Exception as err:  # say what the page was doing instead of stopping the run
         state = page.evaluate("""[...document.querySelectorAll('.moves-bar button')].map((b) => b.textContent + (b.disabled ? ':off' : ''))""")
         failures.append(f"[{scheme}] could not press Later ({type(err).__name__}): main re-rendered {churn}x in 3 s; "
-                        f"buttons {state}; presence {page.inner_text('#presence')!r}; {page.evaluate('location.hash')}")
+                        f"buttons {state}; presence {page.inner_text('#presence')!r}; {page.evaluate('location.hash')}; "
+                        f"main: {page.inner_html('#main')[:700]!r}")
         return
     try:
         page.wait_for_selector(".moves-bar.sent .sent-note", timeout=5000)
