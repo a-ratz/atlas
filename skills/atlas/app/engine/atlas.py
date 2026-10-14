@@ -369,6 +369,14 @@ class Index:
                 at = next(i for i, c in enumerate(self.commands) if c.get("name") == "sketch") + 1
                 self.commands = [*self.commands[:at], *(c for c in default_reg.get("commands") or [] if c.get("name") == "spec"),
                                  *self.commands[at:]]
+            if self.commands is not None and {c.get("name") for c in self.commands} == old_commands | {"expand-cards", "spec"}:
+                at = next(i for i, c in enumerate(self.commands) if c.get("name") == "map") + 1  # 0.9 learns /revisit (#52)
+                self.commands = [*self.commands[:at], *(c for c in default_reg.get("commands") or [] if c.get("name") == "revisit"),
+                                 *self.commands[at:]]
+            ins = self.types.get("insight")
+            if ins and [m.get("label") for m in ins.get("moves") or []] == ["🔗 Find connections", "⚔️ Challenge it", "🧭 Next research avenues"]:
+                ins["moves"] = [*ins["moves"], *(m for m in defaults.get("insight", {}).get("moves", [])
+                                                 if m.get("label") == "🔁 Revisit its source")]
             q = self.types.get("question")
             if q and [m.get("label") for m in q.get("moves") or []] == ["🔎 Research this"]:  # copied before 0.6.4
                 q["moves"] = [*q["moves"], *(m for m in defaults.get("question", {}).get("moves", [])
@@ -682,7 +690,7 @@ def is_operational(e: "Entity") -> bool:
 def needs_you(index: Index) -> dict:
     today = dt.date.today().isoformat()
     ents = index.entities.values()
-    revisits = sorted((e for e in ents if e.type == "insight" and _date(e.meta.get("revisit_after"))
+    revisits = sorted((e for e in ents if e.type == "insight" and not e.meta.get("superseded_by") and _date(e.meta.get("revisit_after"))
                        and _date(e.meta.get("revisit_after")) <= today), key=lambda e: e.title)
     pending_q = [e for e in ents if e.type == "question" and str(e.meta.get("status", "")).lower() in ("pending", "open")]
     dialogs: list = []
@@ -2165,7 +2173,8 @@ def suggestions(index: Index) -> list[str]:
     mapped = {i for m in maps for i in m.links}
     unmapped = [e for e in insights if e.id not in mapped]
     today = dt.date.today().isoformat()
-    due = [e for e in insights if _date(e.meta.get("revisit_after")) and _date(e.meta.get("revisit_after")) <= today]
+    due = [e for e in insights if not e.meta.get("superseded_by")  # a replaced claim is not re-checked (#53)
+           and _date(e.meta.get("revisit_after")) and _date(e.meta.get("revisit_after")) <= today]
     notes = [e for e in ents if e.type == "note" and str(e.meta.get("status")) == "new"]
     out = []
     if notes:
@@ -2193,7 +2202,7 @@ def suggestions(index: Index) -> list[str]:
     if len(unmapped) >= 5:
         out.append(f"{len(unmapped)} insight(s) belong to no map: offer to build the first map(s) (skill atlas-map)")
     if due:
-        out.append(f"{len(due)} insight(s) past revisit_after: offer to re-check their sources")
+        out.append(f"{len(due)} insight(s) past revisit_after: offer /revisit (skill atlas-revisit)")
     h = health(index)
     if h["total"]:
         parts = [f"{n} {label}" for n, label in ((h["frontmatter"], "with frontmatter problems"),

@@ -506,6 +506,12 @@ const commandSend = (name, args = "") => {
   const c = commandList().find((x) => x.name === name);
   return c ? (c.send || `/${c.name} {args}`).replace("{args}", args).trim() : `/${name} ${args}`.trim();
 };
+// The Revisit button sends the registry's `revisit` command, found by its name, never by matching wording: a vault's own
+// /revisit text is what the agent gets (#53). One due: "this insight", on that note; several: "all".
+function revisitButton(n, r) {
+  const send = commandSend("revisit", n.revisits_total > 1 ? "all" : "this insight");
+  return `<button class="btn primary" data-send="${esc(send)}" data-via="command" data-ctx="${esc(r.id)}">Revisit</button>`;
+}
 function needsItems(n) {
   const items = [];
   const c = n.captures?.[0];
@@ -522,7 +528,7 @@ function needsItems(n) {
   }
   const r = n.revisits?.[0];
   if (n.revisits_total && r) items.push({ key: "revisits", sig: n.sigs?.revisits ?? String(n.revisits_total), ico: svg("clock"), t: n.revisits_total > 1 ? `${n.revisits_total} revisits due` : "Revisit due",
-    s: `${esc(r.title)}${r.status ? ` · ${esc(r.status)}` : ""}${r.facts?.revisit_after ? ` · due ${esc(r.facts.revisit_after)}` : ""}`, acts: `<a class="btn" href="#/e/${enc(r.id)}">Open</a>` });
+    s: `${esc(r.title)}${r.status ? ` · ${esc(r.status)}` : ""}${r.facts?.revisit_after ? ` · due ${esc(r.facts.revisit_after)}` : ""}`, acts: revisitButton(n, r) + `<a class="btn" href="#/e/${enc(r.id)}">Open</a>` });
   const f = n.fixes?.[0];
   if (n.fixes_total && f) items.push({ key: "fixes", sig: n.sigs?.fixes ?? String(n.fixes_total), ico: `<span style="color:var(--bad);display:inline-flex">${svg("link")}</span>`, t: `${n.fixes_total} note${n.fixes_total > 1 ? "s need" : " needs"} a fix`,
     s: `${esc(f.title)}: ${esc(String(f.issues?.[0] || "").replace(/[`*]/g, ""))}`, acts: `<button class="btn mono" data-send="/check" data-via="command">/check</button>` });
