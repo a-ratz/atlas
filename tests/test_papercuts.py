@@ -118,3 +118,39 @@ def test_a_fact_naming_a_title_with_quotes_links_it(engine, vault):
         "---\nstatus: open\nraised: 2026-10-01\naffects: '[[What \"working\" means]]'\n---\n\n# Q\n", encoding="utf-8")
     view = engine.entity_view(engine.Index(), "questions/q.md")
     assert view["fact_links"]['What "working" means']["id"] == "insights/what-working-means.md"
+
+
+def test_status_survives_another_service_on_the_port(engine, vault, capsys):
+    # a service answering `[]` or `{"vault_path": null}` on the saved port crashed `status` (#18, round 5)
+    import http.server
+    import threading
+    for body in (b"[]", b'{"vault_path": null}'):
+        handler = type("H", (http.server.BaseHTTPRequestHandler,), {
+            "do_GET": lambda self, b=body: (self.send_response(200), self.end_headers(), self.wfile.write(b)),
+            "log_message": lambda *a: None})
+        server = http.server.HTTPServer(("127.0.0.1", 0), handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        try:
+            engine.ensure_state()
+            engine.SESSION.write_text(json.dumps({"mode": "operator", "port": server.server_port}), encoding="utf-8")
+            engine.cmd_status(Namespace())
+            assert json.loads(capsys.readouterr().out)["running"] is False
+        finally:
+            server.shutdown()
+
+
+def test_fact_links_resolve_before_escaping():
+    # `affects: [[Latency < 1 ms]]` was looked up as "Latency &lt; 1 ms" and lost its link (#18, round 5)
+    import shutil
+    from conftest import APP
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    js = (APP / "engine" / "static" / "app.js").read_text(encoding="utf-8")
+    pieces = [re.search(p, js, re.S).group(0) for p in (r"const esc = .*?;\n", r"const enc = .*?;\n",
+                                                          r"function factValue\(e, text\) \{.*?\n\}")]
+    probe = "\n".join(pieces) + """
+const e = {fact_links: {"Latency < 1 ms": {id: "insights/latency.md", title: "Latency < 1 ms"}}};
+console.log(factValue(e, "[[Latency < 1 ms]] and <b>"));"""
+    out = subprocess.run([node, "-e", probe], capture_output=True, text=True, encoding="utf-8").stdout.strip()
+    assert out == '<a href="#/e/insights%2Flatency.md">Latency &lt; 1 ms</a> and &lt;b&gt;', out

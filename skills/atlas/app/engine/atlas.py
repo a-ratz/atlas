@@ -1703,7 +1703,8 @@ def make_app(index: Index):
             if to:  # for one named agent; without it, every listening agent receives the message
                 record["to"] = to
             append_jsonl(INBOX, record)
-            return JSONResponse({"ok": True, "delivered": "agent", "ts": record["ts"]})
+            # outbox_at: how many answers there were when the message arrived; one numbered from it on came after
+            return JSONResponse({"ok": True, "delivered": "agent", "ts": record["ts"], "outbox_at": len(read_jsonl(OUTBOX))})
         path = write_note("note", context, f"[via {via}] {text}" if via else text, index)
         return JSONResponse({"ok": True, "delivered": "note", "note": path})
 
@@ -1749,7 +1750,8 @@ def make_app(index: Index):
         return JSONResponse({"ok": True, "path": path.relative_to(VAULT.resolve()).as_posix()})
 
     def chat_payload() -> dict:
-        items = read_jsonl(INBOX) + read_jsonl(OUTBOX)
+        outbox = [{**r, "n": i} for i, r in enumerate(read_jsonl(OUTBOX))]  # n: its place, to tell later from earlier
+        items = read_jsonl(INBOX) + outbox
         items.sort(key=lambda r: r.get("ts", ""))
         items = items[-200:]
         for m in items:
@@ -2889,9 +2891,11 @@ def serving(url: str | None) -> bool:
     import urllib.request
     try:
         with urllib.request.urlopen(url + "/api/meta", timeout=2) as r:
-            return Path(json.loads(r.read()).get("vault_path", "")).resolve() == VAULT.resolve()
+            meta = json.loads(r.read())
     except (OSError, ValueError):
         return False
+    path = meta.get("vault_path") if isinstance(meta, dict) else None  # another service may answer on the port
+    return isinstance(path, str) and bool(path) and Path(path).resolve() == VAULT.resolve()
 
 
 def cmd_expose(args) -> None:

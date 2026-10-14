@@ -72,6 +72,7 @@ def main() -> None:
                     follows_changes(ctx, srv, vault)
                     move_waits_for_its_own_answer(ctx, srv, vault)
                     move_ignores_late_history(ctx, srv, vault)
+                    move_survives_pickup(ctx, srv, vault)
                     moves_release(ctx, srv, vault)
                 ctx.close()
             empty_home_lists_notes(browser, Path(tmp))
@@ -110,9 +111,9 @@ def checks(page, base: str, scheme: str) -> None:
     if "…" in box[0] or not box[1]:
         failures.append(f"[{scheme}] a Home chip put {box[0]!r} in the box, selecting {box[1]!r} (#10)")
     page.goto(f"{base}/#/e/{urllib.parse.quote('questions/can-tmr-work-without-eeg.md', safe='')}")
-    page.wait_for_selector(".meta-row", timeout=15000)
-    row = page.inner_text(".meta-row")
-    if "[[" in row or "raised_count" in row or not page.query_selector(".meta-row a[href^='#/e/insights']"):
+    page.wait_for_selector(".reader-main h1:has-text('Can cueing work')", timeout=15000)  # this page, not the last
+    row = page.inner_text(".reader-main .meta-row", timeout=15000)
+    if "[[" in row or "raised_count" in row or not page.query_selector(".reader-main .meta-row a[href^='#/e/insights']"):
         failures.append(f"[{scheme}] the facts line shows {row!r} instead of a linked title (#10)")
     if scheme != "light":  # pressing a move writes to the chat, which the next pass expects empty
         return
@@ -302,8 +303,7 @@ def move_ignores_late_history(ctx, srv: Server, vault: Path) -> None:
     held, holding = [], [True]
     page.route("**/api/chat", lambda r: held.append(r) if holding[0] and r.request.method == "GET" else r.continue_())
     atlas(vault, "say", "An answer from before the move.", "--agent", "claude")
-    page.wait_for_timeout(2200)  # the click lands in a later second than that answer
-    page.click(".moves-bar [data-via='move']:has-text('Research this')")
+    page.click(".moves-bar [data-via='move']:has-text('Research this')")  # often in the same second (round 5)
     page.wait_for_selector(".moves-bar.sent", timeout=5000)
     holding[0] = False
     for r in held:  # the history arrives now, the earlier answer in it
@@ -319,6 +319,34 @@ def move_ignores_late_history(ctx, srv: Server, vault: Path) -> None:
         page.wait_for_selector(".moves-bar.sent", state="detached", timeout=10000)
     except Exception:
         failures.append("a sent move stays locked after its agent's answer (#18, review round 3)")
+    page.evaluate("localStorage.removeItem('atlas.to')")
+    page.close()
+
+
+def move_survives_pickup(ctx, srv: Server, vault: Path) -> None:
+    """An agent that picks a move up (working, then listening again) has not answered it (#18, review round 5)."""
+    import os
+    import time
+    beat = vault / ".atlas" / "agents" / "claude.beat"
+    beat.touch()
+    os.utime(beat, (time.time() - 60, time.time() - 60))  # claude listened a minute ago: a message makes it work
+    page = ctx.new_page()
+    page.goto(f"{srv.base}/#/e/{urllib.parse.quote('questions/do-cues-disturb-sleep.md', safe='')}")
+    page.wait_for_selector(".moves-bar", timeout=15000)
+    page.evaluate("localStorage.setItem('atlas.to', JSON.stringify('claude'))")
+    page.wait_for_timeout(2500)
+    page.click(".moves-bar [data-via='move']:has-text('Research this')")
+    page.wait_for_selector(".moves-bar.sent", timeout=5000)
+    page.wait_for_timeout(3000)  # working
+    os.utime(beat, (time.time() + 600, time.time() + 600))  # `wait` again: listening, nothing answered
+    page.wait_for_timeout(4000)
+    if not page.query_selector(".moves-bar.sent"):
+        failures.append("picking a move up freed it before any answer (#18, review round 5)")
+    atlas(vault, "say", "Done.", "--agent", "claude")
+    try:
+        page.wait_for_selector(".moves-bar.sent", state="detached", timeout=10000)
+    except Exception:
+        failures.append("a picked-up move stays locked after its answer (#18, review round 5)")
     page.evaluate("localStorage.removeItem('atlas.to')")
     page.close()
 
