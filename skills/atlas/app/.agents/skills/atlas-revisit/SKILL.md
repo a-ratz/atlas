@@ -16,8 +16,9 @@ found. Nothing is deleted.
 - `/revisit <insight>` or the move on an insight's page: that insight, due or
   not.
 - `/revisit` or `/revisit all`, the Needs you button: every insight in
-  `vault/insights/` whose `revisit_after` is today or earlier, oldest date
-  first, **at most five per run**. Say how many remain.
+  `vault/insights/` whose `revisit_after` is today or earlier and that has no
+  `superseded_by`, oldest date first, **at most five per run**. Say how many
+  remain.
 
 ## 2. Read the source as it stands now
 

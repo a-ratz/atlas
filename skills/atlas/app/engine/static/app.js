@@ -510,7 +510,7 @@ const commandSend = (name, args = "") => {
 // several due, the command with "all"; one due, the insight's revisit move on that note.
 function revisitButton(n, r) {
   const move = movesOf("insight").find((m) => /revisit/i.test(`${m.label || ""} ${m.send || ""}`));
-  const [send, via] = n.revisits_total > 1 || !move ? [commandSend("revisit", n.revisits_total > 1 ? "all" : "this insight"), "command"] : [move.send, "move"];
+  const [send, via] = n.revisits_total > 1 || !move ? [commandSend("revisit", n.revisits_total > 1 ? "all" : "this insight"), "command"] : [fillMove(move.send, r), "move"];
   return `<button class="btn primary" data-send="${esc(send)}" data-via="${via}" data-ctx="${esc(r.id)}">Revisit</button>`;
 }
 function needsItems(n) {
