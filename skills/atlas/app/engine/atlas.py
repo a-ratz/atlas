@@ -1268,12 +1268,13 @@ FRONT_LINE = re.compile(r"^\s*([\w-]+:|- |---$|$)")  # what a frontmatter line l
 def frontmatter_end(rel: str) -> int:
     """The line number (from 1) of a note's closing `---`; 0 without frontmatter."""
     try:
-        lines = (VAULT / rel).read_text(encoding="utf-8").splitlines()
+        lines = (VAULT / rel).read_text(encoding="utf-8", errors="replace").splitlines()  # as parse_file reads it
     except OSError:
         return 0
-    if not lines or lines[0].strip() != "---":
+    if not lines or lines[0].rstrip() != "---":
         return 0
-    return next((n + 1 for n, line in enumerate(lines[1:], 1) if line.strip() == "---"), 0)
+    # unindented only: an indented --- belongs to a block scalar (description: |)
+    return next((n + 1 for n, line in enumerate(lines[1:], 1) if line.rstrip() == "---"), 0)
 
 
 def snippet_text(snippet: str, title: str = "", keys: frozenset = frozenset(), front_end: int = 0) -> str:

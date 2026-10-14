@@ -370,3 +370,13 @@ def test_relative_qmd_paths_keep_their_meaning_in_the_vault(engine, vault, fake,
     monkeypatch.setenv("QMD_CONFIG_DIR", "conf")
     engine.qmd("status", index="atlas")
     assert fake.envs[-1]["QMD_CONFIG_DIR"] == str(tmp_path / "conf")
+
+
+def test_the_frontmatter_end_of_any_note(engine, vault):
+    # a non-UTF-8 byte made deep search answer 500; an indented --- in a block scalar ended the frontmatter early
+    (vault / "sources").mkdir(exist_ok=True)
+    (vault / "sources" / "latin1.md").write_bytes(b"---\ntitle: Caf\xe9\n---\n\nBody\n")
+    assert engine.frontmatter_end("sources/latin1.md") == 3
+    (vault / "sources" / "scalar.md").write_text("---\ndescription: |\n  one\n  ---\n  two\ndate: 2026\n---\nBody\n",
+                                                  encoding="utf-8")
+    assert engine.frontmatter_end("sources/scalar.md") == 7  # (#23, review round 2)
