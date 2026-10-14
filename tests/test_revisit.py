@@ -48,7 +48,8 @@ def test_the_revisit_skill_records_instead_of_deleting():
     skill = (APP / ".agents" / "skills" / "atlas-revisit" / "SKILL.md").read_text(encoding="utf-8")
     assert skill.startswith("---\nname: atlas-revisit\n")
     assert "**at most five per run**" in skill and "that has no\n  `superseded_by`" in skill and "superseded_by" in skill and "Do not rename or delete" in skill
-    assert "An earlier version said" in skill and "only if the text can\nstill change" in skill
+    assert "An earlier version said" in skill and "only if the text can still change" in skill
+    assert "A source you could not read\nkeeps a date for another try, final version or not" in skill  # final pass on #53
 
 
 def test_a_superseded_insight_is_not_due(engine, vault):

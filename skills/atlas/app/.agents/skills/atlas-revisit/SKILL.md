@@ -50,10 +50,12 @@ Leave the `source:` capture as it is: it records what was read back then.
   dated line, set `confidence: speculative`, and keep `revisit_after` for
   another try.
 
-Then set `revisit_after` again (about three months out) only if the text can
-still change. Remove it when the source has a final version now, or is stable
-by nature. A superseded insight loses its `revisit_after`; its replacement
-carries the date, if its source can still change.
+After a check that read the source, set `revisit_after` again (about three
+months out) only if the text can still change, and remove it when the source
+has a final version now or is stable by nature. A source you could not read
+keeps a date for another try, final version or not. A superseded insight
+loses its `revisit_after`; its replacement carries the date, if its source can
+still change.
 
 ## 4. Close the loop
 
