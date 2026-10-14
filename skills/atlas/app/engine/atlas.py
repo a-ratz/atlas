@@ -1014,7 +1014,7 @@ def entity_view(index: Index, eid: str) -> dict | None:
         "provenance": [e.card(index) for e in provenance(index, ent)],
         "map_nav": map_nav(index, ent, maps),
         "history": git_file_history(ent.id),
-        "log": thread_log(ent) if ent.type == "thread" else [],
+        "log": thread_log(ent, index) if ent.type == "thread" else [],
     }
     if ent.type == "project":
         view["project_view"] = project_view(index, ent)
@@ -1064,10 +1064,21 @@ def map_nav(index: Index, ent: "Entity", maps: list["Entity"]) -> dict | None:
 LOG_LINE = re.compile(r"^\s*[-*]\s+(\d{4}-\d{2}-\d{2})\s*\(([^)]+)\)\s*:\s*(.+?)\s*$", re.M)
 
 
-def thread_log(e: "Entity") -> list[dict]:
+def wiki_links(index: "Index | None", *texts) -> dict:
+    """Where the wiki links in short texts (log lines, a thread's next) point, for the front end's inline()."""
+    out = {}
+    for text in texts if index else ():
+        for target, _ in WIKI.findall(str(text or "")):
+            hit = index.resolve(target)
+            if hit:
+                out[target] = {"id": hit, "title": index.entities[hit].title}
+    return out
+
+
+def thread_log(e: "Entity", index: "Index | None" = None) -> list[dict]:
     """A thread's `## Log`: `- 2026-10-10 (claude): what happened`, oldest first as written."""
-    return [{"date": d, "agent": a.strip().lower(), "text": t, "thread": e.id, "title": e.title}
-            for d, a, t in LOG_LINE.findall(e.body)]
+    return [{"date": d, "agent": a.strip().lower(), "text": t, "thread": e.id, "title": e.title,
+             "links": wiki_links(index, t)} for d, a, t in LOG_LINE.findall(e.body)]
 
 
 def group_rules(group: "Entity | None") -> list[str]:
@@ -1086,7 +1097,7 @@ def project_summary(index: Index, p: "Entity", activity: dict[str, list[int]] | 
     threads = [e for e in mine if e.type == "thread"]
     open_threads = sorted((e for e in threads if str(e.status) == "open"),
                           key=lambda e: (index.touched.get(e.id) or "", e.mtime), reverse=True)
-    logs = sorted((line for t in threads for line in thread_log(t)), key=lambda l: l["date"])
+    logs = sorted((line for t in threads for line in thread_log(t, index)), key=lambda l: l["date"])
     last = logs[-1] if logs else None
     ops = [e for e in index.entities.values() if is_operational(e) and str(e.meta.get("project", "")) == p.project]
     co = resolve_checkout(p)
@@ -1100,7 +1111,8 @@ def project_summary(index: Index, p: "Entity", activity: dict[str, list[int]] | 
         "proposed": sum(1 for e in mine if e.type == "decision" and str(e.status) == "proposed"),
         "accepted": sum(1 for e in mine if e.type == "decision" and str(e.status) == "accepted"),
         "provisional": sum(1 for e in mine if e.type == "lesson" and str(e.status) == "provisional"),
-        "next": ({"text": _plain(open_threads[0].meta.get("next")), "thread": open_threads[0].id, "title": open_threads[0].title}
+        "next": ({"text": _plain(open_threads[0].meta.get("next")), "thread": open_threads[0].id, "title": open_threads[0].title,
+                  "links": wiki_links(index, open_threads[0].meta.get("next"))}
                  if open_threads and open_threads[0].meta.get("next") else None),
         "last": last,
         "operational": len(ops),
@@ -1139,7 +1151,7 @@ def project_view(index: Index, p: "Entity") -> dict:
     summary = project_summary(index, p, git_activity("projects"), live)
     mine = sorted((e for e in index.entities.values() if e.group == p.group and e.project == p.project and e.id != p.id),
                   key=member_order)
-    logs = sorted((line for e in mine if e.type == "thread" for line in thread_log(e)), key=lambda l: l["date"])
+    logs = sorted((line for e in mine if e.type == "thread" for line in thread_log(e, index)), key=lambda l: l["date"])
     by_date: dict[str, list[dict]] = {}
     for line in logs:
         by_date.setdefault(line["date"], []).append(line)
@@ -1166,7 +1178,7 @@ def project_view(index: Index, p: "Entity") -> dict:
     return {
         **summary,
         "threads": [member(e, next=_plain(e.meta.get("next")), blocked=_plain(e.meta.get("blocked")),
-                           branch=_plain(e.meta.get("branch")), log=thread_log(e)) for e in mine if e.type == "thread"],
+                           branch=_plain(e.meta.get("branch")), log=thread_log(e, index)) for e in mine if e.type == "thread"],
         "decisions": [member(e, superseded_by=(lambda h: h.card(index) if h else _plain(e.meta.get("superseded_by")))(
                           _find(index, e.meta.get("superseded_by")) if e.meta.get("superseded_by") else None))
                       for e in mine if e.type == "decision"],

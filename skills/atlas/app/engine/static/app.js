@@ -123,8 +123,20 @@ const typeLabel = (t) => typeOf(t)?.label ?? t;
 const stripEmoji = (s) => String(s || "").replace(/^[\p{Extended_Pictographic}️‍\s]+/u, "");
 const remember = (list) => { for (const e of list || []) if (e?.id) state.titles[e.id] = e.title; return list; };
 const titleOf = (id) => state.titles[id] || String(id || "").split("/").pop().replace(/\.md$/, "").replace(/[-_]/g, " ");
-const inline = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+const inlineText = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
   .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+// Short texts (a log line, a thread's next): wiki links become links with the note's title where the engine
+// resolved them (`links`), and plain words where it did not; never brackets.
+function inline(s, links) {
+  const text = String(s ?? "");
+  let out = "", last = 0;
+  for (const m of text.matchAll(/\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g)) {
+    const hit = links?.[m[1]];
+    out += inlineText(text.slice(last, m.index)) + (hit ? `<a href="#/e/${enc(hit.id)}">${esc(m[2] || hit.title)}</a>` : esc(m[2] || m[1]));
+    last = m.index + m[0].length;
+  }
+  return out + inlineText(text.slice(last));
+}
 
 // What a reader must know before trusting a page (polish must not make provisional material look accepted).
 function epistemic(e) {
@@ -1091,9 +1103,9 @@ function projectCard(p) {
   return `<article class="pcard${live ? " live" : ""}${p.status === "paused" ? " paused" : ""}" data-t="project">
     <div class="p-head">${g("project")}<a class="p-title" href="${pid}">${esc(p.title)}</a>${statusBadge(p.status)}${p.aliases?.length ? `<span class="p-alias">aka ${esc(p.aliases.join(", "))}</span>` : ""}</div>
     ${liveStrip(p.here || [])}
-    ${p.last ? `<div class="p-last"><span class="kicker">Last time · ${esc(shortDay(p.last.date))} · ${esc(agentName(p.last.agent))}</span><span class="txt">${inline(p.last.text)}</span></div>`
+    ${p.last ? `<div class="p-last"><span class="kicker">Last time · ${esc(shortDay(p.last.date))} · ${esc(agentName(p.last.agent))}</span><span class="txt">${inline(p.last.text, p.last.links)}</span></div>`
       : p.description ? `<div class="p-last"><span class="txt" style="color:var(--soft)">${esc(p.description)}</span></div>` : ""}
-    ${p.next ? `<div class="p-next">${svg("arrow", "sm")}<span><b>Next:</b> ${inline(p.next.text)}</span></div>` : ""}
+    ${p.next ? `<div class="p-next">${svg("arrow", "sm")}<span><b>Next:</b> ${inline(p.next.text, p.next.links)}</span></div>` : ""}
     <div class="p-stats">
       <a href="${pid}"><span class="n${p.open ? "" : " zero"}">${p.open}</span><span class="l">open threads${p.blocked ? ` · ${p.blocked} blocked` : ""}</span></a>
       <a href="${pid}"><span class="n${p.proposed ? " acc" : " zero"}">${p.proposed}</span><span class="l">to decide</span></a>
@@ -1189,8 +1201,8 @@ function renderProject(e) {
         ${ls ? `<section class="left-off panel" aria-labelledby="left-h">
           <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px"><span class="kicker">Where we left off</span>
             <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--soft)">${[...new Set(ls.lines.map((l) => l.agent))].map((a) => avatar(a, "s")).join("")}${esc(dayLabel(ls.date))} · ${esc([...new Set(ls.lines.map((l) => agentName(l.agent)))].join(" and "))}</span></div>
-          <h2 id="left-h" class="h-serif">${inline(ls.lines.at(-1).text)}</h2>
-          ${ls.lines.length > 1 ? `<div class="lines">${ls.lines.map((l) => `<div class="line">${avatar(l.agent, "s")}<div><a class="th" href="#/e/${enc(l.thread)}">${esc(l.title)}</a>${inline(l.text)}</div></div>`).join("")}</div>`
+          <h2 id="left-h" class="h-serif">${inline(ls.lines.at(-1).text, ls.lines.at(-1).links)}</h2>
+          ${ls.lines.length > 1 ? `<div class="lines">${ls.lines.map((l) => `<div class="line">${avatar(l.agent, "s")}<div><a class="th" href="#/e/${enc(l.thread)}">${esc(l.title)}</a>${inline(l.text, l.links)}</div></div>`).join("")}</div>`
             : `<div class="lines"><a class="th" href="#/e/${enc(ls.lines[0].thread)}">${esc(ls.lines[0].title)}</a></div>`}
           ${ls.commits?.length ? `<div class="chips" style="align-items:center;font-size:12.5px;color:var(--faint)"><span>commits</span>${ls.commits.map((c) => `<span class="badge" title="${esc(c.subject)}">${esc(c.sha.slice(0, 7))}</span>`).join("")}</div>` : ""}
         </section>` : ""}
@@ -1207,7 +1219,7 @@ function renderProject(e) {
                 ${t.branch ? `<span class="badge" style="margin-left:auto">${esc(t.branch)}</span>` : ""}</div>
               ${t.next ? `<div class="row"><span class="k">next</span><span>${inline(String(t.next))}</span></div>` : ""}
               ${t.blocked ? `<div class="row"><span class="k warn">blocked</span><span class="blk">${inline(String(t.blocked))}</span></div>` : ""}
-              ${t.log?.length ? `<ol class="log">${t.log.slice(-2).map((l) => `<li><span class="w">${esc(shortDay(l.date))} · ${esc(l.agent)}</span> ${inline(l.text)}</li>`).join("")}</ol>` : ""}
+              ${t.log?.length ? `<ol class="log">${t.log.slice(-2).map((l) => `<li><span class="w">${esc(shortDay(l.date))} · ${esc(l.agent)}</span> ${inline(l.text, l.links)}</li>`).join("")}</ol>` : ""}
               ${continueMove ? `<div><button class="btn" data-send="${esc(fillMove(continueMove.send, t))}" data-via="move" data-ctx="${esc(t.id)}">${esc(stripEmoji(continueMove.label))}</button></div>` : ""}
             </article>`; }).join("")}</div>` : `<div class="empty">No open threads.</div>`}
           ${closed.length ? `<details style="margin-top:10px"><summary style="cursor:pointer;color:var(--soft);font-size:13px">${closed.length} closed thread${closed.length > 1 ? "s" : ""}</summary><ul class="mini-list" style="margin-top:10px">${closed.map((t) => `<li data-t="thread">${g("thread")}<a href="#/e/${enc(t.id)}">${esc(t.title)}</a>${lastLine(t) ? `<span class="when">${esc(rel(lastLine(t).date))}</span>` : ""}</li>`).join("")}</ul></details>` : ""}
@@ -1252,7 +1264,7 @@ function renderProject(e) {
         </div></section>
         ${pv.sessions?.length ? `<section><h3 class="kicker" style="margin:0 0 12px">Sessions</h3><ol class="timeline">${pv.sessions.map((s) => {
           const agents = [...new Set(s.lines.map((l) => l.agent))];
-          return `<li><span class="dot" style="--av:var(--agent-${agentSlot(agents[0])})"></span><div><span class="w">${esc(shortDay(s.date))} · ${esc(agents.join(", "))}</span><span class="t">${inline(s.lines.at(-1).text)}</span></div></li>`; }).join("")}</ol></section>` : ""}
+          return `<li><span class="dot" style="--av:var(--agent-${agentSlot(agents[0])})"></span><div><span class="w">${esc(shortDay(s.date))} · ${esc(agents.join(", "))}</span><span class="t">${inline(s.lines.at(-1).text, s.lines.at(-1).links)}</span></div></li>`; }).join("")}</ol></section>` : ""}
         ${pv.group_rules?.length ? `<section><h3 class="kicker" style="margin:0 0 12px">Rules of ${esc(e.group)}</h3><ul class="mini-list">${pv.group_rules.map((r) => `<li style="white-space:normal;align-items:flex-start">${svg("shield", "sm")}<span style="white-space:normal;color:var(--soft)">${inline(r)}</span></li>`).join("")}</ul></section>` : ""}
         ${(pv.outlinks?.length || pv.backlinks?.length) ? `<section><h3 class="kicker" style="margin:0 0 12px">Came from, feeds into</h3><ul class="mini-list">${[...pv.outlinks, ...pv.backlinks].map((x) => `<li data-t="${esc(x.type)}">${g(x.type)}<a href="#/e/${enc(x.id)}">${esc(typeLabel(x.type))}: ${esc(x.title)}</a></li>`).join("")}</ul></section>` : ""}
         <section><h3 class="kicker" style="margin:0 0 8px">File</h3><div class="path">${esc(e.path)}</div></section>

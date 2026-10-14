@@ -905,7 +905,7 @@ files:
 
     ## Log
     - {{day:-4}} (codex): Wrist data rejected for timing, see the decision.
-    - {{day:0}} (codex): Headband SDK arrived; phase API looks usable.
+    - {{day:0}} (codex): Headband SDK arrived; phase API looks usable. Why it matters: [[cueing-at-home-needs-eeg]].
   projects/private/nightlight/threads/tester-recruiting.md: |
     ---
     status: open

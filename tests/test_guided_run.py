@@ -48,3 +48,17 @@ def test_the_idea_skills_answer_what_the_operators_asked():
     assert "the rules they test" in spec and "prior art, not a question" in spec
     assert "when prior art exists" not in spec  # the hand-over follows the same rule (#25, review round 1)
     assert "No code yet" in proj
+
+
+def test_log_lines_carry_their_links(engine, vault):
+    # "Where we left off" showed [[when-an-effect-reaches-along-a-line-check-the-whole-line]] as written (#27)
+    (vault / "insights" / "Ice reaches along a line.md").write_text("---\ndescription: d\n---\n\n# Ice reaches along a line\n",
+                                                                     encoding="utf-8")
+    folder = vault / "projects" / "private" / "terrain" / "threads"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "slice.md").write_text("---\nstatus: open\n---\n\n# Slice\n\n## Log\n"
+                                     "- 2026-10-14 (claude): stop rule fired, see [[Ice reaches along a line]].\n", encoding="utf-8")
+    index = engine.Index()
+    line = engine.thread_log(index.entities["projects/private/terrain/threads/slice.md"], index)[0]
+    assert line["links"] == {"Ice reaches along a line": {"id": "insights/Ice reaches along a line.md",
+                                                          "title": "Ice reaches along a line"}}

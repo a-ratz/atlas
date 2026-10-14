@@ -482,7 +482,8 @@ details.rest-group[open] summary { margin-bottom: 10px; }
 .reader pre { background: var(--sunk); border: 1px solid var(--line-2); padding: 14px 16px; border-radius: 10px; overflow-x: auto; }
 .reader pre code { background: none; padding: 0; font-size: 13px; line-height: 1.55; }
 .reader table { border-collapse: collapse; font: 14px/1.45 var(--sans); margin: 1em 0; display: block; overflow-x: auto; }
-.reader th, .reader td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+.reader th, .reader td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top;
+  overflow-wrap: break-word; }  /* .reader's "anywhere" let a column shrink to one letter: Terr|ain */
 .reader th { background: var(--raised); color: var(--text); }
 .reader hr { border: none; border-top: 1px solid var(--line); margin: 2em 0; }
 .reader a { color: var(--text); text-decoration: underline; text-decoration-color: var(--dim); text-underline-offset: 3px; }
