@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terrain Only</title>
+<style>
+  :root {
+    --bg: #f4f1ea; --panel: #fffdf8; --text: #222; --muted: #6b665c; --line: #cfc8b8;
+    --ground: #d9cfbd; --grass: #8bbf5a; --water: #4aa3df; --ice: #d8f3f8; --fire: #f06a3c;
+    --wall: #4d4a45; --chasm: #16130f; --stone: #a9a39a; --strike: #c62828; --accent: #2d6cdf;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.4 system-ui, sans-serif; }
+  main { display: flex; flex-wrap: wrap; gap: 20px; padding: 16px; align-items: flex-start; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 12px; }
+  #board { display: grid; grid-template-columns: 22px repeat(6, 72px); grid-template-rows: 22px repeat(6, 72px); gap: 3px; }
+  .label { display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; }
+  .cell { position: relative; border-radius: 4px; display: flex; align-items: center; justify-content: center;
+          font-weight: 700; font-size: 22px; cursor: pointer; user-select: none; border: 2px solid transparent; }
+  .cell * { pointer-events: none; } /* the tile itself takes the mouse, never its badges */
+  .t-ground { background: var(--ground); } .t-grass { background: var(--grass); } .t-water { background: var(--water); }
+  .t-ice { background: var(--ice); border-color: #9ccfd8; } .t-fire { background: var(--fire); }
+  .t-wall { background: var(--wall); cursor: default; } .t-chasm { background: var(--chasm); cursor: default; }
+  .t-stone { background: var(--stone); cursor: default; }
+  .unit { background: #fff; border: 2px solid #333; border-radius: 50%; width: 44px; height: 44px; display: flex;
+          align-items: center; justify-content: center; font-size: 17px; }
+  .unit.C { border-radius: 6px; }
+  .player { background: #333; color: #fff; border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
+  .age { position: absolute; left: 4px; top: 2px; font-size: 11px; font-weight: 600; color: #3a1405; }
+  .intent { position: absolute; right: 3px; top: 2px; font-size: 13px; font-weight: 700; color: #1a1a1a;
+            background: rgba(255,255,255,.85); border-radius: 3px; padding: 0 3px; }
+  .path { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 26px; color: rgba(0,0,0,.45); pointer-events: none; }
+  .strikes { position: absolute; left: 2px; top: 2px; right: 2px; font-size: 11px; color: #fff; background: var(--strike);
+             border-radius: 3px; text-align: center; font-weight: 600; }
+  .t-stone .player { margin-top: 14px; width: 36px; height: 36px; font-size: 17px; }
+  .pv-catch { box-shadow: inset 0 0 0 4px #ff9800; } .pv-out { box-shadow: inset 0 0 0 4px #8d6e63; }
+  .ghost { position: absolute; left: 3px; bottom: 2px; font-size: 13px; color: #111; background: rgba(255,255,255,.8); border: 1px dashed #111; border-radius: 3px; padding: 0 3px; }
+  .death { position: absolute; left: 3px; bottom: 2px; font-size: 12px; color: #fff; background: #111; border-radius: 3px; padding: 0 3px; }
+  .hover { border-color: var(--accent); }
+  .side { width: 380px; max-width: 100%; display: flex; flex-direction: column; gap: 12px; }
+  .box { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button, select { font: inherit; padding: 6px 10px; border-radius: 5px; border: 1px solid var(--line); background: #fff; cursor: pointer; }
+  button.sel { outline: 3px solid var(--accent); }
+  button:disabled { opacity: .4; cursor: default; }
+  .sw { display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+  #status { font-weight: 600; } #banner { font-weight: 700; color: var(--accent); }
+  #preview { min-height: 2.8em; color: var(--muted); }
+  table { border-collapse: collapse; font-size: 13px; } td { padding: 2px 6px 2px 0; vertical-align: top; } td:first-child { white-space: nowrap; }
+  ol { margin: 4px 0 0 18px; padding: 0; font-size: 13px; }
+  #log { font-size: 13px; max-height: 180px; overflow: auto; }
+  #log div { border-bottom: 1px solid #eee; padding: 2px 0; }
+</style>
+</head>
+<body>
+<main>
+  <section>
+    <h1>Terrain Only</h1>
+    <p class="sub">You cannot attack. Change one tile a turn; the terrain does the killing.</p>
+    <div id="board"></div>
+    <p id="preview"></p>
+  </section>
+  <section class="side">
+    <div class="box">
+      <div class="row">
+        <select id="pick"></select>
+        <button id="restart">Restart</button>
+      </div>
+      <p id="status"></p>
+      <p id="banner"></p>
+    </div>
+    <div class="box">
+      <div class="row" id="terrains"></div>
+      <div class="row" style="margin-top:8px"><button id="pass">Pass</button></div>
+    </div>
+    <div class="box">
+      <table>
+        <tr><td><span class="sw t-grass"></span>grass</td><td>catches fire if next to fire</td></tr>
+        <tr><td><span class="sw t-water"></span>water</td><td>a unit that enters it drowns</td></tr>
+        <tr><td><span class="sw t-ice"></span>ice</td><td>a unit that steps on slides one tile on, further only over ice</td></tr>
+        <tr><td><span class="sw t-fire"></span>fire</td><td>kills a unit on or entering it; burns out after 2 turns (number = turns burnt)</td></tr>
+        <tr><td><span class="sw t-chasm"></span>chasm</td><td>a unit that enters it falls</td></tr>
+        <tr><td><span class="sw t-wall"></span>wall</td><td>blocks everything</td></tr>
+      </table>
+      <p style="margin:6px 0 0;font-size:13px"><b>W</b> walker: walks to you, never into water, chasm or fire. <b>C</b> charger: once it sees you, runs at you through anything. Numbers show who acts first; a badge shows where each goes next (1↓ one step, 1↓↓ a charge, 1· stays). Red = a strike that lands if nothing stops it.</p>
+      <ol>
+        <li>You change one empty tile (or pass).</li>
+        <li>Fire: old fires burn out, grass next to fire catches, units on fire die.</li>
+        <li>Enemies act in number order.</li>
+        <li>Enemies announce their next move.</li>
+      </ol>
+    </div>
+    <div class="box">
+      <div class="row"><b>Log</b><button id="download">Download log</button></div>
+      <div id="log"></div>
+    </div>
+  </section>
+</main>
+
+<script id="engine">
+// The resolver: RULES.md, in code. No DOM here; tests/run.mjs loads this block in node.
+var TO = (function () {
+  "use strict";
+  var N = 6, COLS = "abcdef", TURN_LIMIT = 10, HP = 3;
+  var CHARGES = { grass: 4, water: 2, ice: 2, fire: 2 };
+  var PLACEABLE = ["grass", "water", "ice", "fire"];
+  var CHANGEABLE = { ground: true, grass: true, water: true, ice: true, fire: true };
+  var DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // up, right, down, left
+  var SYMBOL = { ".": "ground", g: "grass", "~": "water", i: "ice", O: "chasm", "#": "wall", "@": "stone" };
+  var CAUSE = { water: "drowned", chasm: "fell", fire: "burned" };
+
+  // Same boards as BOARDS.md (tests/run.mjs checks that they match).
+  var BOARDS = [
+    { name: "Door", rows: ["......", "......", "..g.g.", ".O...O", "..#.#.", "..#@#."],
+      variants: { A: [["W", "a1"], ["C", "c1"], ["W", "f2"]], B: [["C", "a1"], ["W", "c1"], ["W", "f1"]] } },
+    { name: "Meadow", rows: ["......", "..ggg.", ".#g.g.", "..ggg.", ".....O", "@....."],
+      variants: { A: [["W", "f1"], ["W", "c1"], ["C", "f6"]], B: [["C", "c1"], ["W", "f3"], ["W", "f1"]] } },
+    { name: "Rink", rows: ["......", "..ii..", "O.....", "##..##", "......", "...@.."],
+      variants: { A: [["W", "a1"], ["W", "f2"], ["C", "c1"]], B: [["C", "f1"], ["W", "a1"], ["W", "c1"]] } }
+  ];
+
+  function name(x, y) { return COLS[x] + (y + 1); }
+  function parse(n) { return [COLS.indexOf(n[0]), Number(n.slice(1)) - 1]; }
+  function inside(x, y) { return x >= 0 && y >= 0 && x < N && y < N; }
+  function tile(s, x, y) { return s.tiles[y * N + x]; }
+  function alive(s) { return s.enemies.filter(function (e) { return e.alive; }); }
+  function enemyAt(s, x, y) {
+    for (var i = 0; i < s.enemies.length; i++) {
+      var e = s.enemies[i];
+      if (e.alive && e.x === x && e.y === y) return e;
+    }
+    return null;
+  }
+  function occupied(s, x, y) { return (x === s.player.x && y === s.player.y) || !!enemyAt(s, x, y); }
+  function walkable(t) { return t === "ground" || t === "grass" || t === "ice"; }
+  function deadly(t) { return t === "water" || t === "chasm" || t === "fire"; }
+  function nextTo(ax, ay, bx, by) { return Math.abs(ax - bx) + Math.abs(ay - by) === 1; }
+  function clone(s) { return JSON.parse(JSON.stringify(s)); }
+
+  function newGame(board, variant, rules) {
+    var b = BOARDS[board];
+    var s = {
+      board: board, variant: variant, name: b.name, turn: 1, status: "play", result: "",
+      rules: { ice: (rules && rules.ice) || "ice" }, // "line": the spec's first ice rule (paper run 1)
+      tiles: [], player: null, enemies: [], charges: Object.assign({}, CHARGES), placements: [],
+      log: { kills: [], damage: [], moves: [] }
+    };
+    for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) {
+      var t = SYMBOL[b.rows[y][x]];
+      s.tiles.push({ t: t, age: 0, src: [] });
+      if (t === "stone") s.player = { x: x, y: y, hp: HP };
+    }
+    b.variants[variant].forEach(function (sp, i) {
+      var p = parse(sp[1]);
+      s.enemies.push({ id: i + 1, kind: sp[0], x: p[0], y: p[1], alive: true, intent: null });
+    });
+    announce(s);
+    return s;
+  }
+
+  // Shortest path lengths to the targets over ground, grass and ice; units do not count.
+  function distances(s, targets) {
+    var d = [], queue = [];
+    for (var i = 0; i < N * N; i++) d.push(Infinity);
+    targets.forEach(function (p) { d[p[1] * N + p[0]] = 0; queue.push(p); });
+    for (var q = 0; q < queue.length; q++) {
+      var x = queue[q][0], y = queue[q][1];
+      DIRS.forEach(function (dv) {
+        var nx = x + dv[0], ny = y + dv[1];
+        if (!inside(nx, ny) || !walkable(tile(s, nx, ny).t) || d[ny * N + nx] !== Infinity) return;
+        d[ny * N + nx] = d[y * N + x] + 1;
+        queue.push([nx, ny]);
+      });
+    }
+    return d;
+  }
+
+  // First step of a shortest path: free, unclaimed, closest to the player as the crow flies,
+  // then up, right, down, left. Null when there is no path or the unit is already there.
+  function firstStep(s, e, targets, claimed) {
+    var d = distances(s, targets), here = d[e.y * N + e.x], best = null, bestCrow = Infinity;
+    if (here === Infinity || here === 0) return null;
+    DIRS.forEach(function (dv) {
+      var nx = e.x + dv[0], ny = e.y + dv[1];
+      if (!inside(nx, ny) || d[ny * N + nx] !== here - 1) return;
+      if (occupied(s, nx, ny) || claimed[name(nx, ny)]) return;
+      var crow = (nx - s.player.x) * (nx - s.player.x) + (ny - s.player.y) * (ny - s.player.y);
+      if (crow < bestCrow) { best = { x: nx, y: ny, dir: dv }; bestCrow = crow; }
+    });
+    return best;
+  }
+
+  function walkerTargets(s) {
+    return DIRS.map(function (dv) { return [s.player.x + dv[0], s.player.y + dv[1]]; })
+      .filter(function (p) { return inside(p[0], p[1]) && walkable(tile(s, p[0], p[1]).t); });
+  }
+
+  // Tiles in the player's row or column with no wall between them and the player.
+  function chargerTargets(s) {
+    var out = [];
+    DIRS.forEach(function (dv) {
+      for (var k = 1; ; k++) {
+        var x = s.player.x + dv[0] * k, y = s.player.y + dv[1] * k;
+        if (!inside(x, y) || tile(s, x, y).t === "wall") break;
+        if (walkable(tile(s, x, y).t)) out.push([x, y]);
+      }
+    });
+    return out;
+  }
+
+  function sees(s, e) {
+    var dx = Math.sign(s.player.x - e.x), dy = Math.sign(s.player.y - e.y);
+    if ((dx !== 0) === (dy !== 0)) return null;
+    for (var x = e.x + dx, y = e.y + dy; x !== s.player.x || y !== s.player.y; x += dx, y += dy) {
+      if (tile(s, x, y).t === "wall" || enemyAt(s, x, y)) return null;
+    }
+    return [dx, dy];
+  }
+
+  // Where a charge in direction dir ends on the board as it is now.
+  function chargePath(s, e, dir) {
+    var x = e.x, y = e.y, path = [];
+    for (;;) {
+      var nx = x + dir[0], ny = y + dir[1];
+      if (!inside(nx, ny) || tile(s, nx, ny).t === "wall") return { path: path, x: x, y: y, hits: false, death: null };
+      if (nx === s.player.x && ny === s.player.y) return { path: path, x: x, y: y, hits: true, death: null };
+      if (enemyAt(s, nx, ny)) return { path: path, x: x, y: y, hits: false, death: null };
+      x = nx; y = ny; path.push([x, y]);
+      var t = tile(s, x, y).t;
+      if (deadly(t)) return { path: path, x: x, y: y, hits: false, death: t };
+    }
+  }
+
+  // Step 4.
+  function announce(s) {
+    var claimed = {};
+    alive(s).forEach(function (e) {
+      var it, st;
+      if (e.kind === "W") {
+        if (nextTo(e.x, e.y, s.player.x, s.player.y)) it = { type: "stay", strike: true };
+        else {
+          st = firstStep(s, e, walkerTargets(s), claimed);
+          it = st ? { type: "step", x: st.x, y: st.y, dir: st.dir, strike: nextTo(st.x, st.y, s.player.x, s.player.y) }
+                  : { type: "stay", strike: false };
+        }
+      } else {
+        var dir = sees(s, e);
+        if (dir) {
+          var run = chargePath(s, e, dir);
+          it = { type: "charge", dir: dir, strike: run.hits, path: run.path };
+        } else {
+          st = firstStep(s, e, chargerTargets(s), claimed);
+          it = st ? { type: "step", x: st.x, y: st.y, dir: st.dir, strike: false } : { type: "stay", strike: false };
+        }
+      }
+      if (it.type === "step") claimed[name(it.x, it.y)] = true;
+      e.intent = it;
+    });
+  }
+
+  function patternOf(s, ids) {
+    var names = [];
+    ids.forEach(function (id) {
+      var t = s.placements[id].terrain;
+      if (names[names.length - 1] !== t) names.push(t);
+    });
+    if (!names.length) return "board";
+    if (names.length === 1) return names[0];
+    return names.slice(0, -1).join(", ") + ", then " + names[names.length - 1];
+  }
+
+  function kill(s, e, cause, srcs, ev) {
+    e.alive = false;
+    var ids = srcs.filter(function (id, i) { return srcs.indexOf(id) === i; }).sort(function (a, b) { return a - b; });
+    var k = { turn: s.turn, enemy: e.id, kind: e.kind, cause: cause, tile: name(e.x, e.y), pattern: patternOf(s, ids),
+              chain: ids.map(function (id) { return s.placements[id].terrain + " " + s.placements[id].tile; }) };
+    s.log.kills.push(k);
+    ev.kills.push(k);
+  }
+
+  function hit(s, e, ev) {
+    s.player.hp--;
+    var d = { turn: s.turn, enemy: e.id };
+    s.log.damage.push(d);
+    ev.damage.push(d);
+    if (s.player.hp <= 0) { s.status = "lost"; s.result = "no hit points left"; }
+  }
+
+  function legal(s, c) {
+    if (!c) return true;
+    if (!inside(c.x, c.y) || PLACEABLE.indexOf(c.terrain) < 0) return false;
+    var t = tile(s, c.x, c.y);
+    return !!CHANGEABLE[t.t] && t.t !== c.terrain && !occupied(s, c.x, c.y) && s.charges[c.terrain] > 0;
+  }
+
+  // Step 1.
+  function applyChange(s, c) {
+    if (!c) return;
+    var t = tile(s, c.x, c.y), id = s.placements.length;
+    s.placements.push({ id: id, turn: s.turn, terrain: c.terrain, tile: name(c.x, c.y) });
+    t.t = c.terrain; t.age = 0; t.src = [id];
+    s.charges[c.terrain]--;
+  }
+
+  // Step 2.
+  function terrainStep(s, ev) {
+    s.tiles.forEach(function (t, i) {
+      if (t.t === "fire" && t.age >= 2) { t.t = "ground"; t.age = 0; t.src = []; ev.burnedOut.push(i); }
+    });
+    var catching = [];
+    s.tiles.forEach(function (t, i) {
+      if (t.t !== "grass") return;
+      var x = i % N, y = (i - x) / N, src = t.src.slice(), lit = false;
+      DIRS.forEach(function (dv) {
+        var nx = x + dv[0], ny = y + dv[1];
+        if (inside(nx, ny) && tile(s, nx, ny).t === "fire") { lit = true; src = src.concat(tile(s, nx, ny).src); }
+      });
+      if (lit) catching.push([i, src]);
+    });
+    catching.forEach(function (c) {
+      var t = s.tiles[c[0]];
+      t.t = "fire"; t.age = 0; t.src = c[1].filter(function (id, i) { return c[1].indexOf(id) === i; });
+      ev.caught.push(c[0]);
+    });
+    alive(s).forEach(function (e) {
+      var t = tile(s, e.x, e.y);
+      if (t.t === "fire") kill(s, e, "burned", t.src, ev);
+    });
+    s.tiles.forEach(function (t) { if (t.t === "fire") t.age++; });
+  }
+
+  function slide(s, e, dir, srcs, ev) {
+    for (;;) {
+      var nx = e.x + dir[0], ny = e.y + dir[1];
+      if (!inside(nx, ny)) return;
+      var t = tile(s, nx, ny);
+      if (t.t === "wall" || t.t === "stone" || occupied(s, nx, ny)) return;
+      e.x = nx; e.y = ny;
+      if (deadly(t.t)) { kill(s, e, CAUSE[t.t], srcs.concat(t.src), ev); return; }
+      if (t.t === "ice") srcs = srcs.concat(t.src);
+      else if (s.rules.ice !== "line") return;
+    }
+  }
+
+  // Step 3.
+  function enemyStep(s, ev) {
+    s.enemies.forEach(function (e) {
+      if (!e.alive || s.status !== "play") return;
+      var it = e.intent;
+      if (it.type === "charge") {
+        var run = chargePath(s, e, it.dir);
+        e.x = run.x; e.y = run.y;
+        if (run.death) kill(s, e, CAUSE[run.death], tile(s, e.x, e.y).src, ev);
+        else if (it.strike && run.hits) hit(s, e, ev);
+        return;
+      }
+      if (it.type === "step") {
+        var t = tile(s, it.x, it.y);
+        if (deadly(t.t)) ev.blocked.push(e.id);
+        else if (!occupied(s, it.x, it.y)) {
+          e.x = it.x; e.y = it.y;
+          if (t.t === "ice") slide(s, e, it.dir, t.src.slice(), ev);
+        }
+      }
+      if (e.alive && it.strike && nextTo(e.x, e.y, s.player.x, s.player.y)) hit(s, e, ev);
+    });
+  }
+
+  // Steps 1 to 3 on s itself. The preview runs exactly this on a copy.
+  function resolve(s, c) {
+    var ev = { caught: [], burnedOut: [], kills: [], damage: [], blocked: [] };
+    applyChange(s, c);
+    terrainStep(s, ev);
+    if (alive(s).length) enemyStep(s, ev);
+    return ev;
+  }
+
+  function play(s, c, hovers) {
+    if (s.status !== "play") throw new Error("the board is over");
+    if (!legal(s, c)) throw new Error("illegal change");
+    var turn = s.turn, ev = resolve(s, c);
+    s.log.moves.push({ turn: turn, change: c ? c.terrain + " " + name(c.x, c.y) : "pass", hovers: hovers || 0 });
+    if (s.status === "play") {
+      if (!alive(s).length) { s.status = "won"; s.result = "won on turn " + turn; }
+      else if (turn >= TURN_LIMIT) { s.status = "lost"; s.result = "turn " + TURN_LIMIT + " ended with enemies left"; }
+      else { s.turn++; announce(s); }
+    }
+    return ev;
+  }
+
+  function preview(s, c) {
+    var copy = clone(s);
+    return { events: resolve(copy, c), state: copy };
+  }
+
+  function options(s) {
+    var out = [null];
+    for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) PLACEABLE.forEach(function (t) {
+      var c = { x: x, y: y, terrain: t };
+      if (legal(s, c)) out.push(c);
+    });
+    return out;
+  }
+
+  // The greedy policy (RULES.md): most kills + blocks this turn; ties: kills, fewer hit
+  // points lost, passing, then the order of options() (reading order, grass water ice fire).
+  function greedy(s) {
+    var best, bestKey;
+    options(s).forEach(function (c) {
+      var ev = preview(s, c).events;
+      var key = [ev.kills.length + ev.blocked.length, ev.kills.length, -ev.damage.length, c ? 0 : 1];
+      for (var i = 0; bestKey && i < key.length && key[i] === bestKey[i]; i++);
+      if (!bestKey || (i < key.length && key[i] > bestKey[i])) { best = c; bestKey = key; }
+    });
+    return best;
+  }
+
+  return { N: N, TURN_LIMIT: TURN_LIMIT, CHARGES: CHARGES, PLACEABLE: PLACEABLE, BOARDS: BOARDS,
+           name: name, parse: parse, tile: tile, alive: alive, clone: clone, legal: legal,
+           newGame: newGame, play: play, preview: preview, options: options, greedy: greedy };
+})();
+</script>
+
+<script>
+// The screen. It writes the strike log itself, when it draws a strike marker.
+(function () {
+  "use strict";
+  var ARROW = { "0,-1": "↑", "1,0": "→", "0,1": "↓", "-1,0": "←" };
+  var game, selected = "water", hoverTile = null, hoverPass = false, hovered = {}, screen = { strikes: [] }, seen = {};
+  var $ = function (id) { return document.getElementById(id); };
+
+  var pick = $("pick");
+  TO.BOARDS.forEach(function (b, i) {
+    ["A", "B"].forEach(function (v) {
+      var o = document.createElement("option");
+      o.value = i + v; o.textContent = "Board " + (i + 1) + ": " + b.name + ", variant " + v;
+      pick.appendChild(o);
+    });
+  });
+
+  function start() {
+    var v = pick.value;
+    game = TO.newGame(Number(v[0]), v.slice(1));
+    hovered = {}; screen = { strikes: [] }; seen = {}; hoverTile = null; hoverPass = false;
+    render();
+  }
+
+  function change(x, y) { return { x: x, y: y, terrain: selected }; }
+
+  function logStrike(e) {
+    var key = game.turn + ":" + e.id;
+    if (seen[key]) return;
+    seen[key] = true;
+    screen.strikes.push({ turn: game.turn, enemy: e.id });
+  }
+
+  function previewNow() {
+    if (game.status !== "play") return null;
+    if (hoverPass) return { c: null, p: TO.preview(game, null) };
+    if (!hoverTile) return null;
+    var c = change(hoverTile[0], hoverTile[1]);
+    if (!TO.legal(game, c)) return null;
+    return { c: c, p: TO.preview(game, c) };
+  }
+
+  function describe(pv) {
+    var ev = pv.p.events, parts = [];
+    var what = pv.c ? selected + " on " + TO.name(pv.c.x, pv.c.y) : "pass";
+    if (ev.caught.length) parts.push("catches fire: " + ev.caught.map(function (i) { return TO.name(i % 6, (i - i % 6) / 6); }).join(", "));
+    if (ev.burnedOut.length) parts.push("burns out: " + ev.burnedOut.map(function (i) { return TO.name(i % 6, (i - i % 6) / 6); }).join(", "));
+    ev.kills.forEach(function (k) { parts.push(k.kind + k.enemy + " " + k.cause + " on " + k.tile + " (" + k.pattern + ")"); });
+    ev.blocked.forEach(function (id) { parts.push(id + " stays: its tile is deadly"); });
+    if (ev.damage.length) parts.push("you lose " + ev.damage.length + " hit point" + (ev.damage.length > 1 ? "s" : ""));
+    return "Preview (" + what + "): " + (parts.length ? parts.join("; ") : "nothing dies, no hit points lost") + ".";
+  }
+
+  // The tiles are built once and only updated afterwards. Rebuilding them on every hover
+  // replaced the tile under the mouse between press and release, so clicks never fired.
+  var cells = {};
+  function buildBoard() {
+    var board = $("board");
+    board.appendChild(document.createElement("div"));
+    "abcdef".split("").forEach(function (c) { var l = document.createElement("div"); l.className = "label"; l.textContent = c; board.appendChild(l); });
+    for (var y = 0; y < 6; y++) {
+      var l = document.createElement("div"); l.className = "label"; l.textContent = y + 1; board.appendChild(l);
+      for (var x = 0; x < 6; x++) {
+        var cell = document.createElement("div");
+        cell.dataset.tile = TO.name(x, y);
+        (function (x, y) {
+          cell.addEventListener("mouseenter", function () {
+            hoverTile = [x, y]; hoverPass = false;
+            if (game.status === "play" && TO.legal(game, change(x, y))) hovered[TO.name(x, y)] = true;
+            render();
+          });
+          cell.addEventListener("mouseleave", function () { hoverTile = null; render(); });
+          cell.addEventListener("click", function () { place(x, y); });
+        })(x, y);
+        cells[TO.name(x, y)] = cell;
+        board.appendChild(cell);
+      }
+    }
+  }
+
+  function render() {
+    var pv = previewNow();
+    for (var y = 0; y < 6; y++) for (var x = 0; x < 6; x++) {
+      var t = TO.tile(game, x, y), cell = cells[TO.name(x, y)];
+      cell.className = "cell t-" + t.t;
+      cell.innerHTML = "";
+      if (t.t === "fire") { var a = document.createElement("span"); a.className = "age"; a.textContent = t.age; cell.appendChild(a); }
+      if (hoverTile && hoverTile[0] === x && hoverTile[1] === y) cell.classList.add("hover");
+    }
+    var p = cells[TO.name(game.player.x, game.player.y)];
+    p.innerHTML = '<div class="player">' + game.player.hp + "</div>";
+    TO.alive(game).forEach(function (e) {
+      var u = document.createElement("div");
+      u.className = "unit " + e.kind; u.textContent = e.kind + e.id;
+      cells[TO.name(e.x, e.y)].appendChild(u);
+    });
+
+    if (game.status === "play") {
+      var strikes = [];
+      TO.alive(game).forEach(function (e) {
+        var it = e.intent, tag = document.createElement("span");
+        tag.className = "intent";
+        if (it.type === "step") {
+          tag.textContent = e.id + ARROW[it.dir.join(",")];
+          cells[TO.name(it.x, it.y)].appendChild(tag);
+        } else if (it.type === "charge") {
+          it.path.forEach(function (q) {
+            var m = document.createElement("span"); m.className = "path"; m.textContent = ARROW[it.dir.join(",")];
+            cells[TO.name(q[0], q[1])].appendChild(m);
+          });
+          tag.textContent = e.id + ARROW[it.dir.join(",")] + ARROW[it.dir.join(",")];
+          cells[TO.name(e.x, e.y)].appendChild(tag);
+        } else {
+          tag.textContent = e.id + "·";
+          cells[TO.name(e.x, e.y)].appendChild(tag);
+        }
+        if (it.strike) { strikes.push(e.kind + e.id); logStrike(e); }
+      });
+      if (strikes.length) {
+        var s = document.createElement("span"); s.className = "strikes"; s.textContent = "strike: " + strikes.join(" ");
+        p.appendChild(s);
+      }
+    }
+
+    if (pv) {
+      var ev = pv.p.events;
+      ev.caught.forEach(function (i) { cells[TO.name(i % 6, (i - i % 6) / 6)].classList.add("pv-catch"); });
+      ev.burnedOut.forEach(function (i) { cells[TO.name(i % 6, (i - i % 6) / 6)].classList.add("pv-out"); });
+      pv.p.state.enemies.forEach(function (e) {
+        var before = game.enemies[e.id - 1];
+        if (!before.alive) return;
+        var g = document.createElement("span");
+        if (!e.alive) {
+          var k = ev.kills.filter(function (k) { return k.enemy === e.id; })[0];
+          g.className = "death"; g.textContent = "✕" + e.id + " " + k.cause;
+          cells[k.tile].appendChild(g);
+        } else if (e.x !== before.x || e.y !== before.y) {
+          g.className = "ghost"; g.textContent = "→" + e.id;
+          cells[TO.name(e.x, e.y)].appendChild(g);
+        }
+      });
+      $("preview").textContent = describe(pv);
+    } else {
+      $("preview").textContent = game.status === "play" ? "Point at a tile to preview this turn; click to place." : "";
+    }
+
+    var tb = $("terrains");
+    tb.innerHTML = "";
+    TO.PLACEABLE.forEach(function (t) {
+      var b = document.createElement("button");
+      b.innerHTML = '<span class="sw t-' + t + '"></span>' + t + " " + game.charges[t];
+      if (t === selected) b.className = "sel";
+      b.disabled = game.charges[t] === 0 || game.status !== "play";
+      b.addEventListener("click", function () { selected = t; render(); });
+      tb.appendChild(b);
+    });
+    $("pass").disabled = game.status !== "play";
+    $("status").textContent = game.name + " " + game.variant + " · turn " + Math.min(game.turn, TO.TURN_LIMIT) + " of " + TO.TURN_LIMIT + " · hit points " + game.player.hp;
+    $("banner").textContent = game.status === "won" ? "Board won (" + game.result + ")." : game.status === "lost" ? "Board lost: " + game.result + "." : "";
+
+    var lines = [];
+    game.log.moves.forEach(function (m) {
+      lines.push("T" + m.turn + " · " + m.change);
+      game.log.kills.filter(function (k) { return k.turn === m.turn; }).forEach(function (k) {
+        lines.push("T" + k.turn + " · " + k.kind + k.enemy + " " + k.cause + " on " + k.tile + " · " + k.pattern);
+      });
+      game.log.damage.filter(function (d) { return d.turn === m.turn; }).forEach(function (d) {
+        lines.push("T" + d.turn + " · −1 hit point from " + d.enemy);
+      });
+    });
+    $("log").innerHTML = lines.reverse().map(function (l) { return "<div>" + l + "</div>"; }).join("");
+  }
+
+  function place(x, y) {
+    if (game.status !== "play") return;
+    var c = change(x, y);
+    if (!TO.legal(game, c)) { $("preview").textContent = "You cannot place " + selected + " on " + TO.name(x, y) + "."; return; }
+    TO.play(game, c, Object.keys(hovered).length);
+    hovered = {};
+    render();
+  }
+
+  $("pass").addEventListener("mouseenter", function () { hoverPass = true; hoverTile = null; render(); });
+  $("pass").addEventListener("mouseleave", function () { hoverPass = false; render(); });
+  $("pass").addEventListener("click", function () {
+    if (game.status !== "play") return;
+    TO.play(game, null, Object.keys(hovered).length);
+    hovered = {}; hoverPass = false;
+    render();
+  });
+  $("restart").addEventListener("click", start);
+  pick.addEventListener("change", start);
+  $("download").addEventListener("click", function () {
+    var data = { board: game.name, variant: game.variant, result: game.status + (game.result ? ": " + game.result : ""),
+                 moves: game.log.moves, kills: game.log.kills, damage: game.log.damage, strikes: screen.strikes };
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+    a.download = "terrain-only-" + game.name.toLowerCase() + "-" + game.variant + "-" + Date.now() + ".json";
+    a.click();
+  });
+
+  window.terrainOnly = { get game() { return game; }, get screen() { return screen; }, start: start };
+  buildBoard();
+  start();
+})();
+</script>
+</body>
+</html>

@@ -319,6 +319,9 @@ def bundle(data: dict, out: Path) -> None:
     shutil.copy2(SITE / "demo.js", out / "demo.js")
     (out / "demo-data.json").write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     (out / ".nojekyll").write_text("")
+    game = ROOT / "docs" / "guided-run" / "game"
+    if game.is_dir():  # the game the guided run built (docs/guided-run.md), playable next to the demo
+        shutil.copytree(game, out / "guided-run")
 
 
 def main() -> None:
