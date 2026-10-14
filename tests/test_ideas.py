@@ -91,6 +91,9 @@ def test_the_spec_skill_follows_the_spec_a_sketch_names():
     skill = (APP / ".agents/skills/atlas-spec/SKILL.md").read_text(encoding="utf-8")
     assert "the sketch's `spec:` already names a spec" in skill
     assert "[[<slug>-spec]]" not in skill and skill.count("[[<spec>]]") >= 2
+    # <spec> is the note name: the file is specs/<spec>.md, never specs/specs/… or ….md.md (round 2)
+    assert "otherwise: `<slug>-spec`." in skill and "`vault/specs/<spec>.md`" in skill
+    assert "otherwise: `specs/" not in skill
 
 
 def test_a_project_shows_the_spec_and_sketch_it_came_from(engine, vault):

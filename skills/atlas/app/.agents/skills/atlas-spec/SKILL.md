@@ -17,13 +17,13 @@ Budget: about 20 note reads and 5 to 8 web searches. Say it before you start.
 Use the sketch the user has open or names. An idea without a sketch gets one
 first (`atlas-sketch`, capture mode): every spec has a source sketch.
 
-Decide the spec's file name now and use it everywhere below (the sketch's
-`spec:`, the project's `source:`); it is `<spec>` from here on:
+Decide the spec's name now: `<spec>` from here on is its note name, without
+folder and `.md` (the file is `vault/specs/<spec>.md`, links are `[[<spec>]]`):
 
 - the sketch's `spec:` already names a spec: that one exists. Ask: rewrite it,
-  or write a new version next to it (`<its name>-v2.md`)?
+  or write a new version next to it (`<its name>-v2`)?
 - no `spec:`, but `specs/<slug>-spec.md` exists: the same question;
-- otherwise: `specs/<slug>-spec.md`.
+- otherwise: `<slug>-spec`.
 
 Read the sketch: its thesis, what it already decided, its open questions, and
 the assumptions it makes without saying so. If it is too thin to spec, ask at
@@ -52,8 +52,8 @@ opens with a **build or adopt** question.
 
 ## 4. Write the spec
 
-`vault/specs/<spec>.md` (step 1). The `-spec` suffix keeps `[[<slug>]]`
-pointing at the sketch.
+`vault/specs/<spec>.md` (the name from step 1). The `-spec` suffix keeps
+`[[<slug>]]` pointing at the sketch.
 
 ```markdown
 ---
