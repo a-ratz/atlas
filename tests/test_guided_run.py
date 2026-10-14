@@ -62,3 +62,30 @@ def test_log_lines_carry_their_links(engine, vault):
     line = engine.thread_log(index.entities["projects/private/terrain/threads/slice.md"], index)[0]
     assert line["links"] == {"Ice reaches along a line": {"id": "insights/Ice reaches along a line.md",
                                                           "title": "Ice reaches along a line"}}
+
+
+def run_inline(*cases) -> list[str]:
+    """inline() from app.js, run in node on (text, links) pairs."""
+    import re
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    js = (APP / "engine" / "static" / "app.js").read_text(encoding="utf-8")
+    pieces = [re.search(p, js, re.S).group(0) for p in (
+        r"const esc = .*?;\n", r"const enc = .*?;\n", r"const inlineText = .*?;\n(?=//)",
+        r"const resolved = .*?;", r"function inline\(s, links\) \{.*?\n\}")]
+    probe = "\n".join(pieces) + "\n" + "\n".join(
+        f"console.log(inline({json.dumps(t)}, {json.dumps(links)}));" for t, links in cases)
+    return subprocess.run([node, "-e", probe], capture_output=True, text=True, encoding="utf-8").stdout.splitlines()
+
+
+def test_inline_keeps_code_and_ignores_inherited_names():
+    # review round 1 on #28: `[[note]]` in a code span lost its formatting; [[constructor]] became an empty link
+    out = run_inline(("Use `[[note]]` in the file", None),
+                     ("see [[constructor]] and [[toString]]", {}),
+                     ("see [[A note]], **now**", {"A note": {"id": "insights/a.md", "title": "A note"}}))
+    assert out[0] == "Use <code>[[note]]</code> in the file"
+    assert out[1] == "see constructor and toString"
+    assert out[2] == 'see <a href="#/e/insights%2Fa.md">A note</a>, <b>now</b>'

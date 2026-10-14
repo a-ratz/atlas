@@ -127,15 +127,24 @@ const inlineText = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replac
   .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
 // Short texts (a log line, a thread's next): wiki links become links with the note's title where the engine
 // resolved them (`links`), and plain words where it did not; never brackets.
+const resolved = (links, target) => (links && Object.hasOwn(links, target) ? links[target] : null);  // [[toString]] is no note
 function inline(s, links) {
   const text = String(s ?? "");
   let out = "", last = 0;
-  for (const m of text.matchAll(/\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g)) {
-    const hit = links?.[m[1]];
-    out += inlineText(text.slice(last, m.index)) + (hit ? `<a href="#/e/${enc(hit.id)}">${esc(m[2] || hit.title)}</a>` : esc(m[2] || m[1]));
+  const words = (part) => {  // outside code spans: wiki links, then the usual formatting
+    let html = "", from = 0;
+    for (const m of part.matchAll(/\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g)) {
+      const hit = resolved(links, m[1]);
+      html += inlineText(part.slice(from, m.index)) + (hit ? `<a href="#/e/${enc(hit.id)}">${esc(m[2] || hit.title)}</a>` : esc(m[2] || m[1]));
+      from = m.index + m[0].length;
+    }
+    return html + inlineText(part.slice(from));
+  };
+  for (const m of text.matchAll(/`([^`]+)`/g)) {  // a code span keeps what it holds, [[…]] included
+    out += words(text.slice(last, m.index)) + `<code>${esc(m[1])}</code>`;
     last = m.index + m[0].length;
   }
-  return out + inlineText(text.slice(last));
+  return out + words(text.slice(last));
 }
 
 // What a reader must know before trusting a page (polish must not make provisional material look accepted).
@@ -975,7 +984,7 @@ const BEHIND_STATUS = ["raised_count"];  // bookkeeping: shown when you point at
 function factValue(e, text) {  // links resolve on the raw text; every piece is escaped once, on its way out
   let out = "", last = 0;
   for (const m of text.matchAll(/\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g)) {
-    const hit = e.fact_links?.[m[1]];
+    const hit = resolved(e.fact_links, m[1]);
     out += esc(text.slice(last, m.index)) + (hit ? `<a href="#/e/${enc(hit.id)}">${esc(m[2] || hit.title)}</a>` : esc(m[2] || m[1]));
     last = m.index + m[0].length;
   }
