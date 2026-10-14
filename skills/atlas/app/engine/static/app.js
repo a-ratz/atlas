@@ -134,14 +134,15 @@ function inline(s, links) {
   // A link counts as quoted only when a code span holds all of it; backticks inside a link do not start one.
   const masked = text.replace(wiki, (m) => "\0".repeat(m.length));
   const quoted = [...masked.matchAll(/`[^`]+`/g)].map((m) => [m.index, m.index + m[0].length]);
-  const links_html = [];
+  const held = [];  // rendered links and code spans; the bold and URL passes go around them
+  const hold = (html) => `\u0001${held.push(html) - 1}\u0002`;
   const marked = text.replace(wiki, (m, target, alias, at) => {
     if (quoted.some(([a, b]) => a < at && at + m.length <= b)) return m;  // `[[note]]` stays as written
     const hit = resolved(links, target);
-    links_html.push(hit ? `<a href="#/e/${enc(hit.id)}">${esc(alias || hit.title)}</a>` : esc(alias || target));
-    return `\u0001${links_html.length - 1}\u0002`;  // a placeholder the formatting passes over
-  });
-  return inlineText(marked).replace(/\u0001(\d+)\u0002/g, (_, n) => links_html[+n]);  // one pass: bold may wrap code
+    return hold(hit ? `<a href="#/e/${enc(hit.id)}">${esc(alias || hit.title)}</a>` : esc(alias || target));
+  }).replace(/`([^`]+)`/g, (_, code) => hold(`<code>${esc(code)}</code>`));
+  const unhold = (h) => h.replace(/\u0001(\d+)\u0002/g, (_, n) => unhold(held[+n]));
+  return unhold(inlineText(marked));  // one pass over the line: bold may wrap code and links
 }
 
 // What a reader must know before trusting a page (polish must not make provisional material look accepted).

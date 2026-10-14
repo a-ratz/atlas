@@ -97,8 +97,11 @@ def test_inline_links_with_backticks_and_bold_around_code():
     out = run_inline(("see [[Prefer `uv run` over bare Python]]", links),
                      ("**Use `git status` before continuing**", None),
                      ("`[[note]]` and [[note]]", {}),
-                     ("https://x.test/[[note]] \u00010\u0002", {}))
+                     ("https://x.test/[[note]] \u00010\u0002", {}),
+                     ("`**/*.py` and **run tests**, `https://x.test`", None))
     assert out[0] == 'see <a href="#/e/insights%2Fuv.md">Prefer `uv run` over bare Python</a>'
     assert out[1] == "<b>Use <code>git status</code> before continuing</b>"
     assert out[2] == "<code>[[note]]</code> and note"
     assert out[3] == '<a href="https://x.test/" target="_blank" rel="noopener">https://x.test/</a>note 0'
+    # round 3: code stays literal; bold and URLs do not reach inside it
+    assert out[4] == "<code>**/*.py</code> and <b>run tests</b>, <code>https://x.test</code>"
