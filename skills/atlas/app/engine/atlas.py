@@ -2451,15 +2451,29 @@ def cmd_machine(args) -> None:
     print("(the key of `paths:` in project.md; set $ATLAS_MACHINE to name this machine differently)", file=sys.stderr)
 
 
-def _frontmatter_write(path: Path, update) -> None:
-    """Rewrite only the frontmatter of a note through a dict update; the body stays byte-identical."""
+def _set_front_path(path: Path, machine: str, target: str) -> None:
+    """Set `paths.<machine>` in a note's frontmatter. Only the `paths:` block is rewritten; every other
+    line, the line endings and the body stay byte-identical (a YAML round trip restyled the whole file, #29)."""
     import yaml
-    text = path.read_text(encoding="utf-8")
+    text = path.read_bytes().decode("utf-8")  # read_text would turn \r\n into \n
     m = FRONT.match(text)
-    meta = (yaml.safe_load(m.group(1)) or {}) if m else {}
-    update(meta)
-    front = yaml.safe_dump(meta, sort_keys=False, allow_unicode=True, width=1000).strip()
-    path.write_text(f"---\n{front}\n---\n" + (text[m.end():] if m else "\n" + text), encoding="utf-8")
+    if m:
+        head, lines, tail = text[:m.start(1)], m.group(1).splitlines(), text[m.end(1):]
+    else:
+        head, lines, tail = "---\n", [], "\n---\n" + ("" if text.startswith("\n") else "\n") + text
+    nl = "\r\n" if head.endswith("\r\n") else "\n"
+    start = next((i for i, line in enumerate(lines) if re.match(r"^paths\s*:", line)), len(lines))
+    end = start + 1 if start < len(lines) else start
+    while end < len(lines) and (lines[end][:1] in (" ", "\t") or not lines[end].strip()):
+        end += 1  # the block: indented lines under `paths:` (and blank lines between them)
+    while end > start + 1 and not lines[end - 1].strip():
+        end -= 1  # blank lines after the block are not part of it
+    paths = (yaml.safe_load("\n".join(lines[start:end])) or {}).get("paths") if end > start else None
+    if paths is not None and not isinstance(paths, dict):
+        sys.exit(f"{path.name}: `paths:` is not a mapping of machine: folder; fix it by hand first")
+    paths = {**(paths or {}), machine: target}
+    lines[start:end] = yaml.safe_dump({"paths": paths}, sort_keys=False, allow_unicode=True, width=1000).splitlines()
+    path.write_text(head + nl.join(lines) + tail, encoding="utf-8", newline="")
 
 
 def cmd_map_path(args) -> None:
@@ -2472,7 +2486,7 @@ def cmd_map_path(args) -> None:
     if probe["status"] != "ok":
         sys.exit(f"not mapped: {probe['hint']}")
     machine = machine_id()
-    _frontmatter_write(VAULT / project.id, lambda meta: meta.update(paths={**(meta.get("paths") or {}), machine: target}))
+    _set_front_path(VAULT / project.id, machine, target)
     print(f"{project.id}: paths.{machine} = {target} (branch {probe['branch']} @ {probe['head']})")
 
 

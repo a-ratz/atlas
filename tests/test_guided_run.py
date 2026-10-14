@@ -105,3 +105,32 @@ def test_inline_links_with_backticks_and_bold_around_code():
     assert out[3] == '<a href="https://x.test/" target="_blank" rel="noopener">https://x.test/</a>note 0'
     # round 3: code stays literal; bold and URLs do not reach inside it
     assert out[4] == "<code>**/*.py</code> and <b>run tests</b>, <code>https://x.test</code>"
+@pytest.mark.parametrize("before, after", [
+    ("", "paths:\n  laptop: /code/terrain\n"),
+    ("paths:\n", "paths:\n  laptop: /code/terrain\n"),
+    ("paths: {}\n", "paths:\n  laptop: /code/terrain\n"),
+    ("paths: {desk: /d/terrain}\n", "paths:\n  desk: /d/terrain\n  laptop: /code/terrain\n"),
+    ("paths:\n  desk: /d/terrain\n  laptop: /old\n\n", "paths:\n  desk: /d/terrain\n  laptop: /code/terrain\n\n"),
+])
+def test_map_path_changes_only_the_paths_entry(engine, vault, before, after):
+    # map-path dumped the whole frontmatter back through YAML: flow lists became blocks, quotes changed (#29)
+    keep_top = 'status: active\ntags: [game, roguelike]\nsource: "[[terrain-only-spec]]"\n'
+    keep_end = "next: 'step 5'  # a comment\n"
+    project(vault, "terrain", keep_top + before + keep_end)
+    note = vault / "projects/private/terrain/project.md"
+    front = keep_top + keep_end + after if not before else keep_top + after + keep_end  # a new key goes last
+    engine._set_front_path(note, "laptop", "/code/terrain")
+    assert note.read_text(encoding="utf-8") == f"---\n{front}---\n\n# terrain\n"
+    engine._set_front_path(note, "laptop", "/code/terrain")  # mapping again changes nothing
+    assert note.read_text(encoding="utf-8") == f"---\n{front}---\n\n# terrain\n"
+
+
+def test_map_path_keeps_crlf_and_refuses_a_paths_that_is_not_a_mapping(engine, vault):
+    note = vault / "projects/private/terrain/project.md"
+    note.parent.mkdir(parents=True)
+    note.write_bytes(b"---\r\nstatus: active\r\ntags: [game]\r\n---\r\n\r\n# terrain\r\n")
+    engine._set_front_path(note, "laptop", "/code/terrain")
+    assert note.read_bytes() == b"---\r\nstatus: active\r\ntags: [game]\r\npaths:\r\n  laptop: /code/terrain\r\n---\r\n\r\n# terrain\r\n"
+    note.write_text("---\npaths: /code/terrain\n---\n", encoding="utf-8")
+    with pytest.raises(SystemExit, match="not a mapping"):
+        engine._set_front_path(note, "laptop", "/code/terrain")
