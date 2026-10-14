@@ -42,7 +42,7 @@ def test_a_registry_from_0_7_learns_the_spec_step(engine, vault):
     assert sketch["moves"][1]["send"] == "Poke holes in it, my way"  # the vault's own wording stays
     assert [m["label"] for m in spec["moves"]] == ["⚔️ Review it", "🚀 Start a project"]
     assert project["fields"] == ["status", "repo", "paths", "source"]
-    assert "status" in sketch["checks"]["allowed"] and spec["checks"]["require"][-1] == "source_sketch"
+    assert "status" in sketch["checks"]["allowed"] and spec["checks"]["resolve"] == ["source_sketch"]
     names = [c["name"] for c in index.commands]
     assert names[names.index("sketch") + 1] == "spec"
 
@@ -72,9 +72,25 @@ def problems(engine, rel: str) -> list[str]:
 
 def test_sketches_and_specs_are_checked(engine, vault):
     sketch = note(vault, "sketches/glow.md", "description: d\nstatus: idea\n")
-    spec = note(vault, "specs/glow-spec.md", "description: d\nstatus: draft\n")
+    spec = note(vault, "specs/glow-spec.md", "description: d\nstatus: done\nsource_sketch: '[[nowhere]]'\n")
     assert any("status: idea" in p for p in problems(engine, sketch))
-    assert any("source_sketch" in p for p in problems(engine, spec))
+    assert any("status: done" in p for p in problems(engine, spec)) and any("nowhere" in p for p in problems(engine, spec))
+
+
+def test_ideas_written_before_0_9_stay_valid(engine, vault):
+    # a 0.8 sketch and spec without description failed `check` after the upgrade (#19, review round 1)
+    sketch = note(vault, "sketches/old-idea.md", "status: sketch\ndate: 2026-10-01\n")
+    spec = note(vault, "specs/old-idea.md", "status: draft\ndate: 2026-10-02\n")
+    assert problems(engine, sketch) == [] and problems(engine, spec) == []
+
+
+def test_the_spec_skill_follows_the_spec_a_sketch_names():
+    # it checked only `<slug>-spec.md`, made a second spec for a sketch that had one, and pointed the
+    # sketch and the project at the old name after writing a -v2 (#19, review round 1)
+    from conftest import APP
+    skill = (APP / ".agents/skills/atlas-spec/SKILL.md").read_text(encoding="utf-8")
+    assert "the sketch's `spec:` already names a spec" in skill
+    assert "[[<slug>-spec]]" not in skill and skill.count("[[<spec>]]") >= 2
 
 
 def test_a_project_shows_the_spec_and_sketch_it_came_from(engine, vault):

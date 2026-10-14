@@ -15,8 +15,15 @@ Budget: about 20 note reads and 5 to 8 web searches. Say it before you start.
 ## 1. The sketch
 
 Use the sketch the user has open or names. An idea without a sketch gets one
-first (`atlas-sketch`, capture mode): every spec has a source sketch. If
-`specs/<slug>-spec.md` exists, ask: rewrite it, or write `<slug>-spec-v2.md`?
+first (`atlas-sketch`, capture mode): every spec has a source sketch.
+
+Decide the spec's file name now and use it everywhere below (the sketch's
+`spec:`, the project's `source:`); it is `<spec>` from here on:
+
+- the sketch's `spec:` already names a spec: that one exists. Ask: rewrite it,
+  or write a new version next to it (`<its name>-v2.md`)?
+- no `spec:`, but `specs/<slug>-spec.md` exists: the same question;
+- otherwise: `specs/<slug>-spec.md`.
 
 Read the sketch: its thesis, what it already decided, its open questions, and
 the assumptions it makes without saying so. If it is too thin to spec, ask at
@@ -45,8 +52,8 @@ opens with a **build or adopt** question.
 
 ## 4. Write the spec
 
-`vault/specs/<slug>-spec.md`. The `-spec` suffix keeps `[[<slug>]]` pointing
-at the sketch.
+`vault/specs/<spec>.md` (step 1). The `-spec` suffix keeps `[[<slug>]]`
+pointing at the sketch.
 
 ```markdown
 ---
@@ -111,7 +118,7 @@ note the review in one line under "First slice".
 
 ## 6. Close the sketch and commit
 
-In the sketch: `status: specified` and `spec: "[[<slug>-spec]]"`. Run
+In the sketch: `status: specified` and `spec: "[[<spec>]]"`. Run
 `engine/atlas.py check`, then commit the sketch, the spec and any capture
 together: `engine/atlas.py commit --agent <id> -m "spec: <slug>" <paths>`.
 
@@ -120,7 +127,7 @@ together: `engine/atlas.py commit --agent <id> -m "spec: <slug>" <paths>`.
 `say` an `atlas:note` block for the spec. Its moves offer the next step:
 
 - **Start a project** (skill `atlas-project`):
-  - `projects/<group>/<slug>/project.md` with `source: "[[<slug>-spec]]"`;
+  - `projects/<group>/<slug>/project.md` with `source: "[[<spec>]]"`;
   - a thread for the first slice, whose `next:` is its first step;
   - when prior art exists, the build-or-adopt question as a decision with
     `status: proposed`.

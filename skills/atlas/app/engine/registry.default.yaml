@@ -150,8 +150,7 @@ types:
     fields: [status, date, origin, spec]
     status: status
     date: date
-    checks:
-      require: [description, status]
+    checks:  # no `require`: sketches written before 0.9 have no description and stay valid
       description_max: 150
       allowed: {status: [sketch, specified, parked, superseded]}
       resolve: [spec]
@@ -168,8 +167,7 @@ types:
     fields: [status, date, source_sketch]
     status: status
     date: date
-    checks:
-      require: [description, status, source_sketch]
+    checks:  # no `require`: specs written before 0.9 stay valid
       description_max: 150
       allowed: {status: [draft, building, parked, superseded]}
       resolve: [source_sketch]

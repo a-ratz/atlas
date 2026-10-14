@@ -53,7 +53,7 @@ description: One sentence about the project
 status: active            # active | paused | done
 repo: https://github.com/owner/repo   # if there is code
 aliases: []               # other names the user uses for it
-source: "[[<slug>-spec]]"  # the spec (or sketch) it came from, if any
+source: "[[<spec>]]"      # the spec (or sketch) it came from, if any
 ---
 
 # <Project name>
