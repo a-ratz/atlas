@@ -16,6 +16,7 @@ and how a change gets from an issue to `main`.
 | `skills/atlas/app/` | what gets copied into a user's Atlas folder: `engine/`, the vault template `vault/`, `demo/`, the vault agents' `AGENTS.md`, `CLAUDE.md`, `.agents/skills/`, `VERSION` |
 | `skills/atlas/app/engine/atlas.py` | the whole engine: one file, its dependencies in the script header, run with `uv run --no-project` |
 | `skills/atlas/app/engine/static/` | the front end: plain ES modules and CSS, no build step |
+| `skills/atlas/app/addons/<name>/` | addons: `addon.yaml` (title, version, navigation icon), `addon.py` (`register(ctx)` returns Starlette routes, mounted under `/api/addons/<name>/`), `static/view.js` (an ES module exporting `view(main, ctx)`, which returns a cleanup function) |
 | `skills/atlas/app/engine/registry.default.yaml` | types, fields, checks, moves, commands; `vault/atlas.yaml` is the same file as a vault copies it |
 | `site/` | the click dummy at https://a-ratz.github.io/atlas/: `build.py` records the real engine over the demo vault and `scene.yaml`, `demo.js` replays it |
 | `ci/` | the gate (`gate.py`, `browser.py`) and the smoke protocol (`smoke/`) |
@@ -37,6 +38,19 @@ and how a change gets from an issue to `main`.
 - **Public repository.** No absolute home paths, machine names, private names or customer names in
   files, commits, issues or PR comments. Review tools print absolute paths: make them
   repository-relative before posting.
+
+## Addons
+
+An addon plugs a service into Atlas without touching the engine. The engine imports only the addons a
+vault names under `addons:` in `atlas.yaml` (`load_addons`), mounts each one's routes under
+`/api/addons/<name>/` behind the same write header as Atlas's own routes, serves its `static/` under
+`/addons/<name>/`, and lists it in `/api/meta` and `status`. A broken addon is reported there and Atlas
+runs on. `ctx` gives an addon its name, its settings and `data_dir`, a folder of its own under
+`~/.atlas/addons/` (never in the vault). Addons use the engine's dependencies only.
+
+What an addon shows belongs to the user, not to the vault: it never writes into the vault, git, the
+index or the agent chat on its own. Tests run it over demo data; nothing from a real account reaches
+this repository. The first addon is `teams` (#54).
 
 ## From issue to `main`
 

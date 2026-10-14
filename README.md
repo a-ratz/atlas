@@ -43,7 +43,7 @@ vault through research, an idea and a spec to a project that builds a small brow
 ## Contents
 
 - [Quick start](#quick-start)
-- [What you get](#what-you-get): [Home](#home), [the reader](#the-reader), [talking to your agents](#talking-to-your-agents), [tours](#tours), [the constellation](#the-constellation), [ideas](#ideas-from-sketch-to-project), [projects](#projects-and-their-memory), [people](#people-and-organizations), [small things](#small-things)
+- [What you get](#what-you-get): [Home](#home), [the reader](#the-reader), [talking to your agents](#talking-to-your-agents), [tours](#tours), [the constellation](#the-constellation), [ideas](#ideas-from-sketch-to-project), [projects](#projects-and-their-memory), [people](#people-and-organizations), [small things](#small-things), [addons](#addons)
 - [How it works](#how-it-works)
 - [Your agent's side](#your-agents-side)
 - [Demo vault](#demo-vault)
@@ -221,6 +221,15 @@ unless you use LinkedIn's private mode.
   <img alt="Atlas on a phone" src="docs/assets/phone.png" width="196">
 </p>
 
+### Addons
+
+An addon brings another service into Atlas: its own page in the navigation, its own routes, switched
+on per vault in `atlas.yaml`. The first one is **Teams**: sign in with your Microsoft account (Entra
+ID, no secret, the token outside the vault), then read and write your chats and channels next to your
+notes. It is a proof of concept: text messages only, calls stay in Teams, and what it shows never
+lands in the vault or your agent's chat. Setup, permissions and a demo with made-up people:
+[addons/teams/README.md](skills/atlas/app/addons/teams/README.md).
+
 ---
 
 ## How it works
@@ -335,10 +344,11 @@ single-user, local-first and young.
 
 ## Status and roadmap
 
-Atlas 0.10.0 is the current release. Stable: the
+Atlas 0.11.0 is the current release. Stable: the
 engine and reader, the duplex chat with answer blocks, project memory with boot
 packets, ideas from sketch to project, cards, search by meaning, the checks,
-tours, the installer with upgrade and restore.
+tours, the installer with upgrade and restore. New and a proof of concept:
+addons, with Teams as the first.
 
 Open:
 

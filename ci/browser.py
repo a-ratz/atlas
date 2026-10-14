@@ -34,7 +34,9 @@ failures: list[str] = []
 
 def routes(srv: Server) -> list[str]:
     out = ["#/", "#/chat", "#/projects", "#/graph", "#/rediscover", "#/search?q=memory"]
-    for t in srv.get("/api/meta")["types"]:
+    meta = srv.get("/api/meta")
+    out += [f"#/addon/{urllib.parse.quote(a['name'])}" for a in meta.get("addons", [])]
+    for t in meta["types"]:
         if t.get("nav") is False:
             continue
         out.append(f"#/t/{urllib.parse.quote(t['id'])}")
@@ -43,12 +45,28 @@ def routes(srv: Server) -> list[str]:
     return out
 
 
+def teams_demo(page, base: str, scheme: str) -> None:
+    """The Teams addon over its demo data: the chats list, a chat opens, a message goes out (#54)."""
+    try:
+        page.goto(f"{base}/#/addon/teams")
+        page.wait_for_selector(".tm-row", timeout=10000)
+        page.click(".tm-row")
+        page.wait_for_selector(".tm-msg", timeout=10000)
+        page.fill("#tm-text", f"sent from the {scheme} check")
+        page.keyboard.press("Enter")
+        page.wait_for_selector(f"text=sent from the {scheme} check", timeout=10000)
+    except Exception as e:  # noqa: BLE001 - any failure here is a finding, not a crash of the run
+        failures.append(f"[{scheme}] teams addon demo: {e}")
+
+
 def main() -> None:
     for stream in (sys.stdout, sys.stderr):  # a Windows console or pipe would refuse "→" and "×" as cp1252
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors="replace")
     with tempfile.TemporaryDirectory() as tmp:
         vault = demo_vault(Path(tmp))
+        reg = vault / "atlas.yaml"  # the Teams addon over its made-up people: no sign-in, no network (#54)
+        reg.write_text(reg.read_text(encoding="utf-8") + "\naddons:\n  teams:\n    demo: true\n", encoding="utf-8")
         with Server(vault, operator=True) as srv, sync_playwright() as pw:
             pages = routes(srv)
             browser = pw.chromium.launch()
@@ -68,6 +86,7 @@ def main() -> None:
                     for e in errors:
                         failures.append(f"[{scheme}] {route}: {e}")
                 checks(page, srv.base, scheme)
+                teams_demo(page, srv.base, scheme)
                 if scheme == "light":  # the last pass: it edits and moves a demo note
                     follows_changes(ctx, srv, vault)
                     move_waits_for_its_own_answer(ctx, srv, vault)
