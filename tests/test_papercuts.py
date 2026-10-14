@@ -322,3 +322,26 @@ def test_a_drop_commits_its_own_path_even_in_a_bracketed_folder(engine, tmp_path
     assert engine.commit_drop(drop, engine.Index().types)
     assert git("show", "--name-only", "--format=", "HEAD").splitlines() == ["vault[1]/captures/capture.md"]
     assert "vault1/" in git("status", "--porcelain", "--untracked-files=all")
+
+
+def test_a_bracketed_title_commits_only_itself(engine, vault, monkeypatch):
+    # git read "insights/Results [2026].md" as a pattern that also matches "Results 2.md" (#48)
+    git = drop_repo(vault, monkeypatch)
+    (vault / "agents" / "claude.md").write_text("---\nname: Claude\n---\n\n# Claude\n", encoding="utf-8")
+    (vault / "insights" / "Results 2.md").write_text("# Someone else's draft\n", encoding="utf-8")
+    note = vault / "insights" / "Results [2026].md"
+    note.write_text("---\ndescription: d\n---\n\n# Results [2026]\n", encoding="utf-8")
+    engine.cmd_commit(Namespace(agent="claude", message="m", paths=[str(note), str(vault / "agents" / "claude.md")]))
+    assert sorted(git("show", "--name-only", "--format=", "HEAD").splitlines()) == ["agents/claude.md", "insights/Results [2026].md"]
+    assert "insights/Results 2.md" in git("ls-files", "--others").splitlines()  # still untracked
+
+
+def test_a_bracketed_title_has_only_its_own_history(engine, vault, monkeypatch):
+    git = drop_repo(vault, monkeypatch)
+    (vault / "insights" / "Results 2.md").write_text("# Other\n", encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-q", "-m", "the other note")
+    (vault / "insights" / "Results [2026].md").write_text("# Results [2026]\n", encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-q", "-m", "the bracketed note")
+    assert [h["subject"] for h in engine.git_file_history("insights/Results [2026].md")] == ["the bracketed note"]

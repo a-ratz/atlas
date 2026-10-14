@@ -551,9 +551,16 @@ class Index:
         return self.resolve(Path(href).stem)
 
 
+def git_env(**extra: str) -> dict:
+    """The environment for every git call: a path is a name, not a pattern, so a note titled
+    "Results [2026].md" matches only itself and never "Results 2.md" (#48)."""
+    return {**os.environ, "GIT_LITERAL_PATHSPECS": "1", **extra}
+
+
 def git(*args: str) -> str:
     try:
-        return subprocess.run(["git", "-C", str(VAULT), *args], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
+        return subprocess.run(["git", "-C", str(VAULT), *args], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              env=git_env()).stdout
     except OSError:  # no git installed: Atlas still works, just without history
         return ""
 
@@ -2228,7 +2235,8 @@ def _norm_remote(url: str) -> str:
 
 def _git_out(*args: str, cwd: str | Path | None = None) -> str | None:
     try:
-        r = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10)
+        r = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10,
+                           env=git_env())
     except (OSError, subprocess.TimeoutExpired):
         return None
     return r.stdout.strip() if r.returncode == 0 else None
@@ -2592,9 +2600,8 @@ def commit_drop(path: Path, types: dict) -> bool:
     except SystemExit:  # an agent is committing right now; the file stays uncommitted, as before
         return False
     # No timeout, as in `commit`: a slow commit hook must finish, not be killed and leave .git/index.lock behind.
-    # --literal-pathspecs: a folder named "vault[1]" is a name, not a pattern that also matches "vault1"
-    run = lambda *a: subprocess.run(["git", "--literal-pathspecs", *a], cwd=top, capture_output=True, text=True,
-                                    encoding="utf-8", errors="replace").returncode == 0
+    run = lambda *a: subprocess.run(["git", *a], cwd=top, capture_output=True, text=True, encoding="utf-8",
+                                    errors="replace", env=git_env()).returncode == 0  # paths are names (#48)
     try:  # `commit -- <path>` commits this file only, whatever else is staged
         if not run("add", "--", rel):
             return False
@@ -2680,7 +2687,7 @@ def cmd_commit(args) -> None:
     # a path that is neither on disk nor in the index was already staged away (git mv): nothing left to add
     addable = [r for r in rel_top if (Path(top) / r).exists() or _git_out("ls-files", "--error-unmatch", "--", r, cwd=top) is not None]
     if addable:
-        subprocess.run(["git", "add", "-A", "--", *addable], cwd=top, check=True)
+        subprocess.run(["git", "add", "-A", "--", *addable], cwd=top, check=True, env=git_env())
     renamed_to = set()
     for line in (_git_out("diff", "--cached", "-M", "--name-status", cwd=top) or "").splitlines():
         cols = line.split("\t")
@@ -2699,12 +2706,12 @@ def cmd_commit(args) -> None:
         if note:
             notes.append(note)
     if files:
-        subprocess.run(["git", "add", "--", *[rel for _, rel in files]], cwd=top, check=True)
+        subprocess.run(["git", "add", "--", *[rel for _, rel in files]], cwd=top, check=True, env=git_env())
     if not (_git_out("diff", "--cached", "--name-only", cwd=top) or "").strip():
         print("nothing to commit")
         return
     r = subprocess.run(["git", "commit", "-q", "-m", args.message, "-m", f"Atlas-Agent: {agent}"], cwd=top,
-                       capture_output=True, text=True, encoding="utf-8", errors="replace")
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", env=git_env())
     # this commit's files, read before another agent's commit can move HEAD; -z: names as they are, unquoted
     committed = [] if r.returncode else \
         (_git_out("diff-tree", "-z", "--root", "--no-commit-id", "--name-only", "-r", "HEAD", cwd=top) or "").split("\0")
@@ -2989,7 +2996,7 @@ def _demo_text(text: str, today: dt.date, now: str) -> str:
 
 def _demo_commit(message: str, agent: str | None, paths: list[str], when: dt.datetime) -> bool:
     """Commit only these paths, dated `when`. False when git cannot commit (no user configured, …)."""
-    env = {**os.environ, "GIT_AUTHOR_DATE": when.isoformat(), "GIT_COMMITTER_DATE": when.isoformat()}
+    env = git_env(GIT_AUTHOR_DATE=when.isoformat(), GIT_COMMITTER_DATE=when.isoformat())
     body = message + "\n\nAtlas-Demo: true" + (f"\nAtlas-Agent: {agent}" if agent else "")
     for cmd in (["add", "-A", "--", *paths], ["commit", "-q", "-m", body, "--", *paths]):
         done = subprocess.run(["git", "-C", str(VAULT), *cmd], capture_output=True, text=True, encoding="utf-8", errors="replace", env=env)
