@@ -1265,7 +1265,7 @@ def deep_collections() -> tuple[str | None, dict]:
 FRONT_LINE = re.compile(r"^\s*([\w-]+:|- |---$|$)")  # what a frontmatter line looks like
 
 
-def snippet_text(snippet: str, title: str = "") -> str:
+def snippet_text(snippet: str, title: str = "", keys: frozenset = frozenset()) -> str:
     """QMD's snippet as the body text it found: without its diff header, without the frontmatter a hit near
     the top of a note starts in (opened or closed inside the snippet, or both), and without the title heading,
     which the result card shows already. Nothing left: empty, and the card shows its description."""
@@ -1276,6 +1276,9 @@ def snippet_text(snippet: str, title: str = "") -> str:
         lines = lines[end + 1:]
     elif dashes and all(FRONT_LINE.match(line) for line in lines[:dashes[0]]):  # starts inside it
         lines = lines[dashes[0] + 1:]
+    elif lines and keys and lines[0].split(":", 1)[0].strip() in keys:  # inside it, and its end is not in the snippet
+        while lines and (lines[0].split(":", 1)[0].strip() in keys or lines[0].startswith((" ", "- ")) or not lines[0].strip()):
+            lines = lines[1:]
     norm = lambda s: " ".join(s.split()).lower()
     while lines and (not lines[0].strip() or (title and lines[0].lstrip().startswith("# ")
                                                and norm(lines[0].lstrip()[2:]) == norm(title))):
@@ -1308,7 +1311,7 @@ def deep_search(index: Index, q: str) -> list[dict]:
             continue
         seen.add(rel)
         e = index.entities.get(rel) if rel else None
-        snippet = snippet_text(h.get("snippet", ""), e.title if e else h.get("title") or "")
+        snippet = snippet_text(h.get("snippet", ""), e.title if e else h.get("title") or "", frozenset(e.meta) if e else frozenset())
         if e:
             out.append({**e.card(index), "snippet": snippet, "score": h.get("score")})
         else:
@@ -2600,8 +2603,10 @@ def qmd(*args: str, index: str | None = None, timeout: float = 1800) -> subproce
     # INDEX_PATH beats --index (one database for every vault); without an index it is the user's own setting
     env = {k: v for k, v in os.environ.items() if not (index and k == "INDEX_PATH")}
     try:
+        # cwd: QMD's model loader stops when the server's own start folder was removed since (uv_cwd)
         return subprocess.run([exe, *(["--index", index] if index else []), *args], capture_output=True, text=True,
-                              encoding="utf-8", errors="replace", timeout=timeout, stdin=subprocess.DEVNULL, env=env)
+                              encoding="utf-8", errors="replace", timeout=timeout, stdin=subprocess.DEVNULL, env=env,
+                              cwd=VAULT)
     except subprocess.TimeoutExpired:
         return subprocess.CompletedProcess([exe, *args], 124, "", f"qmd {args[0]} took longer than {timeout:.0f} s")
 

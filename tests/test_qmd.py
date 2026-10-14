@@ -19,6 +19,7 @@ class FakeQmd:
     def __init__(self, engine, monkeypatch, conf: Path):
         self.calls: list[list[str]] = []
         self.envs: list[dict] = []
+        self.cwds: list = []
         self.fail: set[str] = set()
         self.during: dict[str, callable] = {}
         self.slow: set[str] = set()
@@ -33,6 +34,7 @@ class FakeQmd:
                 return real(args, **kw)
             self.calls.append(args)
             self.envs.append(kw.get("env") or {})
+            self.cwds.append(kw.get("cwd"))
             rest = args[3:] if args[1] == "--index" else args[1:]
             if rest[0] in self.during:
                 self.during.pop(rest[0])()
@@ -343,3 +345,17 @@ def test_notes_right_in_a_recursive_folder_refresh_their_area(engine, vault):
     types = engine.Index().types
     assert engine.qmd_areas_for(["sources/a.md", "specs/a.md"], types) == ["ideas", "sources"]
     assert engine.qmd_areas_for(["research/sleep/run-1/brief.md"], types) == ["sources"]
+
+
+def test_qmd_runs_in_the_vault_whatever_the_server_started_in(engine, vault, fake):
+    # a server started from a folder removed since made QMD's model loader fail (uv_cwd), guided run (#22)
+    engine.qmd("status", index="atlas")
+    assert fake.cwds[-1] == engine.VAULT
+
+
+def test_a_snippet_inside_frontmatter_that_does_not_reach_its_end(engine):
+    # a source's hit showed `source_type: research question: "…" date: … sources:` as its excerpt (#22)
+    snippet = "@@ -2,6 @@\nsource_type: research\nquestion: \"What makes runs fair?\"\ndate: 2026-10-14\nsources:\n  - talk\nThe body"
+    keys = frozenset({"source_type", "question", "date", "sources"})
+    assert engine.snippet_text(snippet, "", keys) == "The body"
+    assert engine.snippet_text("Note: a body line\nmore", "", keys) == "Note: a body line\nmore"  # not a key of the note
