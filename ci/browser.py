@@ -97,6 +97,7 @@ def checks(page, base: str, scheme: str) -> None:
         failures.append(f"[{scheme}] the sidebar does not mark a link with a query (#4, round 2)")
     deep_after_nothing(page, base, scheme)
     slow_view_stays_behind(page, base, scheme)
+    project_pages(page, base, scheme)
     page.goto(f"{base}/#/chat")
     page.wait_for_selector(".op-bar", timeout=15000)
     if not page.query_selector("#op-title"):
@@ -142,10 +143,27 @@ def checks(page, base: str, scheme: str) -> None:
         failures.append(f"[{scheme}] pressing Later shows nothing on the page, only a toast (#10)")
 
 
+def project_pages(page, base: str, scheme: str) -> None:
+    """A project shows the spec and sketch it came from (#16); one left-off line is not said twice."""
+    page.goto(f"{base}/#/e/{urllib.parse.quote('projects/private/nightlight/project.md', safe='')}")
+    page.wait_for_selector(".side-col .path:has-text('projects/private/nightlight/project.md')", timeout=15000)
+    if not (page.query_selector(".side-col .chain a[href*='specs']") and page.query_selector(".side-col .chain a[href*='sketches']")):
+        failures.append(f"[{scheme}] the project page does not show the spec and sketch it came from (#16)")
+    for project in ("projects/private/nightlight/project.md", "projects/work/thesis/project.md"):
+        page.goto(f"{base}/#/e/{urllib.parse.quote(project, safe='')}")
+        page.wait_for_selector(f".side-col .path:has-text('{project}')", timeout=15000)  # this project, not the last
+        if page.query_selector(".left-off"):
+            head = page.inner_text(".left-off h2").strip()
+            lines = page.eval_on_selector_all(".left-off .line", "ls => ls.map((l) => l.innerText)")
+            if any(head in line for line in lines) and len(lines) == 1:
+                failures.append(f"[{scheme}] {project}: 'Where we left off' says {head!r} twice (#16 smoke run)")
+
 def slow_view_stays_behind(page, base: str, scheme: str) -> None:
     """A view whose data comes late does not paint over the page the reader opened meanwhile (CI on #18: Home,
     still loading after a reload, replaced an open question)."""
     held = []
+    page.goto(f"{base}/#/projects")  # from another page: a goto to the hash the page is on loads nothing
+    page.wait_for_timeout(300)
     page.route("**/api/home", lambda r: held.append(r))
     page.goto(f"{base}/#/")
     for _ in range(100):

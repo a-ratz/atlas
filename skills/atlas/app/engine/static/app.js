@@ -992,13 +992,15 @@ function readerHead(e, { crumbs = true } = {}) {
 `;
 }
 
+// where a note came from, oldest first, ending at the note itself (a project: sketch → spec → this project)
+const provenanceChain = (e) => `${(e.provenance || []).map((x) => `<li data-t="${esc(x.type)}"><span class="node">${g(x.type)}</span><div><span class="k">${esc(typeLabel(x.type))}${x.date ? ` · ${esc(x.date)}` : ""}</span><a href="#/e/${enc(x.id)}">${esc(x.title)}</a></div></li>`).join("")}
+      <li class="here" data-t="${esc(e.type)}"><span class="node"></span><div><span class="k">this ${esc(typeLabel(e.type).toLowerCase())}</span><span class="t">${esc(e.title)}</span></div></li>`;
 function marginHtml(e) {
   const chain = [...(e.provenance || [])];
   const parts = [];
   if (chain.length || e.maps?.length) {
     parts.push(`<section><h3>Provenance</h3><ol class="chain">
-      ${chain.map((x) => `<li data-t="${esc(x.type)}"><span class="node">${g(x.type)}</span><div><span class="k">${esc(typeLabel(x.type))}${x.date ? ` · ${esc(x.date)}` : ""}</span><a href="#/e/${enc(x.id)}">${esc(x.title)}</a></div></li>`).join("")}
-      <li class="here" data-t="${esc(e.type)}"><span class="node"></span><div><span class="k">this ${esc(typeLabel(e.type).toLowerCase())}</span><span class="t">${esc(e.title)}</span></div></li>
+      ${provenanceChain(e)}
       ${(e.maps || []).map((x) => `<li data-t="map"><span class="node">${g("map")}</span><div><span class="k">map</span><a href="#/e/${enc(x.id)}">${esc(x.title)}</a></div></li>`).join("")}
     </ol></section>`);
   }
@@ -1185,7 +1187,8 @@ function renderProject(e) {
           <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px"><span class="kicker">Where we left off</span>
             <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--soft)">${[...new Set(ls.lines.map((l) => l.agent))].map((a) => avatar(a, "s")).join("")}${esc(dayLabel(ls.date))} · ${esc([...new Set(ls.lines.map((l) => agentName(l.agent)))].join(" and "))}</span></div>
           <h2 id="left-h" class="h-serif">${inline(ls.lines.at(-1).text)}</h2>
-          <div class="lines">${ls.lines.map((l) => `<div class="line">${avatar(l.agent, "s")}<div><a class="th" href="#/e/${enc(l.thread)}">${esc(l.title)}</a>${inline(l.text)}</div></div>`).join("")}</div>
+          ${ls.lines.length > 1 ? `<div class="lines">${ls.lines.map((l) => `<div class="line">${avatar(l.agent, "s")}<div><a class="th" href="#/e/${enc(l.thread)}">${esc(l.title)}</a>${inline(l.text)}</div></div>`).join("")}</div>`
+            : `<div class="lines"><a class="th" href="#/e/${enc(ls.lines[0].thread)}">${esc(ls.lines[0].title)}</a></div>`}
           ${ls.commits?.length ? `<div class="chips" style="align-items:center;font-size:12.5px;color:var(--faint)"><span>commits</span>${ls.commits.map((c) => `<span class="badge" title="${esc(c.subject)}">${esc(c.sha.slice(0, 7))}</span>`).join("")}</div>` : ""}
         </section>` : ""}
 
@@ -1237,6 +1240,7 @@ function renderProject(e) {
 
       <aside class="side-col" aria-label="About this project">
         ${bootBox(pv)}
+        ${e.provenance?.length ? `<section><h3 class="kicker" style="margin:0 0 12px">Came from</h3><ol class="chain">${provenanceChain(e)}</ol></section>` : ""}
         ${pv.who?.length ? `<section><h3 class="kicker" style="margin:0 0 12px">Who works here</h3><ul class="mini-list">${pv.who.map((w) => `<li>${avatar(w.agent === "user" ? "user" : w.agent, "m", live.has(w.agent) ? "working" : null)}<span class="t">${esc(agentName(w.agent))}</span><span class="when">${live.has(w.agent) ? "here now" : `${w.lines} log line${w.lines === 1 ? "" : "s"}`}</span></li>`).join("")}</ul></section>` : ""}
         <section><h3 class="kicker" style="margin:0 0 12px">Checkouts</h3><div style="display:flex;flex-direction:column;gap:8px">
           ${pv.checkout?.status === "ok" ? `<div class="xcard"><span style="display:flex;align-items:center;gap:8px">${svg("check", "sm ok")}this machine <span class="mono" style="font-size:11px;color:var(--faint)">${esc(pv.checkout.machine)}</span></span><span class="path">${esc(pv.checkout.path)}</span></div>`
