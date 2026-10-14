@@ -131,8 +131,8 @@ together: `engine/atlas.py commit --agent <id> -m "spec: <slug>" <paths>`.
 - **Start a project** (skill `atlas-project`):
   - `projects/<group>/<slug>/project.md` with `source: "[[<spec>]]"`;
   - a thread for the first slice, whose `next:` is its first step;
-  - when prior art exists, the build-or-adopt question as a decision with
-    `status: proposed`.
+  - when the spec asks build or adopt (something already does the job, step
+    3), that question as a decision with `status: proposed`.
 
   The spec becomes `status: building`. Atlas then shows the line project →
   spec → sketch in the margin.

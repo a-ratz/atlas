@@ -46,4 +46,5 @@ def test_the_idea_skills_answer_what_the_operators_asked():
     proj = (skills / "atlas-project" / "SKILL.md").read_text(encoding="utf-8")
     assert "the red-team's answer on this idea" in sketch and "A read is a note read in" in sketch
     assert "the rules they test" in spec and "prior art, not a question" in spec
+    assert "when prior art exists" not in spec  # the hand-over follows the same rule (#25, review round 1)
     assert "No code yet" in proj
