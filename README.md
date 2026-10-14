@@ -355,7 +355,7 @@ skills/atlas/references/         onboarding for the first run
 skills/atlas/app/                the app that gets installed: engine/, vault/, demo/, AGENTS.md, .agents/skills/
 docs/guided-run.md               one real session in thirteen steps; the game it built is in docs/guided-run/game/
 docs/assets/                     images and badges for this README and the guided run
-site/                            the live demo: build.py records the engine on the demo vault, demo.js replays it
+site/                            the live demo (build.py records the engine on the demo vault, demo.js replays it) and readme_shots.py
 ci/                              the pull request gate (gate.py) and isolated smoke runs (smoke/)
 tests/                           tests for the engine and the skills
 ```
@@ -367,6 +367,10 @@ tests/                           tests for the engine and the skills
 - Try a change locally: `npx skills add /path/to/this/repo -g -s atlas`, then
   "update atlas" in your harness. Run the engine straight from the repo:
   `uv run --no-project skills/atlas/app/engine/atlas.py serve --vault <some vault>`.
+- Re-take the README screenshots after a UI change: `uv run site/readme_shots.py`
+  stages the demo vault as the pictures show it and writes `docs/assets/*.png`
+  (once: `uvx playwright@1.55.0 install chromium`). A release also updates
+  `docs/assets/badges/version.svg`; the gate fails while it differs from `VERSION`.
 
 ## License
 
