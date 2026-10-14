@@ -35,8 +35,8 @@ out. Two modes write the same file:
 
 ## Generate mode
 
-Say the budget before you start: about 15 note reads, at most 6 web searches,
-one red-team. The point is a few ideas that survived honest attempts to kill
+Say the budget before you start, as a progress line (`say --progress`): about
+15 note reads, at most 6 web searches, one red-team. The point is a few ideas that survived honest attempts to kill
 them, not many ideas.
 
 ### 1. Frame
@@ -113,9 +113,12 @@ pair that flips is a tie. No numbers. Label each survivor **obvious** or
 
 ### 7. Let the user pick
 
-`say` the top three at most, as a `choices` block: one-liner, why it survived,
-what kills it. Add "None of these: change the constraints". The pick is the
-user's. One round with changed constraints is fine; after that, stop.
+`say` the top three at most. First a short paragraph per idea, in plain words:
+the one-liner, **why it survived** (said as such), what would kill it, and
+whether it is the obvious one. Then the `choices` block, so the user reads
+before they pick; add "None of these: change the constraints". Keep the
+method out of it ("A and C are about even", not "the pair flipped"). The pick
+is the user's. One round with changed constraints is fine; after that, stop.
 
 If nothing survives, say so and say what the vault lacks to do better (a
 missing area, an unanswered question). Offer research on it (`atlas-learn`).
