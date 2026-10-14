@@ -27,7 +27,7 @@ is no database and no account.
 to install. No AI agent is connected there; the chat replays a recorded session, including one
 distill you can start yourself.
 
-**[🎲 Follow a guided run](docs/guided-run.md)**: one real session in twelve steps, from an empty
+**[🎲 Follow a guided run](docs/guided-run.md)**: one real session in thirteen steps, from an empty
 vault through research, an idea and a spec to a project that builds a small browser roguelike.
 [Play the game it built](https://a-ratz.github.io/atlas/guided-run/).
 

@@ -19,6 +19,7 @@
   .label { display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; }
   .cell { position: relative; border-radius: 4px; display: flex; align-items: center; justify-content: center;
           font-weight: 700; font-size: 22px; cursor: pointer; user-select: none; border: 2px solid transparent; }
+  .cell * { pointer-events: none; } /* the tile itself takes the mouse, never its badges */
   .t-ground { background: var(--ground); } .t-grass { background: var(--grass); } .t-water { background: var(--water); }
   .t-ice { background: var(--ice); border-color: #9ccfd8; } .t-fire { background: var(--fire); }
   .t-wall { background: var(--wall); cursor: default; } .t-chasm { background: var(--chasm); cursor: default; }
@@ -475,19 +476,18 @@ var TO = (function () {
     return "Preview (" + what + "): " + (parts.length ? parts.join("; ") : "nothing dies, no hit points lost") + ".";
   }
 
-  function render() {
-    var board = $("board"), pv = previewNow(), cells = {};
-    board.innerHTML = "";
+  // The tiles are built once and only updated afterwards. Rebuilding them on every hover
+  // replaced the tile under the mouse between press and release, so clicks never fired.
+  var cells = {};
+  function buildBoard() {
+    var board = $("board");
     board.appendChild(document.createElement("div"));
     "abcdef".split("").forEach(function (c) { var l = document.createElement("div"); l.className = "label"; l.textContent = c; board.appendChild(l); });
     for (var y = 0; y < 6; y++) {
       var l = document.createElement("div"); l.className = "label"; l.textContent = y + 1; board.appendChild(l);
       for (var x = 0; x < 6; x++) {
-        var t = TO.tile(game, x, y), cell = document.createElement("div");
-        cell.className = "cell t-" + t.t;
+        var cell = document.createElement("div");
         cell.dataset.tile = TO.name(x, y);
-        if (t.t === "fire") { var a = document.createElement("span"); a.className = "age"; a.textContent = t.age; cell.appendChild(a); }
-        if (hoverTile && hoverTile[0] === x && hoverTile[1] === y) cell.classList.add("hover");
         (function (x, y) {
           cell.addEventListener("mouseenter", function () {
             hoverTile = [x, y]; hoverPass = false;
@@ -500,6 +500,17 @@ var TO = (function () {
         cells[TO.name(x, y)] = cell;
         board.appendChild(cell);
       }
+    }
+  }
+
+  function render() {
+    var pv = previewNow();
+    for (var y = 0; y < 6; y++) for (var x = 0; x < 6; x++) {
+      var t = TO.tile(game, x, y), cell = cells[TO.name(x, y)];
+      cell.className = "cell t-" + t.t;
+      cell.innerHTML = "";
+      if (t.t === "fire") { var a = document.createElement("span"); a.className = "age"; a.textContent = t.age; cell.appendChild(a); }
+      if (hoverTile && hoverTile[0] === x && hoverTile[1] === y) cell.classList.add("hover");
     }
     var p = cells[TO.name(game.player.x, game.player.y)];
     p.innerHTML = '<div class="player">' + game.player.hp + "</div>";
@@ -614,6 +625,7 @@ var TO = (function () {
   });
 
   window.terrainOnly = { get game() { return game; }, get screen() { return screen; }, start: start };
+  buildBoard();
   start();
 })();
 </script>

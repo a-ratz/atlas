@@ -8,7 +8,8 @@ play. The topic was roguelike games. In about two hours the vault went from noth
 - 2 maps and search by meaning;
 - one idea, picked from eleven candidates, then a spec;
 - a project with 6 decisions and 3 lessons;
-- a greybox of the game, tested.
+- a greybox of the game, tested;
+- one bug report, fixed through the project.
 
 **[▶ Play the result: Terrain Only](https://a-ratz.github.io/atlas/guided-run/)**, a turn-based
 roguelike in which you cannot attack. Each turn you change one tile, and the terrain does the
@@ -41,6 +42,7 @@ How the run was set up:
 | [10. Start a project](#10-start-a-project) | the move "Start a project from this spec" | atlas-project |
 | [11. Build the first slice](#11-build-the-first-slice) | "Let's work on Terrain Only…" | atlas-project |
 | [12. Close the session](#12-close-the-session) | `/close` | atlas-project |
+| [13. A bug report](#13-a-bug-report) | "Bug in Terrain Only: … nothing happens" | atlas-project |
 
 ## 1. An empty vault
 
@@ -314,6 +316,38 @@ and links to the decisions and lessons it produced.
 
 **Take away:** the next session, by you or another agent, starts from this page.
 
+## 13. A bug report
+
+The first review of this page tried the published game with a real mouse: clicking a tile did
+nothing. The agent's browser test had played 300 boards with synthetic clicks, and every one
+passed. The report went where a player's report would go, into the chat:
+
+**The user:** "Bug in Terrain Only: I opened terrain-only.html in Chrome, picked water and clicked
+b1 on Door A with the mouse. Nothing happens: still turn 1, water still 2. Hovering shows the
+preview fine. Can you fix it?"
+
+![The fix, with its thread and lesson](assets/guided-run/31-bug-fixed.webp)
+
+The agent reproduced the bug with real mouse input and traced it with an event log. Every hover
+rebuilt the board, so the tile under the mouse was replaced between press and release, and the
+browser never sent a click. It fixed the game and added a real-mouse click to the browser test.
+The new test fails before the fix and passes after it. The agent recorded a thread for the bug
+(closed, with what it verified and what it did not) and a lesson that holds beyond this project:
+
+> When a UI test clicks with synthetic events, also click at least once with real input
+
+The lesson holds everywhere, so the agent offered to turn it into an insight. **The user** pressed
+"Distill the lesson into an insight". Insights come only from captures, so the agent first wrote
+a small one: the bug case, plus MDN's pages on how a click is dispatched. The insight cites
+both and stays at *working*: one case and a documented mechanism. The lesson now points to it
+(`promoted_to`).
+
+![The lesson, promoted to an insight](assets/guided-run/32-insight-promoted.webp)
+
+**Take away:** a bug report lands in the project's memory: a thread with the cause and the
+evidence, and a lesson every later session reads at boot. A lesson that holds beyond the
+project can go on to become an insight.
+
 ## What the run changed
 
 The run used Atlas the way a new user would. Each thing that went wrong became an issue and a
@@ -326,6 +360,7 @@ pull request with Codex review rounds and regression tests, merged before this p
 | 8–10 | The idea skills left open what to do in four places, and a project without code warned about an unmapped checkout. A second Atlas on the same vault turned the first one standalone. | [#24](https://github.com/a-ratz/atlas/issues/24), [PR #25](https://github.com/a-ratz/atlas/pull/25) |
 | 9, 11 | Table cells broke words mid-word; thread log lines showed `[[wiki links]]` as raw text. | [#27](https://github.com/a-ratz/atlas/issues/27), [PR #28](https://github.com/a-ratz/atlas/pull/28) |
 | 11 | `map-path` rewrote the whole frontmatter of `project.md`. | [#29](https://github.com/a-ratz/atlas/issues/29), [PR #30](https://github.com/a-ratz/atlas/pull/30) |
+| 11–12 | `next` ignored open threads during project work, and the project and operator skills left eight questions open (decision size, spec edits, verification notes, a server that went away). | [#32](https://github.com/a-ratz/atlas/issues/32), [PR #33](https://github.com/a-ratz/atlas/pull/33) |
 
 The idea skills themselves, atlas-sketch's generate mode and atlas-spec, came in just before
 the run ([#16](https://github.com/a-ratz/atlas/issues/16),
