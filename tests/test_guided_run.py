@@ -246,6 +246,17 @@ def test_the_build_skills_answer_what_the_operator_asked():
     assert "A bug gets its own\nthread" in proj and "add a dated correction that names it" in proj
 
 
+def test_distill_reads_the_primary_not_the_capture():
+    # a capture is a lossy summary; claims come from the primary it cites (#34)
+    distill = (APP / ".agents" / "skills" / "atlas-distill" / "SKILL.md").read_text(encoding="utf-8")
+    assert "## 2. Read the primary, not the capture" in distill
+    assert "open the primary at the passage the claim rests on" in distill
+    assert "where capture and primary differ, the primary wins" in distill
+    assert "if only the capture says it, that is the capture's reading, not evidence" in distill
+    assert "a summary in the capture" not in distill  # no longer counts as a citable piece
+    assert "keep its confidence at\n  `speculative`" in distill and "The new evidence comes from the primary too" in distill
+
+
 def test_an_insight_with_no_neighbour_yet_can_say_so(engine, vault):
     # the first insight on a new topic: no honest link exists, and atlas-map needs five insights (#33 review round 2)
     (vault / "insights").mkdir(exist_ok=True)
