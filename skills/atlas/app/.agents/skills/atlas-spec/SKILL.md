@@ -48,7 +48,8 @@ Sort what you found into:
 Search for what already exists, within the budget. Findings worth keeping land
 as a capture (`kind: research`, with sources) for a later distill; do not
 write insights from them directly. If something already does the job, the spec
-opens with a **build or adopt** question.
+opens with a **build or adopt** question. Relatives that do not do the job are
+prior art, not a question: name them and the difference, no decision.
 
 ## 4. Write the spec
 
@@ -111,9 +112,10 @@ Rules for the content:
 
 ## 5. Review in a separate context
 
-Give the first slice and the acceptance criteria to a subagent where your
-harness has one (otherwise a separate pass): "Does this slice test the riskiest
-assumption, or a safe one? Which criterion cannot fail?" Fix what it finds and
+Give the first slice, the acceptance criteria and the rules they test (the
+design decisions they depend on) to a subagent where your harness has one
+(otherwise a separate pass): "Does this slice test the riskiest assumption, or a
+safe one? Which criterion cannot fail?" Fix what it finds and
 note the review in one line under "First slice".
 
 ## 6. Close the sketch and commit

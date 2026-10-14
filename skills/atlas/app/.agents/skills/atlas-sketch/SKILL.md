@@ -36,8 +36,9 @@ out. Two modes write the same file:
 ## Generate mode
 
 Say the budget before you start, as a progress line (`say --progress`): about
-15 note reads, at most 6 web searches, one red-team. The point is a few ideas that survived honest attempts to kill
-them, not many ideas.
+15 note reads, at most 6 web searches, one red-team. A read is a note read in
+full; skimming a map's list of links to choose what to read is free. The point
+is a few ideas that survived honest attempts to kill them, not many ideas.
 
 ### 1. Frame
 
@@ -161,7 +162,8 @@ origin: user              # user | "generated: <goal>"
 <The cheapest test that could kill it, and the result that would.>
 
 ## Red-team
-<Generate mode: the red-team's answer, verbatim.>
+<Generate mode: the red-team's answer on this idea, verbatim. The other
+survivors' verdicts go, one line each, under "Alternatives considered".>
 
 ## Alternatives considered
 - <name>: <one line> (killed: <gate>, or not picked)
