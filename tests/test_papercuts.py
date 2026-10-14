@@ -253,7 +253,7 @@ def test_the_distill_rules_from_the_smoke_runs(engine):
     assert "several\n  sources agree" not in distill and "set `revisit_after` for preprints" not in distill
     kinds = "company, university, research lab,\n   nonprofit, public body, open-source project, media, other"
     assert kinds in cabinet and "write `unknown`" in cabinet
-    assert "gets `created_by: user` in its frontmatter" in distill  # `user` passes check; a new sentinel would not (#43 review)
+    assert "has no `created_by` gets\n   `created_by: user`" in distill and "A `created_by` it already has stays" in distill  # `user` passes check; a new sentinel would not (#43 review)
 
 
 def test_a_slow_commit_hook_does_not_cut_a_drop_short(engine, vault, monkeypatch):
@@ -277,3 +277,16 @@ def test_a_slow_commit_hook_does_not_cut_a_drop_short(engine, vault, monkeypatch
     assert engine.commit_drop(drop)
     assert git("log", "-1", "--format=%s").strip() == "drop: slow.md"
     assert not (vault / ".git" / "index.lock").exists()
+
+
+def test_a_drop_a_hook_rejects_is_not_left_staged(engine, vault, monkeypatch):
+    # a refused drop commit left the file staged, and every later `commit` stopped at "unrelated changes" (#43 review)
+    git = drop_repo(vault, monkeypatch)
+    hook = vault / ".git" / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    hook.chmod(0o755)
+    drop = vault / "captures" / "refused.md"
+    drop.write_text("# Refused\n", encoding="utf-8")
+    assert engine.commit_drop(drop) is False and drop.exists()
+    assert git("diff", "--cached", "--name-only").strip() == ""
+    assert git("log", "-1", "--format=%s").strip() == "atlas: install"

@@ -2595,7 +2595,12 @@ def commit_drop(path: Path) -> bool:
     run = lambda *a: subprocess.run(["git", *a], cwd=top, capture_output=True, text=True, encoding="utf-8",
                                     errors="replace").returncode == 0
     try:  # `commit -- <path>` commits this file only, whatever else is staged
-        return run("add", "--", rel) and run("commit", "-q", "-m", f"drop: {path.name}", "--", rel)
+        if not run("add", "--", rel):
+            return False
+        if run("commit", "-q", "-m", f"drop: {path.name}", "--", rel):
+            return True
+        run("reset", "-q", "--", rel)  # a hook said no: unstage it, or every later `commit` stops at "unrelated changes"
+        return False
     except OSError:
         return False
     finally:

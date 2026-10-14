@@ -244,9 +244,10 @@ that is only mentioned ("as Netflix does") gets no card.
 5. Run `uv run --no-project engine/atlas.py next`. If it reports five or more
    insights without a map, offer to build one (`atlas-map`).
 6. Commit what you wrote, including the capture's old path (it moved). A
-   capture that git does not know yet and that you did not write (the user
-   copied it into `captures/`) gets `created_by: user` in its frontmatter
-   first, so the commit does not name you as its author. Run it
+   capture that git does not know yet, that you did not write (the user
+   copied it into `captures/`) and that has no `created_by` gets
+   `created_by: user` in its frontmatter first, so the commit does not name
+   you as its author. A `created_by` it already has stays. Run it
    from the Atlas folder; paths are relative to it (`vault/captures/<file>.md`,
    `vault/sources/<file>.md`, …):
    `engine/atlas.py commit --agent <id> -m "distill: <capture slug>" <paths>`.
