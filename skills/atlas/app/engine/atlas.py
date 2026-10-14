@@ -1187,7 +1187,7 @@ def deep_collections() -> tuple[str | None, dict]:
 FRONT_LINE = re.compile(r"^\s*([\w-]+:|- |---$|$)")  # what a frontmatter line looks like
 
 
-def snippet_text(snippet: str) -> str:
+def snippet_text(snippet: str, title: str = "") -> str:
     """QMD's snippet as the body text it found: without its diff header, without the frontmatter a hit near
     the top of a note starts in (opened or closed inside the snippet, or both), and without the title heading,
     which the result card shows already. Nothing left: empty, and the card shows its description."""
@@ -1198,8 +1198,10 @@ def snippet_text(snippet: str) -> str:
         lines = lines[end + 1:]
     elif dashes and all(FRONT_LINE.match(line) for line in lines[:dashes[0]]):  # starts inside it
         lines = lines[dashes[0] + 1:]
-    while lines and (not lines[0].strip() or lines[0].lstrip().startswith("# ")):
-        lines = lines[1:]
+    norm = lambda s: " ".join(s.split()).lower()
+    while lines and (not lines[0].strip() or (title and lines[0].lstrip().startswith("# ")
+                                               and norm(lines[0].lstrip()[2:]) == norm(title))):
+        lines = lines[1:]  # the title's own heading; a section heading the hit is about stays
     return "\n".join(lines).strip()[:300]
 
 
@@ -1228,7 +1230,7 @@ def deep_search(index: Index, q: str) -> list[dict]:
             continue
         seen.add(rel)
         e = index.entities.get(rel) if rel else None
-        snippet = snippet_text(h.get("snippet", ""))
+        snippet = snippet_text(h.get("snippet", ""), e.title if e else h.get("title") or "")
         if e:
             out.append({**e.card(index), "snippet": snippet, "score": h.get("score")})
         else:

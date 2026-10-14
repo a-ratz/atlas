@@ -283,8 +283,11 @@ def test_the_operator_gets_the_whole_isolation(tmp_path, monkeypatch):
 
 def test_snippets_leave_the_frontmatter_out(engine):
     # deep search showed "created_by: codex updated_by: codex ---" as a note's snippet (#10, smoke run on #15)
-    assert engine.snippet_text("@@ -1,4 @@\nevidence: woke\ncreated_by: codex\n---\n\n# Cue volume\nThe body") == "The body"
-    assert engine.snippet_text("---\ndescription: d\ncategory: sleep\n---\n# Title\nText") == "Text"
+    assert engine.snippet_text("@@ -1,4 @@\nevidence: woke\ncreated_by: codex\n---\n\n# Cue volume\nThe body",
+                               "Cue volume") == "The body"
+    assert engine.snippet_text("---\ndescription: d\ncategory: sleep\n---\n# Title\nText", "Title") == "Text"
+    # only the title's heading goes; a section the hit is about stays (#15, review round 6)
+    assert engine.snippet_text("# Noise sensitivity\nTwo woke.", "Sleep study") == "# Noise sensitivity\nTwo woke."
     assert engine.snippet_text("A body line\n---\nmore") == "A body line\n---\nmore"  # a rule in the body stays
     # the second smoke run: frontmatter that opens in the snippet and does not close there, then nothing
     assert engine.snippet_text("@@ -1,5 @@\n---\ndescription: d\ncategory: sleep\nconfidence: working") == ""
