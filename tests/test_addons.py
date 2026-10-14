@@ -309,3 +309,25 @@ def test_a_busy_token_endpoint_keeps_the_refresh_token_a_revoked_one_does_not(te
             account.access_token()
         assert account.store.load()["refresh_token"] == "r"
     assert account.access_token() is None and account.store.load() is None
+
+
+# ------------------------------------------------------------------ review round 2 on #60
+
+def test_signing_out_never_blocks_other_requests(teams_module, tmp_path):
+    import threading
+    import time as clock
+
+    def slow_sign_out(self):  # as if it waited for a refresh in flight that holds the lock
+        clock.sleep(1.0)
+        self.store.clear()
+
+    teams_module.Account.sign_out = slow_sign_out
+    with fake_teams_app(teams_module, tmp_path, lambda method, path, body: {"value": []}) as c:  # one event loop
+        out = threading.Thread(target=lambda: c.post("/api/addons/teams/logout"))
+        out.start()
+        clock.sleep(0.1)
+        started = clock.monotonic()
+        assert c.get("/api/addons/teams/chats").status_code == 200
+        waited = clock.monotonic() - started
+        out.join(5)
+    assert waited < 0.6, f"another request waited {waited:.2f}s for the sign-out"

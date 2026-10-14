@@ -99,6 +99,17 @@ def teams_races(page, base: str, scheme: str) -> None:
             failures.append(f"[{scheme}] teams: a send's answer was shown under the chat opened meanwhile")
         page.unroute("**/api/addons/teams/chats/*/messages")
 
+        # round 2: a send that never gets an answer leaves the composer usable for a retry
+        page.route("**/api/addons/teams/chats/*/messages", lambda r: r.abort() if r.request.method == "POST" else r.continue_())
+        page.evaluate("t => { document.querySelector('#tm-text').value = t; document.querySelector('.tm-compose button').click(); }",
+                      f"no answer ({scheme})")
+        page.wait_for_timeout(600)
+        stuck = page.evaluate("() => document.querySelector('.tm-compose button').disabled || document.querySelector('#tm-text').disabled")
+        if stuck or page.input_value("#tm-text") != f"no answer ({scheme})":
+            failures.append(f"[{scheme}] teams: a send without an answer left the composer stuck or lost the draft")
+        page.unroute("**/api/addons/teams/chats/*/messages")
+        page.fill("#tm-text", "")
+
         page.goto(f"{base}/#/")
         page.wait_for_function("document.querySelector('#main, main')?.children.length > 0", timeout=15000)
         page.route("**/api/addons/teams/state", lambda route: held.append(route))

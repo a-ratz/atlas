@@ -458,7 +458,7 @@ def register(ctx) -> list[Route]:
         return RedirectResponse(BACK)
 
     async def logout(request: Request):
-        account.sign_out()
+        await run_in_threadpool(account.sign_out)  # it may wait for a refresh in flight: never on the event loop
         me.clear()
         return JSONResponse({"ok": True})
 
