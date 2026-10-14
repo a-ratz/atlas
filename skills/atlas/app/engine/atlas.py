@@ -2516,7 +2516,8 @@ def cmd_commit(args) -> None:
     lock = _lock("git.lock")
     rel_top = [os.path.relpath(p, top).replace("\\", "/") for p in paths]
     staged = set((_git_out("diff", "--cached", "--name-only", cwd=top) or "").splitlines())
-    unrelated = sorted(s for s in staged if s not in rel_top)
+    # a named folder covers what is staged inside it (a rename into it, say)
+    unrelated = sorted(s for s in staged if not any(s == r or s.startswith(r.rstrip("/") + "/") for r in rel_top))
     if unrelated:
         sys.exit("unrelated changes are staged, not committing: " + ", ".join(unrelated[:8]) +
                  "\nCommit or unstage them first; this command commits only the paths you name.")

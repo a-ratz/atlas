@@ -171,3 +171,21 @@ def test_an_answer_right_after_the_move_counts_as_after(engine, vault, monkeypat
     res = client.post("/api/chat", json={"text": "Set this to dormant", "via": "move"}, headers={"x-atlas": "1"}).json()
     answer = next(m for m in client.get("/api/chat").json()["messages"] if m.get("role") == "agent")
     assert answer["n"] >= res["outbox_at"]
+
+
+def test_a_staged_rename_inside_a_named_folder_is_part_of_the_commit(engine, vault):
+    # `git mv captures/x sources/x`, then `commit … vault/sources`: refused as "unrelated changes" (#22, guided run)
+    git = lambda *a: subprocess.run(["git", "-C", str(vault), *a], capture_output=True, text=True, check=True)
+    git("init", "-q")
+    git("config", "user.name", "gate")
+    git("config", "user.email", "gate@example.com")
+    (vault / "agents").mkdir(exist_ok=True)
+    (vault / "agents" / "gate.md").write_text("# Gate\n", encoding="utf-8")
+    (vault / "captures").mkdir(exist_ok=True)
+    (vault / "captures" / "moved.md").write_text("# Moved\n", encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-q", "-m", "start")
+    (vault / "sources").mkdir(exist_ok=True)
+    git("mv", "captures/moved.md", "sources/moved.md")
+    engine.cmd_commit(Namespace(agent="gate", message="distill: moved", paths=[str(vault / "sources")]))
+    assert "sources/moved.md" in git("show", "--name-only", "HEAD").stdout
