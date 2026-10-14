@@ -2506,16 +2506,28 @@ def _set_front_path(path: Path, machine: str, target: str) -> None:
     paths = meta.get("paths") if isinstance(meta, dict) else None
     if not isinstance(meta, dict) or (paths is not None and not isinstance(paths, dict)):
         sys.exit(f"{path.name}: `paths:` is not a mapping of machine: folder; fix it by hand first")
-    block = yaml.safe_dump({"paths": {**(paths or {}), machine: target}},
-                           sort_keys=False, allow_unicode=True, width=1000).splitlines()
+    want = {**(paths or {}), machine: target}
+    block = yaml.safe_dump({"paths": want}, sort_keys=False, allow_unicode=True, width=1000).splitlines()
     if span and span[3]:
         sys.exit(f"{path.name}: `paths:` uses a YAML anchor or alias; set `{machine}: {target}` under it by hand")
     if span:
         start, end, column, _ = span
-        front = front[:start] + (nl + " " * column).join(block) + front[end:]
+        line = front.rfind("\n", 0, start) + 1
+        if front[line:start].strip() == "?":  # an explicit key (`? paths`): the indicator goes too
+            start, column = line + front[line:start].index("?"), front[line:start].index("?")
+        while end > start and front[end - 1] in " \t\r\n":
+            end -= 1  # a block scalar (`|-`) ends after its newline; the line break stays outside
+        new = front[:start] + (nl + " " * column).join(block) + front[end:]
     else:
-        front = front + nl + nl.join(block) if front.strip() else nl.join(block)
-    path.write_text(head + front + tail, encoding="utf-8", newline="")
+        new = front + nl + nl.join(block) if front.strip() else nl.join(block)
+    try:  # the file is the truth: write only what reads back as the old frontmatter plus this one path
+        ok = yaml.safe_load(new) == {**meta, "paths": want}
+    except yaml.YAMLError:
+        ok = False
+    if not ok:
+        sys.exit(f"{path.name}: could not set paths.{machine} without touching other lines; set `{machine}: {target}` "
+                 "under `paths:` by hand")
+    path.write_text(head + new + tail, encoding="utf-8", newline="")
 
 
 def cmd_map_path(args) -> None:

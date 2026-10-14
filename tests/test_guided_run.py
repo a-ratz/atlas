@@ -144,6 +144,9 @@ def test_map_path_keeps_crlf_and_refuses_a_paths_that_is_not_a_mapping(engine, v
     ("paths:\n  desk: /d/terrain\n# moved in May\n  laptop: /old\n", "paths:\n  desk: /d/terrain\n  laptop: /code/terrain\n"),
     ("paths: {desk: /d/terrain,\n  laptop: /old\n}\n", "paths:\n  desk: /d/terrain\n  laptop: /code/terrain\n"),
     ("paths:\n  desk: /d/terrain\n# about next\n", "paths:\n  desk: /d/terrain\n  laptop: /code/terrain\n# about next\n"),
+    # review round 2 on #30: a block scalar that ends after its newline, an explicit key
+    ("paths:\n  laptop: |-\n    /old\n", "paths:\n  laptop: /code/terrain\n"),
+    ("? paths\n: {desk: /d/terrain}\n", "paths:\n  desk: /d/terrain\n  laptop: /code/terrain\n"),
 ])
 def test_map_path_finds_the_whole_paths_value(engine, vault, before, after):
     project(vault, "terrain", "status: active\n" + before + "next: step 5\n")
@@ -161,5 +164,16 @@ def test_map_path_leaves_anchors_and_aliases_to_the_user(engine, vault, front):
     note = vault / "projects/private/terrain/project.md"
     before = note.read_bytes()
     with pytest.raises(SystemExit, match="anchor or alias"):
+        engine._set_front_path(note, "laptop", "/code/terrain")
+    assert note.read_bytes() == before
+
+
+def test_map_path_writes_nothing_it_cannot_read_back(engine, vault, monkeypatch):
+    # the last guard: a span that would change another key is refused, and the file stays as it was (#30 round 2)
+    project(vault, "terrain", "status: active\npaths: {desk: /d}\nnext: step 5\n")
+    note = vault / "projects/private/terrain/project.md"
+    before = note.read_bytes()
+    monkeypatch.setattr(engine, "_top_value_span", lambda events, key: (0, 20, 0, False))  # also eats `status:`
+    with pytest.raises(SystemExit, match="without touching other lines"):
         engine._set_front_path(note, "laptop", "/code/terrain")
     assert note.read_bytes() == before
