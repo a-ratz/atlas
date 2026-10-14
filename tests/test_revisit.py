@@ -63,7 +63,7 @@ def test_a_superseded_insight_is_not_due(engine, vault):
 
 
 def test_the_revisit_button_speaks_through_the_registry():
-    # review round 1 on #53: the Needs you button sent hardcoded text and skipped a vault's own /revisit wording
+    # review rounds 1-3 on #53: hardcoded text skipped a vault's own /revisit; matching move wording picked the wrong move
     import re
     import shutil
     import subprocess
@@ -73,21 +73,17 @@ def test_the_revisit_button_speaks_through_the_registry():
     js = (APP / "engine" / "static" / "app.js").read_text(encoding="utf-8")
     pieces = [re.search(p, js, re.S).group(0) for p in (
         r"const esc = .*?;\n", r"const commandSend = \(name, args = \"\"\) => \{.*?\n\};\n",
-        r"const fillMove = .*?;\n", r"function revisitButton\(n, r\) \{.*?\n\}\n")]
-    stubs = ('const commandList = () => [{name: "revisit", send: "Check {args} offline only"}];\n'
-             'let moves = [{label: "Mine", send: "Re-read this insight\'s source, offline"}];\n'
-             "const movesOf = () => moves;\n")
+        r"function revisitButton\(n, r\) \{.*?\n\}\n")]
+    stubs = ('let commands = [{name: "revisit", send: "Check {args} offline only"}];\n'
+             "const commandList = () => commands;\n"
+             'const movesOf = () => [{label: "Challenge", send: "Revisit the assumptions behind this claim"}];\n')
     probe = stubs + "\n".join(pieces) + (
         '\nconst r = {id: "insights/a.md", title: "A claim"};'
         "\nconsole.log(revisitButton({revisits_total: 2}, r));"
-        "\nmoves = [{label: \"🔁 Revisit its source\", send: \"/revisit this insight\"}];"
         "\nconsole.log(revisitButton({revisits_total: 1}, r));"
-        "\nmoves = [{label: \"Revisit\", send: \"Revisit {title} using {path}\"}];"
-        "\nconsole.log(revisitButton({revisits_total: 1}, r));"
-        "\nmoves = [];"
+        "\ncommands = [];"
         "\nconsole.log(revisitButton({revisits_total: 1}, r));")
     out = subprocess.run([node, "-e", probe], capture_output=True, text=True, encoding="utf-8").stdout.splitlines()
-    assert 'data-send="Check all offline only" data-via="command"' in out[0]  # the vault's own command text
-    assert 'data-send="/revisit this insight" data-via="move"' in out[1]
-    assert 'data-send="Revisit A claim using insights/a.md" data-via="move"' in out[2]  # review round 2: placeholders filled
-    assert 'data-send="Check this insight offline only" data-via="command"' in out[3]  # no revisit move: the command
+    assert 'data-send="Check all offline only" data-via="command" data-ctx="insights/a.md"' in out[0]  # the vault's wording
+    assert 'data-send="Check this insight offline only" data-via="command"' in out[1]  # not the challenge move
+    assert 'data-send="/revisit this insight"' in out[2]  # a registry without the command: the plain command

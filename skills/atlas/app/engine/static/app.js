@@ -506,12 +506,11 @@ const commandSend = (name, args = "") => {
   const c = commandList().find((x) => x.name === name);
   return c ? (c.send || `/${c.name} {args}`).replace("{args}", args).trim() : `/${name} ${args}`.trim();
 };
-// The Revisit button speaks through the registry, so a vault's own /revisit or move wording is what the agent gets (#53):
-// several due, the command with "all"; one due, the insight's revisit move on that note.
+// The Revisit button sends the registry's `revisit` command, found by its name, never by matching wording: a vault's own
+// /revisit text is what the agent gets (#53). One due: "this insight", on that note; several: "all".
 function revisitButton(n, r) {
-  const move = movesOf("insight").find((m) => /revisit/i.test(`${m.label || ""} ${m.send || ""}`));
-  const [send, via] = n.revisits_total > 1 || !move ? [commandSend("revisit", n.revisits_total > 1 ? "all" : "this insight"), "command"] : [fillMove(move.send, r), "move"];
-  return `<button class="btn primary" data-send="${esc(send)}" data-via="${via}" data-ctx="${esc(r.id)}">Revisit</button>`;
+  const send = commandSend("revisit", n.revisits_total > 1 ? "all" : "this insight");
+  return `<button class="btn primary" data-send="${esc(send)}" data-via="command" data-ctx="${esc(r.id)}">Revisit</button>`;
 }
 function needsItems(n) {
   const items = [];
