@@ -901,21 +901,26 @@ def _block_unsafe(index: Index, kind: str, body: str) -> dict:
     return {"kind": "error", "text": f"unknown block atlas:{kind}"}
 
 
-FENCE_LINE = re.compile(r"^ {0,3}(`{3,}[^`\n]*|~{3,}[^\n]*)$", re.M)  # a whole line that opens or closes a code block
+FENCE = re.compile(r"^( {0,3})(`{3,}|~{3,})(.*)$")
 
 
 def atlas_block_open_at_end(text: str) -> bool:
-    """Whether the message ends inside an `atlas:` block that was never closed, in the renderer's own terms
-    (BLOCK: an opener at the start of a line). After the last complete block, the last opener counts when no
-    fence-like line follows it and it is not inside another code block (an even number of fence lines before)."""
-    tail = text[max((m.end() for m in BLOCK.finditer(text)), default=0):]
-    openers = list(re.finditer(r"^```atlas:[a-z]+[^\n]*\n", tail, re.M))
-    if not openers:
-        return False
-    opener = openers[-1]
-    if FENCE_LINE.search(tail[opener.end():]) or re.search(r"^\s*(```|~~~)", tail[opener.end():], re.M):
-        return False
-    return len(FENCE_LINE.findall(tail[:opener.start()])) % 2 == 0
+    """Whether the message ends inside an `atlas:` block that was never closed. Fences are followed line by
+    line the Markdown way: a fence opens with three or more backticks or tildes (up to three spaces in; a
+    backtick fence's info string has no backticks) and closes only with the same character, at least as
+    many, and nothing after them. A quoted line (`> `) or indented code is no fence."""
+    fence = None  # (character, length, is it an atlas: block)
+    for line in text.split("\n"):
+        m = FENCE.match(line)
+        if not m:
+            continue
+        mark, info = m.group(2), m.group(3)
+        if fence is None:
+            if not (mark[0] == "`" and "`" in info):
+                fence = (mark[0], len(mark), mark == "```" and info.startswith("atlas:"))
+        elif mark[0] == fence[0] and len(mark) >= fence[1] and not info.strip():
+            fence = None
+    return fence is not None and fence[2]
 
 
 def render_agent_message(index: Index, text: str) -> list[dict]:

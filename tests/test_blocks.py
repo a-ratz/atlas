@@ -57,3 +57,14 @@ def test_a_quoted_example_html_lines_and_stray_returns(engine, vault):
     assert [b["kind"] for b in blocks] == ["md"] and "That is all." in blocks[0]["html"]
     assert kinds(engine, "<br>\n```atlas:choices\noptions: [A, B]\n")[-1] == "choices"
     assert kinds(engine, "Done.\rNext steps:\n```atlas:choices\noptions: [A, B]\n")[-1] == "choices"
+
+
+def test_fences_are_followed_by_their_delimiter(engine, vault):
+    # round 4: a backtick line inside an open ~~~ example flipped a parity count; an indented fence inside a
+    # YAML label stopped the closing; an opener one to three spaces in was missed (#21)
+    inside_tildes = "~~~text\n```\n```atlas:choices\noptions: [A]\n"
+    blocks = engine.render_agent_message(engine.Index(), inside_tildes)
+    assert [b["kind"] for b in blocks] == ["md"]
+    yaml_label = "```atlas:choices\noptions:\n  - label: |\n      ```python\n      print(1)\n    send: run it\n"
+    assert kinds(engine, yaml_label)[-1] == "choices"
+    assert kinds(engine, "Pick:\n  ```atlas:choices\noptions: [A, B]\n")[-1] == "choices"
