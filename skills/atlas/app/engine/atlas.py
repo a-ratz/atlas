@@ -690,7 +690,7 @@ def is_operational(e: "Entity") -> bool:
 def needs_you(index: Index) -> dict:
     today = dt.date.today().isoformat()
     ents = index.entities.values()
-    revisits = sorted((e for e in ents if e.type == "insight" and _date(e.meta.get("revisit_after"))
+    revisits = sorted((e for e in ents if e.type == "insight" and not e.meta.get("superseded_by") and _date(e.meta.get("revisit_after"))
                        and _date(e.meta.get("revisit_after")) <= today), key=lambda e: e.title)
     pending_q = [e for e in ents if e.type == "question" and str(e.meta.get("status", "")).lower() in ("pending", "open")]
     dialogs: list = []
@@ -2173,7 +2173,8 @@ def suggestions(index: Index) -> list[str]:
     mapped = {i for m in maps for i in m.links}
     unmapped = [e for e in insights if e.id not in mapped]
     today = dt.date.today().isoformat()
-    due = [e for e in insights if _date(e.meta.get("revisit_after")) and _date(e.meta.get("revisit_after")) <= today]
+    due = [e for e in insights if not e.meta.get("superseded_by")  # a replaced claim is not re-checked (#53)
+           and _date(e.meta.get("revisit_after")) and _date(e.meta.get("revisit_after")) <= today]
     notes = [e for e in ents if e.type == "note" and str(e.meta.get("status")) == "new"]
     out = []
     if notes:

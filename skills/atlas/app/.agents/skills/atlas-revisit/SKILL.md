@@ -51,7 +51,8 @@ Leave the `source:` capture as it is: it records what was read back then.
 
 Then set `revisit_after` again (about three months out) only if the text can
 still change. Remove it when the source has a final version now, or is stable
-by nature.
+by nature. A superseded insight loses its `revisit_after`; its replacement
+carries the date, if its source can still change.
 
 ## 4. Close the loop
 
