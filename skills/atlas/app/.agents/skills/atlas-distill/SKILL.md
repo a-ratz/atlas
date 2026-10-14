@@ -77,7 +77,9 @@ Quality bar:
 - **Confidence:** `speculative` (one source, or inference), `working` (several
   sources agree), `proven` (replicated or well-established).
 - **Links:** link at least one existing insight whenever one is related. The
-  connections are what turns a list into knowledge.
+  connections are what turns a list into knowledge. When none is (the first
+  insight on a new topic), do not force one: offer a map for the topic; until
+  then `check` lists the insight as unconnected.
 - Cite paper versions (`2609.16247v2`) and set `revisit_after` for preprints
   (about three months out).
 

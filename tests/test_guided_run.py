@@ -240,3 +240,7 @@ def test_the_build_skills_answer_what_the_operator_asked():
     assert "(`[via choice]: /close`) runs that command" in op and "runs that command too" in agents
     assert "would be revisited together are one decision" in proj and "add a dated note that links the decision" in proj
     assert "what was verified and how" in proj and "does not count" in proj and "`boot` prints it as text" in proj
+    distill = (skills / "atlas-distill" / "SKILL.md").read_text(encoding="utf-8")
+    # the bug phase's operator: promoting a lesson, a first insight on a new topic, bug threads, corrections
+    assert "write a short capture with the lesson's evidence" in proj and "do not force one: offer a map" in distill
+    assert "A bug gets its own\nthread" in proj and "add a dated correction that names it" in proj
