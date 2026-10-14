@@ -284,6 +284,13 @@ def check_docs(args) -> None:
                     line = text.count("\n", 0, start + c.start()) + 1
                     fail(f"{md.relative_to(ROOT)}:{line} names `engine/atlas.py {c.group(1)}`, which does not exist")
     ok(f"the docs name only commands the engine has ({len(commands)} known)")
+    version = (APP / "VERSION").read_text(encoding="utf-8").strip()
+    badge = ROOT / "docs" / "assets" / "badges" / "version.svg"
+    shown = set(re.findall(r"\d+\.\d+\.\d+", badge.read_text(encoding="utf-8")))
+    if shown != {version}:
+        fail(f"{badge.relative_to(ROOT).as_posix()} shows {', '.join(sorted(shown)) or 'no version'}, VERSION is {version}")
+    else:
+        ok(f"the version badge shows {version}")
 
 
 def check_hygiene(args) -> None:
