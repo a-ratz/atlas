@@ -901,11 +901,24 @@ def _block_unsafe(index: Index, kind: str, body: str) -> dict:
     return {"kind": "error", "text": f"unknown block atlas:{kind}"}
 
 
-OPEN_AT_END = re.compile(r"^```atlas:[a-z]+[^\n]*\n(?:(?!^```[ \t]*$).)*\Z", re.S | re.M)
+def atlas_block_open_at_end(text: str) -> bool:
+    """Whether the message ends inside an `atlas:` block. Fences are followed the Markdown way, so an
+    opener quoted inside another code block (~~~, four backticks) is not one."""
+    fence, atlas = None, False
+    for line in text.split("\n"):
+        s = line.strip()
+        if fence is None:
+            m = re.match(r"(`{3,}|~{3,})(.*)$", s)
+            if m:
+                fence, atlas = m.group(1), m.group(1) == "```" and m.group(2).startswith("atlas:")
+        elif len(s) >= len(fence) and s == fence[0] * len(s):  # a closing fence: same mark, at least as long
+            fence, atlas = None, False
+    return atlas
 
 
 def render_agent_message(index: Index, text: str) -> list[dict]:
-    if OPEN_AT_END.search(text):  # an agent left its last block open: the end of the message closes it
+    text = text.replace("\r\n", "\n")  # an agent on Windows writes CRLF; the fences are matched per line
+    if atlas_block_open_at_end(text):  # an agent left its last block open: the end of the message closes it
         text = text.rstrip("\n") + "\n```"
     blocks, pos = [], 0
     for m in BLOCK.finditer(text):

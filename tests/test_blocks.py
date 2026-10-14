@@ -26,3 +26,17 @@ def test_after_a_closed_block_an_open_last_one_is_closed_too(engine, vault):
 def test_a_plain_code_block_left_open_is_not_touched(engine, vault):
     text = "Here is code:\n```python\nprint(1)\n"
     assert kinds(engine, text) == ["md"]
+
+
+def test_crlf_answers_keep_their_text(engine, vault):
+    # with CRLF a closed block looked open, and the prose after it disappeared into it (#21, review round 1)
+    text = "```atlas:choices\r\noptions: [A, B]\r\n```\r\nAnd then some words.\r\n"
+    assert kinds(engine, text) == ["choices", "md"]
+
+
+def test_an_opener_quoted_in_another_code_block_stays_quoted(engine, vault):
+    # an unfinished example inside ~~~ or four backticks became an empty choices block (#21, round 1)
+    for fence in ("~~~", "````"):
+        text = f"Write it like this:\n{fence}text\n```atlas:choices\noptions: [A]\n{fence}\nThat is all."
+        blocks = engine.render_agent_message(engine.Index(), text)
+        assert [b["kind"] for b in blocks] == ["md"] and "That is all." in blocks[0]["html"], fence
