@@ -31,16 +31,17 @@ distill you can start yourself.
 vault through research, an idea and a spec to a project that builds a small browser roguelike.
 [Play the game it built](https://a-ratz.github.io/atlas/guided-run/).
 
-**New in 0.5:**
+**New since 0.6:**
 
-- 🧭 **[Tours](#tours):** your agent walks you through what changed since your last visit and marks what needs your call.
-- 🌙 **[Chart Room](#what-you-get):** a new look, dark and Paper light, built for long reading on desk and phone.
-- 🧪 **[Demo vault](#demo-vault):** try a full vault the minute Atlas is installed; one sentence removes it again.
+- 💡 **[Ideas](#ideas-from-sketch-to-project):** write an idea down, or let your agent generate candidates from what the vault knows and keep the survivors. A spec works one out, and a project starts from the spec.
+- 🔎 **[Search by meaning](#small-things):** QMD indexes the vault in five collections and stays fresh after every commit.
+- 🗂️ **[Cards that grow from research](#people-and-organizations):** distilling writes a minimal card for each person and organization the insights rest on; **Expand cards** completes them.
+- 📚 **Distilling checks the primary sources:** quotes, figures and attributions come from the paper or the docs, not from the research summary. It also files the few open questions that would change a claim.
 
 ## Contents
 
 - [Quick start](#quick-start)
-- [What you get](#what-you-get): [Home](#home), [the reader](#the-reader), [talking to your agents](#talking-to-your-agents), [tours](#tours), [the constellation](#the-constellation), [projects](#projects-and-their-memory), [small things](#small-things)
+- [What you get](#what-you-get): [Home](#home), [the reader](#the-reader), [talking to your agents](#talking-to-your-agents), [tours](#tours), [the constellation](#the-constellation), [ideas](#ideas-from-sketch-to-project), [projects](#projects-and-their-memory), [people](#people-and-organizations), [small things](#small-things)
 - [How it works](#how-it-works)
 - [Your agent's side](#your-agents-side)
 - [Demo vault](#demo-vault)
@@ -117,7 +118,8 @@ agents on shift with their state and last answer.
 The chat is a panel next to your reading, and a full page with a workbench.
 Agents answer with **blocks**: note cards you unfold in place, charts, choices,
 checklists and sandboxed HTML mockups. Several agents can listen at once, each
-under its own name; long jobs show their steps live. When an agent opens a page
+under its own name; long jobs show their steps live, and the bar above the
+conversation names what the agent is working on. When an agent opens a page
 for you, it lands in the workbench, next to the conversation.
 
 ### Tours
@@ -144,6 +146,17 @@ Every insight and map as a living graph, with maps as hubs. Colour it by map,
 author or category, fly to a note, or press play and watch the vault grow out
 of your conversations, day by day.
 
+### Ideas, from sketch to project
+
+Say "I have an idea…" and your agent writes it down as a sketch (`atlas-sketch`).
+Or ask for ideas: it generates candidates from what your vault knows and kills
+the weak ones at fixed gates. A second agent attacks the survivors, and you get
+the few that are left. **Turn into a spec** works a sketch out (`atlas-spec`):
+grounded in your insights, with prior art, acceptance criteria, risks and a
+first slice. A second review checks the slice before you see it. **Start a
+project** on the spec, and the project page shows the line back to the spec and
+the sketch it came from. The operator view above shows a spec in the workbench.
+
 ### Projects and their memory
 
 <p align="center">
@@ -155,6 +168,7 @@ one memory that every agent shares: **threads** with their next step and a log,
 **decisions** (proposed → accepted), **lessons** that hold beyond one session.
 The page shows where you left off and exactly what an agent loads before it
 starts (`atlas.py boot <project> --agent <id>`), with its token budget.
+`atlas.py map-path` records where the project's code lives on each machine.
 
 ### People and organizations
 
@@ -241,6 +255,7 @@ vault/
   questions/  open questions that would change a claim (at most 7 open)
   sketches/   specs/      ideas, rough and worked out
   projects/<group>/<project>/   project.md, threads/, decisions/, lessons/
+  cabinet/    people/ and orgs/: one card per person or organization
   tours/      guided walks through what changed
   you/        your goals, profile and notes
   agents/     one identity file per agent
@@ -257,7 +272,8 @@ Atlas ships the workflows as skills that every harness reads from
 |---|---|
 | ask to start Atlas | `atlas-operator`: serve, listen, answer with blocks, write tours |
 | ask a question or name a topic | `atlas-learn`: research it, land a capture with sources |
-| agree to distill | `atlas-distill`: one claim per insight, every claim traced to its source |
+| agree to distill | `atlas-distill`: one claim per insight, every claim checked against its primary source |
+| want to search by meaning | `atlas-qmd`: set up QMD and search the vault by meaning |
 | have a cluster of insights | `atlas-map`: group them into a map |
 | say "I have an idea…", or ask for ideas | `atlas-sketch`: write it down, or generate candidates from the vault and keep the survivors |
 | want a sketch worked out | `atlas-spec`: a spec grounded in your insights, with a first slice; then a project |
@@ -266,15 +282,16 @@ Atlas ships the workflows as skills that every harness reads from
 | want the demo gone | `atlas-clean-demo` |
 
 In the chat, `/` lists the commands (`/learn`, `/distill`, `/map`, `/sketch`, `/spec`,
-`/project`, `/close`, `/remember`, `/check`, `/next`, `/tour`); add your own in
-`vault/atlas.yaml`.
+`/project`, `/close`, `/expand-cards`, `/remember`, `/check`, `/next`, `/tour`); add
+your own in `vault/atlas.yaml`.
 
 ---
 
 ## Demo vault
 
 The installer offers a demo: a researcher's vault on sleep, memory and learning,
-with 23 insights in three maps, sources, a research run, open questions, a
+with 23 insights in three maps, sources, a research run, open questions, two
+sketches and a spec, cards for two researchers and their university, a
 sleep-app project and a thesis, a tour, and a git history over the last ten
 days, written by Claude and Codex. The screenshots above show it; only the
 chat and the name Ada were added for the pictures.
@@ -317,15 +334,15 @@ single-user, local-first and young.
 
 Atlas 0.9.7 is the current release. Stable: the
 engine and reader, the duplex chat with answer blocks, project memory with boot
-packets, the checks, tours, the installer with upgrade and restore.
+packets, ideas from sketch to project, cards, search by meaning, the checks,
+tours, the installer with upgrade and restore.
 
 Open:
 
 - Listening in the foreground (Codex, pi) is not yet verified end to end.
 - One vault per server; "since you were last here" is kept per browser.
 - Not built yet, by decision: packs (heavier knowledge-graph machinery as an
-  opt-in), hard enforcement of group rules, `atlas-spec` and `atlas-revisit`
-  workflows.
+  opt-in), hard enforcement of group rules, an `atlas-revisit` workflow.
 
 ---
 
@@ -336,8 +353,11 @@ skills/atlas/SKILL.md            the global skill: installer, pointer, factory c
 skills/atlas/scripts/            atlas_install.py: status, install, locate, upgrade, restore
 skills/atlas/references/         onboarding for the first run
 skills/atlas/app/                the app that gets installed: engine/, vault/, demo/, AGENTS.md, .agents/skills/
-docs/assets/                     images and badges for this README
+docs/guided-run.md               one real session in thirteen steps; the game it built is in docs/guided-run/game/
+docs/assets/                     images and badges for this README and the guided run
 site/                            the live demo: build.py records the engine on the demo vault, demo.js replays it
+ci/                              the pull request gate (gate.py) and isolated smoke runs (smoke/)
+tests/                           tests for the engine and the skills
 ```
 
 - Update: `npx skills update atlas`, then "update atlas" (upgrades the app files
