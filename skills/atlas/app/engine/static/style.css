@@ -243,6 +243,7 @@ a.card:hover { text-decoration: none; border-color: color-mix(in srgb, var(--hue
 .card-kind .k { color: var(--hue); }
 .card-title { font-weight: 600; font-size: 14.5px; line-height: 1.38; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .card-desc { color: var(--soft); font-size: 13.5px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.card-desc.snip code { font: .88em var(--mono); color: var(--text); }
 .card-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; font: 11.5px var(--mono); color: var(--faint); }
 .list { display: flex; flex-direction: column; gap: 10px; }
 
@@ -254,7 +255,7 @@ a.card:hover { text-decoration: none; border-color: color-mix(in srgb, var(--hue
 .facet.on { background: var(--raised-2); border-color: var(--soft); color: var(--text); }
 .seg { display: inline-flex; padding: 3px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
 .seg button { min-height: 32px; padding: 0 12px; border-radius: 7px; border: 0; background: transparent; color: var(--soft); font-size: 12.5px; cursor: pointer; }
-.seg button.on, .seg button[aria-pressed="true"] { background: var(--raised-2); color: var(--text); }
+.seg button.on, .seg button[aria-pressed="true"], .seg a.on, .seg a[aria-pressed="true"] { background: var(--raised-2); color: var(--text); }
 
 .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: 14px; z-index: 60; box-shadow: var(--shadow); max-width: calc(100vw - 32px); }
 body.undo-on .toast:not(.undo) { bottom: 82px; }

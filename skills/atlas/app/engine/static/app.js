@@ -171,6 +171,10 @@ function byBadges(e) {
   if (e.edited_by && e.edited_by !== e.by) out.push(agentBadge(e.edited_by, "edited by"));
   return out.join("");
 }
+// A search-by-meaning snippet inside a result card, which is a link itself: bold and code render, nothing in it is a
+// link; the engine already turned [[links]] into the names a reader sees (#50).
+const snippetHtml = (s) => esc(String(s ?? "")).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+
 const card = (e, extra = "") => {
   remember([e]);
   const f = e.facts || {};
@@ -834,7 +838,7 @@ async function viewSearch(params) {
     return;
   }
   if (data.note) toast(data.note);
-  $("#results").innerHTML = data.results.length ? data.results.map((e) => e.id ? card(e, e.snippet ? `<div class="card-desc mono" style="font-size:12.5px">${esc(e.snippet)}</div>` : "")
+  $("#results").innerHTML = data.results.length ? data.results.map((e) => e.id ? card(e, e.snippet ? `<div class="card-desc snip">${snippetHtml(e.snippet)}</div>` : "")
     : `<div class="card" data-t="external"><div class="card-title">${esc(e.title)}</div><div class="card-desc">${esc(e.description)}</div><div class="path">${esc(e.path)}</div></div>`).join("")
     : `<div class="empty">No results.${mode === "fast" && !state.meta.qmd ? " Search by meaning needs QMD (ask your agent to turn it on)." : ""}</div>`;
 }

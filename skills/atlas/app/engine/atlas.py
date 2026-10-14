@@ -1296,6 +1296,17 @@ def frontmatter_end(rel: str) -> int:
     return next((n + 1 for n, line in enumerate(lines[1:], 1) if line.rstrip() == "---"), 0)
 
 
+def snippet_links(snippet: str, index: "Index") -> str:
+    """[[links]] in a search snippet as the names a reader sees: the alias, else the linked note's title, else the
+    target. The result card is a link itself, so the snippet carries no links of its own (#50)."""
+    def name(m: re.Match) -> str:
+        if m.group(2):
+            return m.group(2).strip()
+        hit = index.entities.get(index.resolve(m.group(1)) or "")
+        return hit.title if hit else m.group(1).strip()
+    return WIKI.sub(name, snippet)
+
+
 def snippet_text(snippet: str, title: str = "", keys: frozenset = frozenset(), front_end: int = 0) -> str:
     """QMD's snippet as the body text it found: without its diff header, without the frontmatter a hit near
     the top of a note starts in (opened or closed inside the snippet, or both), and without the title heading,
@@ -1344,8 +1355,8 @@ def deep_search(index: Index, q: str) -> list[dict]:
             continue
         seen.add(rel)
         e = index.entities.get(rel) if rel else None
-        snippet = snippet_text(h.get("snippet", ""), e.title if e else h.get("title") or "",
-                               frozenset(e.meta) if e else frozenset(), frontmatter_end(rel) if e else 0)
+        snippet = snippet_links(snippet_text(h.get("snippet", ""), e.title if e else h.get("title") or "",
+                                             frozenset(e.meta) if e else frozenset(), frontmatter_end(rel) if e else 0), index)
         if e:
             out.append({**e.card(index), "snippet": snippet, "score": h.get("score")})
         else:
