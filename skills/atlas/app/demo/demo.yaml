@@ -944,6 +944,8 @@ files:
     ---
     status: open
     raised: {{day:-2}}
+    raised_count: 2
+    affects: "[[cueing-at-home-needs-eeg]]"
     created_by: claude
     updated_by: claude
     ---
@@ -956,6 +958,8 @@ files:
     ---
     status: open
     raised: {{day:0}}
+    raised_count: 1
+    affects: "[[tmr-cues-reactivate-memories]]"
     created_by: claude
     updated_by: claude
     ---

@@ -168,7 +168,7 @@ const card = (e, extra = "") => {
 const chip = (e) => { remember([e]); return `<a class="chip" data-t="${esc(e.type)}" href="#/e/${enc(e.id)}" title="${esc(e.title)}">${g(e.type)}<span class="t">${esc(e.title)}</span></a>`; };
 
 // ------------------------------------------------------------------ agents and presence
-const ST_LABEL = { listening: "listening", working: "working", away: "busy", offline: "offline" };
+const ST_LABEL = { listening: "listening", working: "working", away: "busy", offline: "offline", starting: "starting" };
 const named = () => state.operator.agents || [];
 function legacyAgent() {  // an operator that runs `wait` without --agent: one unnamed agent
   const op = state.operator, msgs = state.chatMessages;
@@ -196,13 +196,14 @@ function renderPresence() {
     el.innerHTML = `<a class="ppill" href="#/chat" title="No agent attached: what you write is kept as a note">${avatar(null, "", "offline")}<span class="nm">Standalone</span></a>`;
   } else {
     const list = liveAgents();
-    el.innerHTML = list.length ? list.map((a) => `<a class="ppill" href="#/chat" title="${esc(agentName(a.id))}: ${esc(stateText(a))}">${avatar(a.id, "", a.state)}<span class="nm">${esc(agentName(a.id))}</span><span class="st ${a.state}">${esc(stateText(a))}</span></a>`).join("")
+    el.innerHTML = list.length ? list.map((a) => `<a class="ppill" href="#/chat" title="${a.state === "starting" ? "Atlas is ready; the agent has not connected yet. What you write waits for it" : `${esc(agentName(a.id))}: ${esc(stateText(a))}`}">${avatar(a.id, "", a.state)}<span class="nm">${esc(agentName(a.id))}</span><span class="st ${a.state}">${esc(stateText(a))}</span></a>`).join("")
       : `<a class="ppill" href="#/chat" title="The agent session ended; messages wait in the inbox">${avatar(null, "", "offline")}<span class="nm">Agent</span><span class="st">offline</span></a>`;
   }
   const sub = $("#chat-sub");
   if (sub) {
     const list = liveAgents();
     sub.textContent = state.operator.mode !== "operator" ? "No agent attached: messages are kept as notes."
+      : list.length === 1 && list[0].state === "starting" ? "Waiting for the agent to connect. Write already: it reads your message when it listens."
       : list.length ? list.map((a) => `${agentName(a.id)} ${stateText(a)}`).join(" · ") : "The agent session ended; messages wait.";
   }
 }
@@ -347,32 +348,65 @@ document.addEventListener("click", async (ev) => {
   if (!b || b.disabled || b.closest("iframe")) return;
   ev.preventDefault();
   if (b.dataset.to) store.set("atlas.to", b.dataset.to);
-  if (b.dataset.prefill !== undefined) return prefill(b.dataset.prefill);
+  if (b.dataset.prefill !== undefined) return prefill(b.dataset.prefill, b.dataset.template !== undefined);
   if (b.dataset.act) return act(b.dataset.act, b.dataset.id);
   b.disabled = true;
-  const ok = await sendText(b.dataset.send, b.dataset.via || null, b.dataset.ctx || null);
+  const to = currentTo(), seen = replyKeys();  // the recipient of this move, and the answers already there
+  const ok = await sendText(b.dataset.send, b.dataset.via || null, b.dataset.ctx || null, to);
   if (ok && b.dataset.once !== undefined) { b.classList.add("chosen"); return; }
   b.disabled = false;
   if (ok && state.operator.mode === "operator") { toast(`Sent to ${agentName(currentTo())}`); if (!onChatPage()) openChat(); }
+  if (ok && state.operator.mode === "operator" && b.dataset.via === "move" && b.closest(".moves-bar")) markSent(b, to, seen, ok.outbox_at);
 });
 
-function prefill(text) {
+// A move the user pressed stays visible on the page, its buttons off, until the note changes (the page
+// re-renders) or the agent is done without changing it: no second press on a note that is about to move.
+const replyKey = (m) => `${m.agent || ""}|${m.ts}|${m.text}`;
+const replyKeys = () => new Set((state.chatMessages || []).filter((m) => m.role === "agent").map(replyKey));
+function markSent(b, to, seen, outboxAt) {
+  const bar = b.closest(".moves-bar");
+  bar.classList.add("sent");
+  bar.querySelectorAll("button").forEach((x) => (x.disabled = true));
+  b.classList.add("chosen");
+  bar.insertAdjacentHTML("beforeend", `<span class="sent-note" role="status">Sent to ${esc(agentName(to))}. This page updates when the agent is done.</span>`);
+  clearTimeout(state.sentMove?.timer);
+  state.sentMove = { to, seen, outboxAt: outboxAt ?? null, timer: setTimeout(() => releaseSent(true), 300000) };
+}
+// Done: the recipient answered after the move, by its place in the outbox (the click dummy has none: an answer
+// not seen before). Picking the move up is not done; an agent that never answers frees it after five minutes.
+function releaseSent(timedOut = false) {
+  const s = state.sentMove;
+  if (!s) return;
+  const after = (m) => (s.outboxAt != null ? (m.n ?? -1) >= s.outboxAt : !s.seen.has(replyKey(m)));
+  const replied = (state.chatMessages || []).some((m) => m.role === "agent" && m.kind !== "progress"
+    && (!s.to || m.agent === s.to) && after(m));
+  if (!replied && !timedOut) return;
+  clearTimeout(s.timer);
+  state.sentMove = null;
+  const bar = $(".moves-bar.sent");
+  if (!bar) return;
+  bar.classList.remove("sent");
+  bar.querySelectorAll("button").forEach((x) => (x.disabled = false));
+  bar.querySelector(".sent-note")?.remove();
+  bar.querySelector(".chosen")?.classList.remove("chosen");
+}
+
+function prefill(text, template = false) {
   const mobile = matchMedia("(max-width: 760px)").matches;
   if (mobile || onChatPage()) {
-    state.prefill = text;
+    state.prefill = text; state.prefillTemplate = template;
     if (onChatPage()) applyPrefill(); else location.hash = "#/chat";
     return;
   }
   openChat();
-  const i = $("#dock-input");
-  i.value = text; fit(i); i.focus(); i.setSelectionRange(text.length, text.length);
+  fillAndSelect($("#dock-input"), text, template);
 }
 // the composer grows with its text (a quoted passage must be readable before it is sent)
 const fit = (i) => { i.style.height = "auto"; i.style.height = `${Math.min(i.scrollHeight + 2, 200)}px`; };
 function applyPrefill() {
   const i = $("#page-input");
   if (!i || state.prefill == null) return;
-  i.value = state.prefill; state.prefill = null; fit(i); i.focus(); i.setSelectionRange(i.value.length, i.value.length);
+  fillAndSelect(i, state.prefill, state.prefillTemplate); state.prefill = null;
 }
 
 const ACT_LABEL = { star: "Kept", kill: "Let go", note: "Note" };
@@ -400,10 +434,20 @@ function viewEmpty() {
       <p>${op ? "Ask a question, name a topic, or drop an idea. Your agent researches it, and your knowledge starts to grow right here: captures first, then insights, maps and a constellation."
         : "No agent is attached yet. Open Claude Code or Codex in this folder and say <b>start atlas</b>. Until then, anything you write is kept as a note."}</p>
       ${composer("hero", "e.g. What is the state of research on sleep and memory?  (type / for commands)")}
-      <div class="chips">${["What is the state of research on…", "Explain the landscape of… tools", "I have an idea for…"].map((q) => `<button class="facet" data-fill="${esc(q)}">${esc(q)}</button>`).join("")}</div>
+      <div class="chips">${HERO_CHIPS.map(([label, fill]) => `<button class="facet" data-fill="${esc(fill)}">${esc(label)}</button>`).join("")}</div>
     </div>`;
   wireComposer("hero", () => null, () => { location.hash = "#/chat"; });
-  $$("[data-fill]").forEach((b) => b.onclick = () => { const i = $("#hero-input"); i.value = b.dataset.fill; i.focus(); });
+  $$("[data-fill]").forEach((b) => b.onclick = () => fillAndSelect($("#hero-input"), b.dataset.fill, true));
+}
+// A chip puts a whole question in the box; the ‹part› to make your own arrives selected, so typing replaces it.
+const HERO_CHIPS = [["What is the state of research on…", "What is the state of research on ‹sleep and memory›?"],
+  ["Explain the landscape of… tools", "Explain the landscape of ‹note-taking› tools"],
+  ["I have an idea for…", "I have an idea: ‹a timer that adapts to how focused I am›"]];
+function fillAndSelect(i, text, template = false) {  // only a chip's own text is a template; a quote stays as it is
+  const m = template ? /‹([^›]*)›/.exec(text) : null;
+  i.value = template ? text.replace(/[‹›]/g, "") : text; fit(i); i.focus();
+  const [from, to] = m ? [m.index, m.index + m[1].length] : [i.value.length, i.value.length];
+  i.setSelectionRange(from, to);
 }
 const greeting = () => { const h = new Date().getHours(); return h < 5 ? "Late night" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"; };
 
@@ -635,8 +679,16 @@ function tourCta(t, lastSeen) {
 }
 
 async function viewHome() {
-  if (!(state.meta.content ?? state.meta.total)) return viewEmpty();
+  const token = state.routeToken;  // every view below checks it after an await: a slow answer must not paint
+  if (!(state.meta.content ?? state.meta.total)) {  // a fresh vault: the welcome, and the user's notes under it
+    viewEmpty();
+    const notes = (await api("/api/home").catch(() => null))?.needs?.notes || [];
+    if (notes.length && token === state.routeToken) $(".empty-hero")?.insertAdjacentHTML("beforeend",
+      `<section class="empty-needs"><div class="kicker">Needs you</div><div class="list">${notes.map((e) => card(e)).join("")}</div></section>`);
+    return;
+  }
   const data = await api("/api/home");
+  if (token !== state.routeToken) return;  // over the page the reader opened since
   const lastSeen = store.get("atlas.lastSeen", null);
   const needs = needsItems(data.needs);
   const recent = [...(data.recent.sketch || []).slice(0, 2), ...(data.recent.frame || []).slice(0, 1), ...(data.recent.spec || []).slice(0, 1)].slice(0, 4);
@@ -682,7 +734,9 @@ async function viewHome() {
 }
 
 async function viewRediscover() {
+  const token = state.routeToken;
   const r = (await api("/api/home")).rediscover;
+  if (token !== state.routeToken) return;
   main.innerHTML = `
     <section class="hero"><div class="kicker">picked fresh every day</div><h1 class="page">Rediscover</h1><p class="page-sub">Ideas that went quiet, and claims worth a second look.</p></section>
     <div class="sec-h"><h2>Longest-untouched sketches</h2></div><div class="grid">${r.forgotten_sketches.map((e) => card(e)).join("") || `<div class="empty">No sketches yet.</div>`}</div>
@@ -695,7 +749,9 @@ const facetVal = (e, k) => (k === "category" ? e.facts?.category : e[k]) || null
 async function viewList(type, params) {
   const t = typeOf(type);
   if (!t) { main.innerHTML = `<div class="empty">Unknown type.</div>`; return; }
+  const token = state.routeToken;
   const data = await api(`/api/list?type=${enc(type)}`);
+  if (token !== state.routeToken) return;
   markTypeSeen(type);
   if (data.groups) return renderFrames(t, data.groups);
   const items = remember(data.items);
@@ -902,18 +958,30 @@ function fixBadge(e) {
 // Titles here are claims, often whole sentences: the longer the title, the smaller the serif.
 const titleClass = (t) => (t.length <= 48 ? "t-l" : t.length <= 90 ? "t-m" : t.length <= 150 ? "t-s" : "t-xs");
 
+const BEHIND_STATUS = ["raised_count"];  // bookkeeping: shown when you point at the status, not in the facts line
+// a fact's wiki links ([[…]]) as links to the notes they name; unknown ones as plain words
+function factValue(e, text) {  // links resolve on the raw text; every piece is escaped once, on its way out
+  let out = "", last = 0;
+  for (const m of text.matchAll(/\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g)) {
+    const hit = e.fact_links?.[m[1]];
+    out += esc(text.slice(last, m.index)) + (hit ? `<a href="#/e/${enc(hit.id)}">${esc(m[2] || hit.title)}</a>` : esc(m[2] || m[1]));
+    last = m.index + m[0].length;
+  }
+  return out + esc(text.slice(last));
+}
 function readerHead(e, { crumbs = true } = {}) {
   const t = typeOf(e.type);
   const nav = e.map_nav;
-  const facts = Object.entries(e.facts || {}).filter(([k]) => !["category", "description", "status", "revisit_after", "superseded_by", "source", "confidence", "date", "question"].includes(k))
-    .map(([k, v]) => `<span title="${esc(k)}">${esc(k)}: ${esc(Array.isArray(v) ? v.join(", ") : typeof v === "object" && v ? JSON.stringify(v) : v)}</span>`).join("");
+  const facts = Object.entries(e.facts || {}).filter(([k]) => !["category", "description", "status", "revisit_after", "superseded_by", "source", "confidence", "date", "question", ...BEHIND_STATUS].includes(k))
+    .map(([k, v]) => `<span title="${esc(k)}">${esc(k)}: ${factValue(e, Array.isArray(v) ? v.join(", ") : typeof v === "object" && v ? JSON.stringify(v) : String(v))}</span>`).join("");
+  const behind = BEHIND_STATUS.filter((k) => e.facts?.[k] != null).map((k) => `${k}: ${e.facts[k]}`).join(", ");
   const ep = epistemic(e);
   return `
     ${crumbs ? `<div class="crumbs"><a href="#/t/${enc(e.type)}">${esc(t?.plural || e.type)}</a>${e.group ? `<span aria-hidden="true">/</span><span>${esc(e.group)}</span>` : ""}${e.project ? `<span aria-hidden="true">/</span><a href="#/e/${enc(`projects/${e.group}/${e.project}/project.md`)}">${esc(e.project)}</a>` : ""}
       ${nav ? `<span class="nav"><span>in <a href="#/e/${enc(nav.map)}">${esc(nav.title)}</a></span>
         <a class="icon-btn" href="${nav.prev ? `#/e/${enc(nav.prev)}` : "#"}" aria-label="Previous in this map" ${nav.prev ? "" : 'aria-disabled="true" tabindex="-1"'}>${svg("left")}</a>${nav.pos} / ${nav.total}
         <a class="icon-btn" href="${nav.next ? `#/e/${enc(nav.next)}` : "#"}" aria-label="Next in this map" ${nav.next ? "" : 'aria-disabled="true" tabindex="-1"'}>${svg("right")}</a></span>` : ""}</div>` : ""}
-    <div class="meta-row" data-t="${esc(e.type)}"><span class="badge kind">${g(e.type)}${esc(typeLabel(e.type))}</span>${e.facts?.category ? `<span>${esc(e.facts.category)}</span>` : ""}${e.status ? `<span class="badge">${esc(e.status)}</span>` : ""}${byBadges(e)}${e.date ? `<span>${esc(e.date)}</span>` : ""}${facts}${fixBadge(e)}</div>
+    <div class="meta-row" data-t="${esc(e.type)}"><span class="badge kind">${g(e.type)}${esc(typeLabel(e.type))}</span>${e.facts?.category ? `<span>${esc(e.facts.category)}</span>` : ""}${e.status ? `<span class="badge"${behind ? ` title="${esc(behind)}"` : ""}>${esc(e.status)}</span>` : ""}${byBadges(e)}${e.date ? `<span>${esc(e.date)}</span>` : ""}${facts}${fixBadge(e)}</div>
     <h1 class="e-title ${titleClass(e.title)}">${esc(e.title)}</h1>
     ${e.meta?.description ? `<p class="e-desc">${esc(e.meta.description)}</p>` : ""}
     ${e.facts?.question ? `<div style="display:flex;flex-direction:column;gap:4px;padding-left:14px;border-left:2px solid var(--line)"><span class="kicker">Question</span><span style="font-size:15.5px">${esc(e.facts.question)}</span></div>` : ""}
@@ -1033,7 +1101,9 @@ function projectCard(p) {
 }
 
 async function viewProjects() {
+  const token = state.routeToken;
   const data = await api("/api/projects");
+  if (token !== state.routeToken) return;
   const projects = data.groups.flatMap((gr) => gr.projects);
   const working = new Set(projects.flatMap((p) => (p.here || []).map((a) => a.id)));
   remember([...data.decisions, ...data.lessons, ...data.blocked]);
@@ -1551,10 +1621,12 @@ async function loadChat() {
   if (opener) lastOpen = opener.ts; else if (lastOpen === null) lastOpen = "";
   return fresh;
 }
-const SUGGESTIONS = ["Research what's new in a topic I care about", "I have an idea…", "What do I already know about…?", "What should we do next?"];
+const SUGGESTIONS = [["Research what's new in a topic I care about", "Research what's new in ‹sleep and memory›"],
+  ["I have an idea…", "I have an idea: ‹a timer that adapts to how focused I am›"],
+  ["What do I already know about…?", "What do I already know about ‹sleep and memory›?"], ["What should we do next?", "What should we do next?"]];
 const chatWelcome = () => `<div class="chat-welcome empty-hero" style="margin:auto;text-align:center;align-items:center"><h1 style="font-size:40px">Ask your knowledge graph</h1>
   <p>${state.operator.mode === "operator" ? "Your agents answer here with notes you can unfold, charts, choices and live mockups. What they open lands in the workbench." : "No agent is attached. Open Claude Code or Codex in this folder and say “start atlas”; until then your messages are kept as notes."}</p>
-  <div class="chips" style="justify-content:center">${SUGGESTIONS.map((q) => `<button class="facet" data-prefill="${esc(q)}">${esc(q)}</button>`).join("")}</div>
+  <div class="chips" style="justify-content:center">${SUGGESTIONS.map(([label, fill]) => `<button class="facet" data-prefill="${esc(fill)}" data-template>${esc(label)}</button>`).join("")}</div>
   ${commandList().length ? `<p style="font-size:13px">Type <b>/</b> for commands: ${commandList().slice(0, 6).map((c) => `<code class="mono">/${esc(c.name)}</code>`).join(" ")}…</p>` : ""}</div>`;
 
 // ------------------------------------------------------------------ composer and commands
@@ -1630,14 +1702,14 @@ function attachCommands(input, form) {
   });
 }
 
-async function sendText(text, via = null, context = null) {
+async function sendText(text, via = null, context = null, to = currentTo()) {
   const command = via ? null : asCommand(text);
   if (command) { text = command; via = "command"; }
   try {
-    const res = await post("/api/chat", { text, context, via, to: currentTo() });
+    const res = await post("/api/chat", { text, context, via, to });
     if (res.delivered === "note") toast(`Kept as a note: ${res.note}`);
     loadChat();
-    return true;
+    return res;  // truthy; for an agent, `ts` is when the server took the message
   } catch (err) {
     toast("Could not send. Is the Atlas server running?");
     return false;
@@ -1711,7 +1783,7 @@ async function viewChat() {
   main.classList.add("bleed");
   main.innerHTML = `<div class="op">
     <section class="op-conv" aria-label="Conversation">
-      <div class="op-bar"><span class="op-title" id="op-title" aria-live="polite"></span><div class="seg" role="group" aria-label="Show messages from" id="op-filter" hidden></div><span class="meta">duplex · inbox ↔ outbox</span></div>
+      <div class="op-bar"><span class="op-title" id="op-title" aria-live="polite"></span><div class="seg" role="group" aria-label="Show messages from" id="op-filter" hidden></div></div>
       <div class="chat-log" id="page-log"></div>
       ${composer("page", "Write to your agent…  type / for commands · Enter sends, Shift+Enter for a new line")}
     </section>
@@ -1953,10 +2025,11 @@ function connectStream() {
   es.addEventListener("chat", async () => {  // also fired on (re)connect, so missed replies show up
     const fresh = await loadChat().catch(() => false);
     if (fresh && !chatVisible()) toast("New message from your agent");
+    releaseSent();
   });
   es.addEventListener("operator", (ev) => {
     state.operator = JSON.parse(ev.data);
-    renderPresence(); renderNav(); updateComposers(); refreshShift();
+    renderPresence(); renderNav(); updateComposers(); refreshShift(); releaseSent();
     if (state.chatOpen || onChatPage()) loadChat();
   });
   es.addEventListener("index", async () => {

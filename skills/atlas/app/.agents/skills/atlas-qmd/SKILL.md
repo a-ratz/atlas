@@ -44,7 +44,8 @@ editing files without committing; it says when QMD failed.
 ## When QMD is off or missing
 
 Search with `grep -ril "<words>" vault/<folder>` or, while Atlas runs,
-`curl -s "localhost:8765/api/search?q=<words>"`. Do not install QMD unasked.
+`curl -s "<url>/api/search?q=<words>"` (the `url` from `engine/atlas.py status`).
+Do not install QMD unasked.
 
 ## Turn it on, off, or repair it
 
