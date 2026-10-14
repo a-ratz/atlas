@@ -184,6 +184,9 @@ def shoot(base: str, out: Path, names: list[str], now: dt.datetime) -> None:
 
 
 def main() -> None:
+    for stream in (sys.stdout, sys.stderr):  # a Windows console or pipe would refuse a non-cp1252 path
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("names", nargs="*", metavar="name", help=f"any of: {' '.join(NAMES)}")
     ap.add_argument("--out", type=Path, default=ROOT / "docs" / "assets")
