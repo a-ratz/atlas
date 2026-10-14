@@ -21,7 +21,9 @@ out. Two modes write the same file:
 2. **Check for a duplicate** in `sketches/`, `specs/` and every
    `projects/*/*/project.md` (search the titles and one-liners; with QMD, the
    `atlas-ideas` and `atlas-projects` collections, skill `atlas-qmd`). Found:
-   - the same idea: add the new angle to it, dated, instead of a new file;
+   - the same idea: add the new angle to it, dated, instead of a new file. If
+     that sketch is already `specified`, the angle goes to its spec instead
+     (under "Open questions", dated) and you say so;
    - an extension of a project: it goes to that project (a thread or a note,
      skill `atlas-project`), not into a sketch.
 3. **Link 2 to 5 insights** the idea touches (search `insights/`), one line each
