@@ -278,6 +278,9 @@ def test_search_snippets_show_links_as_names(engine, vault):
     index = engine.Index()
     out = engine.snippet_links("see [[tmr-cues]], [[tmr-cues#Method|the method]] and [[gone]]", index)
     assert out == "see Cues replay memories, the method and gone"
+    # review round 1 on #51: a link quoted in code is an example, not a link
+    assert engine.snippet_links("Use `[[tmr-cues]]` in the file, see [[tmr-cues]]", index) == \
+        "Use `[[tmr-cues]]` in the file, see Cues replay memories"
 
 
 def test_search_snippets_render_bold_and_code_but_no_links():
@@ -288,10 +291,12 @@ def test_search_snippets_render_bold_and_code_but_no_links():
     if not node:
         pytest.skip("node is not installed")
     js = (APP / "engine" / "static" / "app.js").read_text(encoding="utf-8")
-    pieces = [re.search(p, js, re.S).group(0) for p in (r"const esc = .*?;\n", r"const snippetHtml = .*?;\n")]
-    probe = "\n".join(pieces) + "\nconsole.log(snippetHtml('Cues **help** in `NREM`, see https://x.test <b>'));"
-    out = subprocess.run([node, "-e", probe], capture_output=True, text=True, encoding="utf-8").stdout.strip()
-    assert out == "Cues <b>help</b> in <code>NREM</code>, see https://x.test &lt;b&gt;"  # the card is a link: none inside
+    pieces = [re.search(p, js, re.S).group(0) for p in (r"const esc = .*?;\n", r"const snippetHtml = \(s\) => \{.*?\n\};\n")]
+    probe = "\n".join(pieces) + "\nconsole.log(snippetHtml('Cues **help** in `NREM`, see https://x.test <b>'));" \
+        + "\nconsole.log(snippetHtml('Python: `2 ** 3 ** 2` is **big**'));"
+    out = subprocess.run([node, "-e", probe], capture_output=True, text=True, encoding="utf-8").stdout.splitlines()
+    assert out[0] == "Cues <b>help</b> in <code>NREM</code>, see https://x.test &lt;b&gt;"  # the card is a link: none inside
+    assert out[1] == "Python: <code>2 ** 3 ** 2</code> is <b>big</b>"  # review round 1 on #51: code keeps its stars
 
 
 def test_the_active_search_tab_is_marked():

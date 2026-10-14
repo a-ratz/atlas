@@ -1299,7 +1299,12 @@ def frontmatter_end(rel: str) -> int:
 def snippet_links(snippet: str, index: "Index") -> str:
     """[[links]] in a search snippet as the names a reader sees: the alias, else the linked note's title, else the
     target. The result card is a link itself, so the snippet carries no links of its own (#50)."""
+    masked = WIKI.sub(lambda m: "\0" * len(m.group(0)), snippet)  # backticks inside a link do not start a code span
+    quoted = [(m.start(), m.end()) for m in re.finditer(r"`[^`]+`", masked)]
+
     def name(m: re.Match) -> str:
+        if any(a < m.start() and m.end() <= b for a, b in quoted):  # `[[note]]` quoted in code stays as written
+            return m.group(0)
         if m.group(2):
             return m.group(2).strip()
         hit = index.entities.get(index.resolve(m.group(1)) or "")

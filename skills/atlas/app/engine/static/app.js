@@ -173,7 +173,11 @@ function byBadges(e) {
 }
 // A search-by-meaning snippet inside a result card, which is a link itself: bold and code render, nothing in it is a
 // link; the engine already turned [[links]] into the names a reader sees (#50).
-const snippetHtml = (s) => esc(String(s ?? "")).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+const snippetHtml = (s) => {
+  const held = [];  // code spans, set aside so the bold pass cannot reach into them (`2 ** 3 ** 2`)
+  const text = esc(String(s ?? "").replace(/[\u0001\u0002]/g, "")).replace(/`([^`]+)`/g, (_, c) => `\u0001${held.push(`<code>${c}</code>`) - 1}\u0002`);
+  return text.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/\u0001(\d+)\u0002/g, (_, n) => held[+n]);
+};
 
 const card = (e, extra = "") => {
   remember([e]);
