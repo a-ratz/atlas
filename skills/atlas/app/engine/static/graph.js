@@ -105,7 +105,7 @@ export async function viewGraph(main, ctx) {
   themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   const mq = matchMedia("(prefers-color-scheme: light)");
   mq.addEventListener("change", repaint);
-  const cleanupBase = () => { alive = false; themeObs.disconnect(); mq.removeEventListener("change", repaint); main.classList.remove("bleed"); stopPlay(); };
+  const cleanupBase = () => { alive = false; themeObs.disconnect(); mq.removeEventListener("change", repaint); window.removeEventListener("atlas:index", onIndex); main.classList.remove("bleed"); stopPlay(); };
 
   try { await loadEngine(); }
   catch (err) {
@@ -117,6 +117,13 @@ export async function viewGraph(main, ctx) {
 
   let data = null, adj = new Map(), byId = new Map(), hover = null, selected = null, focus = null, legendPick = null, legendKey = null, lit = null;
   let mapColor = new Map(), catColor = {}, T = null, sel = 0, timer = null;
+  // `light` resolves its notes on a fresh index; the server's may be up to 10 s older. A note it does not have
+  // yet joins the highlight when the index catches up (a few tries: a note deleted since stays missing).
+  let catchUps = 3;
+  function onIndex() {
+    if (light && data && catchUps > 0 && light.ids.some((id) => !byId.has(id))) { catchUps--; load().catch((err) => toast(`Graph failed: ${err.message}`)); }
+  }
+  window.addEventListener("atlas:index", onIndex);
   const node = (x) => (typeof x === "object" ? x : byId.get(x));
   const bucketOf = (n) => (T ? T.of(n) : 0);
   const visible = (n) => !T || bucketOf(n) <= sel;
@@ -336,7 +343,7 @@ export async function viewGraph(main, ctx) {
       light = lit = null; forced.clear(); syncExtra();
       history.replaceState(null, "", "#/graph");  // no hashchange: the view stays and keeps its layout
       if (reload) load().catch((err) => toast(`Graph failed: ${err.message}`));
-      else { setFocus(); drawLit(); }
+      else { setFocus(); drawLit(); G.nodeVisibility((n) => visible(n)); }  // a settled graph draws only when told
     };
   }
 

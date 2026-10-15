@@ -2086,6 +2086,7 @@ function connectStream() {
     if (state.chatOpen || onChatPage()) loadChat();
   });
   es.addEventListener("index", async () => {
+    window.dispatchEvent(new Event("atlas:index"));  // views that read more than one note (the constellation) listen
     cardCache.clear();
     state.meta = await api("/api/meta");
     renderNav();
