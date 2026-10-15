@@ -339,6 +339,7 @@ def _light_race(page, srv: Server, vault: Path, note: Path, case: str):
                 answers[0][0].fulfill(response=answers[0][1])
                 return None  # the newer answer was fresh, or the event came before it landed
             if case == "replaced":  # another highlight replaces the view whose first load is still held
+                page.wait_for_timeout(1100)  # chat times have whole seconds: the follow needs a later one (r6)
                 r = atlas(vault, "light", "New light", "insights/spacing-plus-sleep.md")
                 page.wait_for_function("location.hash === '#/graph?light=new-light'", timeout=15000)
                 page.wait_for_function("document.querySelector('#gx-lit')?.innerText.includes('New light')", timeout=15000)
