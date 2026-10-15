@@ -121,7 +121,10 @@ export async function viewGraph(main, ctx) {
   // yet joins the highlight when the index catches up (a few tries: a note deleted since stays missing). An index
   // change during a load counts too: that answer may predate it (round 3 on #64).
   let catchUps = 3, indexGen = 0, settled = 0;  // settled: the latest load whose answer is in (or failed)
-  function onIndex() { indexGen++; if (settled === loadSeq) catchUp(); }  // else that load catches up when it lands
+  // A newer view replaced this one's page before route() could dispose it (it gets the cleanup only after the
+  // first load): such a view must neither catch up nor render (round 5 on #64).
+  const live = () => alive && el.isConnected;
+  function onIndex() { if (!live()) return; indexGen++; if (settled === loadSeq) catchUp(); }  // else that load catches up when it lands
   function catchUp() {
     if (light && data && catchUps > 0 && light.ids.some((id) => !byId.has(id))) { catchUps--; load().catch((err) => toast(`Graph failed: ${err.message}`)); }
   }
@@ -309,7 +312,7 @@ export async function viewGraph(main, ctx) {
     let fresh;
     try { fresh = await api(`/api/graph?types=${enc(["insight", "map", ...new Set([...opts.extra, ...forced])].join(","))}`); }
     finally { if (seq === loadSeq) settled = seq; }  // a superseded answer neither holds nor releases events
-    if (!alive || seq !== loadSeq) return;
+    if (!live() || seq !== loadSeq) return;
     data = fresh;
     const nodes = data.nodes.map((n) => ({ ...n }));
     const links = data.links.map(([a, b]) => ({ source: nodes[a].id, target: nodes[b].id }));

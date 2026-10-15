@@ -277,14 +277,15 @@ def light_catch_up_race(ctx, srv: Server, vault: Path) -> None:
     """A note written right before `light` is missing from the first graph answers (the server re-reads the
     vault at most every 10 s); the index event that brings it must not get lost on the way (#64):
     - round 3: the event arrives while the first answer is still on its way;
-    - round 4: a newer load (an "Also show" toggle) has landed while the first one is still pending.
+    - round 4: a newer load (an "Also show" toggle) has landed while the first one is still pending;
+    - round 5: as round 4, but the user has opened another highlight since: the old view must stay quiet.
     Answers are fetched at once, while stale, and delivered in the order the case needs."""
     outbox = vault / ".atlas" / "outbox.jsonl"
     before = outbox.read_bytes() if outbox.exists() else b""
     page = ctx.new_page()
     written: list[Path] = []
     try:
-        for case in ("first-load", "superseded"):
+        for case in ("first-load", "superseded", "replaced"):
             for attempt in range(3):  # the server may re-read the vault at the wrong moment: stage it again
                 note = vault / "insights" / f"light-race-{case}-{attempt}.md"
                 written.append(note)
@@ -331,13 +332,29 @@ def _light_race(page, srv: Server, vault: Path, note: Path, case: str):
             page.wait_for_timeout(100)
         if not answers[0][2]:
             return None
-        if case == "superseded":
+        if case in ("superseded", "replaced"):
             page.click(".gx-extra input[value=capture]")  # a newer load while the first is still held
             page.wait_for_selector("#gx-lit:not([hidden])", timeout=15000)
             if len(answers) < 2 or not answers[1][2] or page.evaluate("window.__idx") > 0:
                 answers[0][0].fulfill(response=answers[0][1])
                 return None  # the newer answer was fresh, or the event came before it landed
+            if case == "replaced":  # another highlight replaces the view whose first load is still held
+                r = atlas(vault, "light", "New light", "insights/spacing-plus-sleep.md")
+                page.wait_for_function("location.hash === '#/graph?light=new-light'", timeout=15000)
+                page.wait_for_function("document.querySelector('#gx-lit')?.innerText.includes('New light')", timeout=15000)
+                if page.evaluate("window.__idx") > 0:
+                    answers[0][0].fulfill(response=answers[0][1])
+                    return None
             page.wait_for_function("window.__idx > 0", timeout=30000)  # the event, after the newer load landed
+            if case == "replaced":
+                page.wait_for_timeout(2500)  # time for an old view to catch up and paint over the new one
+                chip = page.inner_text("#gx-lit") if page.is_visible("#gx-lit") else ""
+                answers[0][0].fulfill(response=answers[0][1])  # the old view's first answer, last of all
+                page.wait_for_timeout(1500)
+                after = page.inner_text("#gx-lit") if page.is_visible("#gx-lit") else ""
+                if "New light" not in chip or "New light" not in after:
+                    failures.append(f"light race replaced: an old graph view painted over the new highlight: {chip!r}, then {after!r} (#64 r5)")
+                return True
             answers[0][0].fulfill(response=answers[0][1])  # the superseded answer comes in last
         else:
             page.wait_for_function("window.__idx > 0", timeout=30000)  # the event, before the first answer lands
