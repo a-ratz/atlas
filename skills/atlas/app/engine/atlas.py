@@ -3228,7 +3228,8 @@ def main() -> None:
     y.add_argument("--title", help='what you are doing now, e.g. "Researching loop engineering"; shown above the conversation')
     li = sub.add_parser("light", parents=[common], help="light up notes in the constellation and dim the rest (writes nothing to the vault)")
     li.add_argument("title", help='what the notes have in common, e.g. "Sleep and memory"; shown on the chip')
-    li.add_argument("notes", nargs="+", help="vault paths or note names; - reads one per line from stdin")
+    li.add_argument("notes", nargs="+", help="vault paths or note names; - reads one per line from stdin. The constellation "
+                    "shows insights, maps, sketches, specs, captures, projects and questions")
     li.add_argument("--say", help='the chat message (default: "Lit N notes: <title>.")')
     li.add_argument("--agent", help="your id (the file name in agents/): the chat shows who answered")
     rc = sub.add_parser("recall", parents=[common], help="print the cabinet cards a text names (stdin or a Claude Code prompt hook)")
