@@ -16,6 +16,7 @@ Run from the repo root (or anywhere; paths resolve from this file):
     uv run --no-project engine/atlas.py serve --operator   # an agent session answers in the chat
     uv run --no-project engine/atlas.py wait [--agent <id>]           # operator: block until the user writes, print it
     uv run --no-project engine/atlas.py say "text" [--open <path>] [--agent <id>]   # operator: reply in the chat
+    uv run --no-project engine/atlas.py light "title" <note>... | -   # light up notes in the constellation
     uv run --no-project engine/atlas.py next               # what the vault suggests doing next
     uv run --no-project engine/atlas.py check              # notes that need a fix (exit 1 if any)
     uv run --no-project engine/atlas.py boot <project> --agent <id>   # an agent's context for a project
@@ -2100,6 +2101,41 @@ def cmd_say(args) -> None:
     print("sent")
 
 
+def cmd_light(args) -> None:
+    """Light up notes in the constellation: the agent names them, Atlas dims the rest. The highlight is a chat
+    message with a `light` field, so nothing lands in the vault and no temporary map has to be deleted later."""
+    names = []
+    for arg in args.notes:
+        names += [s.strip() for s in sys.stdin.read().splitlines()] if arg == "-" else [arg.strip()]
+    index = Index()
+    ids, missing, hidden = [], [], []
+    for name in filter(None, names):
+        hit = note_path(name)
+        if hit not in index.entities:  # a note name, as in a wiki link
+            hit = None if "/" in name or "\\" in name else index.resolve(name.strip("[]").removesuffix(".md"))
+        if not hit:
+            missing.append(name)
+        elif index.entities[hit].type not in GRAPH_TYPES:
+            hidden.append(hit)
+        elif hit not in ids:
+            ids.append(hit)
+    for name in missing:
+        print(f"not found: {name}")
+    for i in hidden:
+        print(f"not in the constellation ({index.entities[i].type}): {i}")
+    if not ids:
+        sys.exit("nothing to light: none of these notes is in the constellation")
+    title = " ".join(args.title.split())[:80]
+    lit = f"{len(ids)} note{'' if len(ids) == 1 else 's'}"
+    record = {"ts": now_iso(), "role": "agent", "text": args.say or f"Lit {lit}: {title}.",
+              "light": {"name": slug(title), "title": title, "ids": ids, "kinds": sorted({index.entities[i].type for i in ids})}}
+    agent = agent_id(args.agent)
+    if agent:
+        record["agent"] = agent
+    append_jsonl(OUTBOX, record)
+    print(f"lit {lit}: {title} (#/graph?light={record['light']['name']})")
+
+
 def frontmatter_problems(meta: dict, checks: dict) -> list[str]:
     """What the registry's `checks:` for this type say is wrong with one note's frontmatter."""
     out = []
@@ -3190,6 +3226,11 @@ def main() -> None:
     y.add_argument("--agent", help="your id (the file name in agents/): the chat shows who answered")
     y.add_argument("--progress", action="store_true", help="a short status line while you work, not an answer")
     y.add_argument("--title", help='what you are doing now, e.g. "Researching loop engineering"; shown above the conversation')
+    li = sub.add_parser("light", parents=[common], help="light up notes in the constellation and dim the rest (writes nothing to the vault)")
+    li.add_argument("title", help='what the notes have in common, e.g. "Sleep and memory"; shown on the chip')
+    li.add_argument("notes", nargs="+", help="vault paths or note names; - reads one per line from stdin")
+    li.add_argument("--say", help='the chat message (default: "Lit N notes: <title>.")')
+    li.add_argument("--agent", help="your id (the file name in agents/): the chat shows who answered")
     rc = sub.add_parser("recall", parents=[common], help="print the cabinet cards a text names (stdin or a Claude Code prompt hook)")
     rc.add_argument("text", nargs="*")
     mn = sub.add_parser("mentions", parents=[common], help="which notes a person or organization wrote or appears in")
@@ -3224,7 +3265,7 @@ def main() -> None:
     set_vault(args.vault_sub or args.vault_top)
     if args.cmd != "expose" and not VAULT.is_dir():
         sys.exit(f"vault not found: {VAULT} (check --vault / $ATLAS_VAULT, or create the folder)")
-    {"serve": cmd_serve, "wait": cmd_wait, "say": cmd_say, "status": cmd_status, "expose": cmd_expose,
+    {"serve": cmd_serve, "wait": cmd_wait, "say": cmd_say, "light": cmd_light, "status": cmd_status, "expose": cmd_expose,
      "next": cmd_next, "check": cmd_check, "boot": cmd_boot, "commit": cmd_commit, "machine": cmd_machine, "tour": cmd_tour,
      "demo": cmd_demo, "recall": cmd_recall, "mentions": cmd_mentions,
      "map-path": cmd_map_path, "qmd": cmd_qmd}[args.cmd](args)

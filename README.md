@@ -146,7 +146,9 @@ tour marks its period as seen.
 
 Every insight and map as a living graph, with maps as hubs. Colour it by map,
 author or category, fly to a note, or press play and watch the vault grow out
-of your conversations, day by day.
+of your conversations, day by day. Ask your agent to light up everything about
+a topic: it names the notes (`atlas.py light`), the constellation dims the rest,
+and nothing is written to the vault.
 
 ### Ideas, from sketch to project
 
@@ -335,7 +337,7 @@ single-user, local-first and young.
 
 ## Status and roadmap
 
-Atlas 0.10.0 is the current release. Stable: the
+Atlas 0.11.0 is the current release. Stable: the
 engine and reader, the duplex chat with answer blocks, project memory with boot
 packets, ideas from sketch to project, cards, search by meaning, the checks,
 tours, the installer with upgrade and restore.

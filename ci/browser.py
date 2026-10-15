@@ -74,6 +74,7 @@ def main() -> None:
                     move_ignores_late_history(ctx, srv, vault)
                     move_survives_pickup(ctx, srv, vault)
                     moves_release(ctx, srv, vault)
+                    light_follows(ctx, srv, vault)
                 ctx.close()
             empty_home_lists_notes(browser, Path(tmp))
             browser.close()
@@ -202,6 +203,37 @@ def slow_view_stays_behind(page, base: str, scheme: str) -> None:
         failures.append(f"[{scheme}] the slow-view check held no Home request")
     elif not page.query_selector(".reader-main h1:has-text('Can cueing work')"):
         failures.append(f"[{scheme}] a late Home answer painted over the open question (#18, CI)")
+
+
+def light_follows(ctx, srv: Server, vault: Path) -> None:
+    """`atlas.py light` takes the user to the constellation with its notes lit; a hidden kind it needs is shown
+    without changing the saved choice, and the chip's x clears the highlight (#63)."""
+    page = ctx.new_page()
+    page.goto(f"{srv.base}/#/")
+    page.wait_for_selector("#main > *", timeout=15000)
+    page.wait_for_timeout(1500)  # the chat has loaded: a light from before the page opened is not followed
+    sketch = srv.get("/api/list?type=sketch")["items"][0]["id"]
+    r = atlas(vault, "light", "Sleep and memory", "insights/spacing-plus-sleep.md", "replay-reruns-the-day", sketch)
+    if r.returncode or "lit 3 notes" not in r.stdout:
+        failures.append(f"atlas.py light failed (#63): {r.stdout}{r.stderr}")
+        return page.close()
+    try:
+        page.wait_for_function("location.hash === '#/graph?light=sleep-and-memory'", timeout=15000)
+        page.wait_for_selector("#gx-lit:not([hidden])", timeout=15000)
+    except Exception:
+        failures.append(f"a light did not take the user to the lit constellation (#63): {page.evaluate('location.hash')}")
+        return page.close()
+    if "3" not in page.inner_text("#gx-lit .n"):
+        failures.append(f"the light chip says {page.inner_text('#gx-lit')!r}, not 3 notes (#63)")
+    box = page.eval_on_selector(".gx-extra input[value=sketch]", "i => [i.checked, i.disabled]")
+    if box != [True, True]:
+        failures.append(f"a lit sketch did not show the sketches for this view: checked, disabled = {box} (#63)")
+    page.click("#gx-lit .x")
+    page.wait_for_timeout(800)
+    box = page.eval_on_selector(".gx-extra input[value=sketch]", "i => [i.checked, i.disabled]")
+    if page.is_visible("#gx-lit") or page.evaluate("location.hash") != "#/graph" or box != [False, False]:
+        failures.append(f"x left the light on: chip {page.is_visible('#gx-lit')}, {page.evaluate('location.hash')}, sketches {box} (#63)")
+    page.close()
 
 
 def follows_changes(ctx, srv: Server, vault: Path) -> None:
