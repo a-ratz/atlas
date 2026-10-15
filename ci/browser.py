@@ -75,6 +75,7 @@ def main() -> None:
                     move_ignores_late_history(ctx, srv, vault)
                     move_survives_pickup(ctx, srv, vault)
                     moves_release(ctx, srv, vault)
+                    light_catch_up_race(ctx, srv, vault)
                 ctx.close()
             empty_home_lists_notes(browser, Path(tmp))
             browser.close()
@@ -270,6 +271,67 @@ def _light_follows(page, srv: Server, vault: Path, scheme: str, extra: Path) -> 
     box = page.eval_on_selector(".gx-extra input[value=sketch]", "i => [i.checked, i.disabled]")
     if box != [False, False]:
         failures.append(f"[{scheme}] x kept the sketches shown for the light: checked, disabled = {box} (#63)")
+
+
+def light_catch_up_race(ctx, srv: Server, vault: Path) -> None:
+    """The first graph answer predates a note written right before `light`, and the index event that brings
+    the note arrives while that answer is still on its way: the note must still join (round 3 on #64).
+    The answer is fetched at once (stale: the server re-reads the vault at most every 10 s) and held until
+    the page has seen the index event."""
+    outbox = vault / ".atlas" / "outbox.jsonl"
+    before = outbox.read_bytes() if outbox.exists() else b""
+    page = ctx.new_page()
+    written: list[Path] = []
+    try:
+        for attempt in range(3):  # the server may happen to re-read between the write and the fetch: try again
+            note = vault / "insights" / f"light-race-{attempt}.md"
+            written.append(note)
+            page.goto(f"{srv.base}/#/")
+            page.wait_for_selector("#main > *", timeout=15000)
+            page.wait_for_timeout(1500)
+            page.evaluate("window.__idx = 0; addEventListener('atlas:index', () => window.__idx++)")
+            held: list = []
+
+            def hold(route):
+                if held:
+                    return route.continue_()
+                held.append((route, route.fetch()))
+            page.route("**/api/graph?*", hold)
+            note.write_text(f"---\ndescription: written right before the light\n---\n\n# Race {attempt}\n\n[[spacing-plus-sleep]]\n",
+                            encoding="utf-8")
+            name = f"race-{attempt}"
+            r = atlas(vault, "light", name, "insights/spacing-plus-sleep.md", note.stem)
+            if r.returncode:
+                failures.append(f"atlas.py light failed (#64 r3): {r.stdout}{r.stderr}")
+                return
+            try:
+                page.wait_for_function(f"location.hash === '#/graph?light={name}'", timeout=15000)
+                for _ in range(150):
+                    if held:
+                        break
+                    page.wait_for_timeout(100)
+                route, resp = held[0]
+                stale = note.stem not in resp.text()
+                page.wait_for_function("window.__idx > 0", timeout=30000)  # the index event, before the answer lands
+                route.fulfill(response=resp)
+            except Exception as err:
+                failures.append(f"could not stage the light race ({type(err).__name__}): {page.evaluate('location.hash')} (#64 r3)")
+                return
+            finally:
+                page.unroute("**/api/graph?*")
+            if not stale:
+                continue
+            try:
+                page.wait_for_function("document.querySelector('#gx-lit .n')?.textContent === '2'", timeout=15000)
+            except Exception:
+                failures.append(f"a note whose index event came during the first graph load never joined: {page.inner_text('#gx-lit')!r} (#64 r3)")
+            return
+        print("note: the light race could not be staged (the server re-read the vault each time); not checked")
+    finally:
+        page.close()
+        for note in written:
+            note.unlink(missing_ok=True)
+        outbox.write_bytes(before)
 
 
 def follows_changes(ctx, srv: Server, vault: Path) -> None:
