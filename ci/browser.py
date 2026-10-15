@@ -274,64 +274,85 @@ def _light_follows(page, srv: Server, vault: Path, scheme: str, extra: Path) -> 
 
 
 def light_catch_up_race(ctx, srv: Server, vault: Path) -> None:
-    """The first graph answer predates a note written right before `light`, and the index event that brings
-    the note arrives while that answer is still on its way: the note must still join (round 3 on #64).
-    The answer is fetched at once (stale: the server re-reads the vault at most every 10 s) and held until
-    the page has seen the index event."""
+    """A note written right before `light` is missing from the first graph answers (the server re-reads the
+    vault at most every 10 s); the index event that brings it must not get lost on the way (#64):
+    - round 3: the event arrives while the first answer is still on its way;
+    - round 4: a newer load (an "Also show" toggle) has landed while the first one is still pending.
+    Answers are fetched at once, while stale, and delivered in the order the case needs."""
     outbox = vault / ".atlas" / "outbox.jsonl"
     before = outbox.read_bytes() if outbox.exists() else b""
     page = ctx.new_page()
     written: list[Path] = []
     try:
-        for attempt in range(3):  # the server may happen to re-read between the write and the fetch: try again
-            note = vault / "insights" / f"light-race-{attempt}.md"
-            written.append(note)
-            page.goto(f"{srv.base}/#/")
-            page.wait_for_selector("#main > *", timeout=15000)
-            page.wait_for_timeout(1500)
-            page.evaluate("window.__idx = 0; addEventListener('atlas:index', () => window.__idx++)")
-            held: list = []
-
-            def hold(route):
-                if held:
-                    return route.continue_()
-                held.append((route, route.fetch()))
-            page.route("**/api/graph?*", hold)
-            note.write_text(f"---\ndescription: written right before the light\n---\n\n# Race {attempt}\n\n[[spacing-plus-sleep]]\n",
-                            encoding="utf-8")
-            name = f"race-{attempt}"
-            r = atlas(vault, "light", name, "insights/spacing-plus-sleep.md", note.stem)
-            if r.returncode:
-                failures.append(f"atlas.py light failed (#64 r3): {r.stdout}{r.stderr}")
-                return
-            try:
-                page.wait_for_function(f"location.hash === '#/graph?light={name}'", timeout=15000)
-                for _ in range(150):
-                    if held:
-                        break
-                    page.wait_for_timeout(100)
-                route, resp = held[0]
-                stale = note.stem not in resp.text()
-                page.wait_for_function("window.__idx > 0", timeout=30000)  # the index event, before the answer lands
-                route.fulfill(response=resp)
-            except Exception as err:
-                failures.append(f"could not stage the light race ({type(err).__name__}): {page.evaluate('location.hash')} (#64 r3)")
-                return
-            finally:
-                page.unroute("**/api/graph?*")
-            if not stale:
-                continue
-            try:
-                page.wait_for_function("document.querySelector('#gx-lit .n')?.textContent === '2'", timeout=15000)
-            except Exception:
-                failures.append(f"a note whose index event came during the first graph load never joined: {page.inner_text('#gx-lit')!r} (#64 r3)")
-            return
-        print("note: the light race could not be staged (the server re-read the vault each time); not checked")
+        for case in ("first-load", "superseded"):
+            for attempt in range(3):  # the server may re-read the vault at the wrong moment: stage it again
+                note = vault / "insights" / f"light-race-{case}-{attempt}.md"
+                written.append(note)
+                staged = _light_race(page, srv, vault, note, case)
+                if staged is not None:
+                    break
+            else:
+                print(f"note: the light race ({case}) could not be staged in three tries; not checked")
     finally:
         page.close()
         for note in written:
             note.unlink(missing_ok=True)
         outbox.write_bytes(before)
+
+
+def _light_race(page, srv: Server, vault: Path, note: Path, case: str):
+    """None when the race could not be staged (an answer was already fresh), else True."""
+    page.goto(f"{srv.base}/#/")
+    page.wait_for_selector("#main > *", timeout=15000)
+    page.wait_for_timeout(1500)
+    page.evaluate("window.__idx = 0; addEventListener('atlas:index', () => window.__idx++)")
+    answers: list = []  # (route, response, stale) per graph request, in order
+
+    def hold(route):
+        if len(answers) >= 2 or (case == "first-load" and answers):
+            return route.continue_()
+        resp = route.fetch()
+        answers.append((route, resp, note.stem not in resp.text()))
+        if len(answers) == 2:  # the newer load lands at once
+            route.fulfill(response=resp)
+    page.route("**/api/graph?*", hold)
+    note.write_text(f"---\ndescription: written right before the light\n---\n\n# {note.stem}\n\n[[spacing-plus-sleep]]\n",
+                    encoding="utf-8")
+    name = note.stem
+    try:
+        r = atlas(vault, "light", name, "insights/spacing-plus-sleep.md", note.stem)
+        if r.returncode:
+            failures.append(f"atlas.py light failed (#64): {r.stdout}{r.stderr}")
+            return True
+        page.wait_for_function(f"location.hash === '#/graph?light={name}'", timeout=15000)
+        for _ in range(150):
+            if answers:
+                break
+            page.wait_for_timeout(100)
+        if not answers[0][2]:
+            return None
+        if case == "superseded":
+            page.click(".gx-extra input[value=capture]")  # a newer load while the first is still held
+            page.wait_for_selector("#gx-lit:not([hidden])", timeout=15000)
+            if len(answers) < 2 or not answers[1][2] or page.evaluate("window.__idx") > 0:
+                answers[0][0].fulfill(response=answers[0][1])
+                return None  # the newer answer was fresh, or the event came before it landed
+            page.wait_for_function("window.__idx > 0", timeout=30000)  # the event, after the newer load landed
+            answers[0][0].fulfill(response=answers[0][1])  # the superseded answer comes in last
+        else:
+            page.wait_for_function("window.__idx > 0", timeout=30000)  # the event, before the first answer lands
+            answers[0][0].fulfill(response=answers[0][1])
+    except Exception as err:
+        failures.append(f"could not stage the light race {case} ({type(err).__name__}): {page.evaluate('location.hash')} (#64)")
+        return True
+    finally:
+        page.unroute("**/api/graph?*")
+    try:
+        page.wait_for_function("document.querySelector('#gx-lit .n')?.textContent === '2'", timeout=15000)
+    except Exception:
+        round_ = "r4" if case == "superseded" else "r3"
+        failures.append(f"light race {case}: the note never joined, chip {page.inner_text('#gx-lit')!r} (#64 {round_})")
+    return True
 
 
 def follows_changes(ctx, srv: Server, vault: Path) -> None:

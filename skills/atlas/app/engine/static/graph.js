@@ -120,8 +120,8 @@ export async function viewGraph(main, ctx) {
   // `light` resolves its notes on a fresh index; the server's may be up to 10 s older. A note it does not have
   // yet joins the highlight when the index catches up (a few tries: a note deleted since stays missing). An index
   // change during a load counts too: that answer may predate it (round 3 on #64).
-  let catchUps = 3, indexGen = 0, loading = 0;
-  function onIndex() { indexGen++; if (!loading) catchUp(); }
+  let catchUps = 3, indexGen = 0, settled = 0;  // settled: the latest load whose answer is in (or failed)
+  function onIndex() { indexGen++; if (settled === loadSeq) catchUp(); }  // else that load catches up when it lands
   function catchUp() {
     if (light && data && catchUps > 0 && light.ids.some((id) => !byId.has(id))) { catchUps--; load().catch((err) => toast(`Graph failed: ${err.message}`)); }
   }
@@ -307,9 +307,8 @@ export async function viewGraph(main, ctx) {
   async function load() {
     const seq = ++loadSeq, gen = indexGen;
     let fresh;
-    loading++;
     try { fresh = await api(`/api/graph?types=${enc(["insight", "map", ...new Set([...opts.extra, ...forced])].join(","))}`); }
-    finally { loading--; }
+    finally { if (seq === loadSeq) settled = seq; }  // a superseded answer neither holds nor releases events
     if (!alive || seq !== loadSeq) return;
     data = fresh;
     const nodes = data.nodes.map((n) => ({ ...n }));
