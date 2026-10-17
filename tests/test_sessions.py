@@ -323,3 +323,88 @@ def test_settings_that_are_not_plain_json_are_left_alone(installer, home):
     with pytest.raises(SystemExit):
         installer.hooks("install", "claude-code")
     assert settings.read_text(encoding="utf-8") == "{ // my comment\n}"
+
+
+# --- review round 1 on #66 -----------------------------------------------------------------------
+
+def test_chat_messages_from_wait_count_as_the_users(engine, vault, home, monkeypatch, capsys):
+    # in operator mode the user writes in the browser; the words arrive as the output of `atlas.py wait`
+    wait = {"type": "assistant", "timestamp": stamp(DAY + dt.timedelta(minutes=40)), "message": {"content": [
+        {"type": "tool_use", "id": "w1", "name": "Bash",
+         "input": {"command": "uv run --no-project engine/atlas.py wait --agent claude"}}]}}
+    heard = {"type": "user", "timestamp": stamp(DAY + dt.timedelta(minutes=41)), "message": {"content": [
+        {"type": "tool_result", "tool_use_id": "w1",
+         "content": "USER [viewing: projects/private/nightlight/project.md]: please also log the firmware version"}]}}
+    session(engine, "sess-chat-00001", *basic(DAY), wait, heard, home=home,
+            closed_at=stamp(DAY + dt.timedelta(minutes=5)))
+
+    assert open_ids(engine) == ["sess-chat-00001"]
+    assert "please also log the firmware version" in run(engine, monkeypatch, capsys, "sessions", "digest",
+                                                         "sess-chat-00001")
+
+
+def test_codex_wait_output_counts_as_the_users(engine, vault, home):
+    sid = "01a12f70-e8f8-7e80-b793-ae386e5b3166"
+    path = home / ".codex" / "sessions" / "2026" / "10" / "16" / f"rollout-2026-10-16T10-00-00-{sid}.jsonl"
+    path.parent.mkdir(parents=True)
+    lines = [
+        {"timestamp": stamp(DAY), "type": "session_meta", "payload": {"id": sid, "originator": "codex-tui"}},
+        {"timestamp": stamp(DAY), "type": "response_item", "payload": {
+            "type": "custom_tool_call", "name": "exec", "call_id": "c1",
+            "input": 'text(await tools.exec_command({cmd:"uv run --no-project engine/atlas.py wait --agent codex --timeout 240"}))'}},
+        {"timestamp": stamp(DAY + dt.timedelta(minutes=1)), "type": "response_item", "payload": {
+            "type": "custom_tool_call_output", "call_id": "c1", "output": "USER [via command]: /distill all\n"}},
+    ]
+    path.write_text("".join(json.dumps(o, separators=(",", ":")) + "\n" for o in lines), encoding="utf-8")
+    os.utime(path, (DAY.timestamp() + 60, DAY.timestamp() + 60))
+    session(engine, sid, home=home, harness="codex")
+
+    items = engine.open_sessions()
+
+    assert [s["id"] for s in items] == [sid]
+    assert items[0]["users"] == 1
+
+
+def test_codex_started_from_claude_code_is_a_codex_session(engine, vault, monkeypatch):
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "sess-parent-claude")
+    monkeypatch.setenv("CODEX_THREAD_ID", "sess-child-codex")
+
+    assert engine.current_session() == ("codex", "sess-child-codex")
+
+
+def test_agents_side_by_side_keep_each_others_notes(engine, vault, home, monkeypatch):
+    import threading
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "sess-second-0001")
+    with engine.sessions_locked():
+        worker = threading.Thread(target=engine.note_session, args=("codex",))
+        worker.start()  # waits for the lock
+        sessions = engine.load_sessions()
+        sessions["sess-first-00001"] = {"harness": "claude-code", "vault": str(vault)}
+        engine.save_sessions(sessions)
+    worker.join(timeout=15)
+
+    assert set(engine.load_sessions()) == {"sess-first-00001", "sess-second-0001"}
+
+
+def test_the_checkpoint_command_quotes_the_engine_path(engine, vault, home, monkeypatch, capsys):
+    session(engine, "sess-quoted-001", *basic(DAY), home=home)
+
+    out = run(engine, monkeypatch, capsys, "hook", "session-start",
+              stdin=json.dumps({"session_id": "sess-quoted-001", "source": "compact"}))
+
+    assert f'uv run --no-project \\"{engine.APP / "atlas.py"}\\" close' in out
+
+
+def test_a_group_shared_with_another_hook_keeps_that_hook(installer, home):
+    settings = home / ".claude" / "settings.json"
+    settings.parent.mkdir()
+    installer.hooks("install", "claude-code")
+    data = json.loads(settings.read_text(encoding="utf-8"))
+    data["hooks"]["SessionStart"][0]["hooks"].append({"type": "command", "command": "bash mine.sh"})
+    settings.write_text(json.dumps(data), encoding="utf-8")
+
+    installer.hooks("install", "claude-code")
+    installer.hooks("remove", "claude-code")
+
+    groups = json.loads(settings.read_text(encoding="utf-8"))["hooks"]["SessionStart"]
+    assert groups == [{"hooks": [{"type": "command", "command": "bash mine.sh"}]}]

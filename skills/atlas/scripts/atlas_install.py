@@ -301,7 +301,14 @@ def hooks(action: str, harness: str | None) -> None:
             print(f"{name}: no hook to remove")
             continue
         hooks_ = data.setdefault("hooks", {})
-        groups = [g for g in hooks_.get("SessionStart") or [] if not _ours(g)]
+        groups = []
+        for group in hooks_.get("SessionStart") or []:  # take out Atlas's commands, keep everything else
+            if isinstance(group, dict) and isinstance(group.get("hooks"), list):
+                kept = [h for h in group["hooks"] if not (isinstance(h, dict) and _is_our_command(h.get("command")))]
+                if not kept:
+                    continue
+                group = {**group, "hooks": kept}
+            groups.append(group)
         if action == "install":
             group: dict = {"hooks": [{"type": "command", "command": hook_command(home)}]}
             if name == "codex":  # Codex fires SessionStart after a compaction only when the matcher names it
