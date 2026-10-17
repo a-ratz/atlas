@@ -26,10 +26,14 @@ def engine():
 
 
 @pytest.fixture
-def vault(engine, tmp_path):
+def vault(engine, tmp_path, monkeypatch):
     path = tmp_path / "vault"
     shutil.copytree(APP / "vault", path, ignore=shutil.ignore_patterns(".atlas"))
     engine.set_vault(path)
+    # no test sees the agent session it may run in, or the machine's session list (#65)
+    for name in ("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID", "CODEX_THREAD_ID", "CODEX_SESSION_ID"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(engine, "SESSIONS", tmp_path / "sessions.json")
     return path
 
 
