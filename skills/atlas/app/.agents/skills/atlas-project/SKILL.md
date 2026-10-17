@@ -189,15 +189,22 @@ agent command here, and `boot`, `next` and the start hook list those that
 ended without `/close`, or where the user wrote more after it. For each one,
 before new work:
 
-1. Read it: `uv run --no-project engine/atlas.py sessions digest <id>`. It shows
-   the user's and the agent's messages and the compaction summaries, only what
-   came after the last close.
-2. Run the `/close` steps 1 to 5 for what it shows: thread log lines saying what
-   that session did (dated by the session, not today), decisions, lessons,
-   `check`, commit.
-3. Run the `close` command the digest prints. Its `--covered-until` keeps the
-   mark at what you read, even if that session goes on in another window.
-4. Tell the user in one line per session what you caught up.
+1. Post a progress line first (`say --agent <id> --progress "Catching up a
+   session from <date> that ended without /close"`): catching up takes a few
+   minutes, and the user should know why the answer waits.
+2. Read it: `uv run --no-project engine/atlas.py sessions digest <id>`. It shows
+   the user's and the agent's messages, one line per tool call and the
+   compaction summaries, only what came after the last close.
+3. Run the `/close` steps 1 to 5 for what that session did, and only for that:
+   - a thread log line carries the session's date, not today's, and goes where
+     that date belongs in the log; credit it as
+     `- <date> (<the session's agent>; caught up by <id> from the transcript): …`;
+   - say what you could not re-check (the transcript is the only source);
+   - resolve operational captures only when that session produced them.
+4. Run the `close` command the digest prints, with your own id for `--agent`.
+   Its `--covered-until` keeps the mark at what you read, even if that session
+   goes on in another window.
+5. Tell the user in one line per session what you caught up.
 
 A session that holds nothing worth keeping (a quick question):
 `uv run --no-project engine/atlas.py sessions skip <id> --reason "…"`. If the

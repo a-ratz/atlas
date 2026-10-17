@@ -3516,7 +3516,7 @@ def session_digest(sid: str, entry: dict, scan: dict, path: Path, max_chars: int
     if omitted:
         head.append(f"{omitted} older message(s) left out to fit {max_chars} characters (`--max-chars`, `--all`).")
     cut = f" --covered-until {_iso_utc(scan['last'])}" if scan["last"] else ""
-    head.append(f"When its /close steps are done: `engine/atlas.py close --agent {agent} --session {sid}{cut}`")
+    head.append(f"When its /close steps are done: `engine/atlas.py close --agent <id> --session {sid}{cut}` (your id)")
     return "\n".join(head) + "\n\n" + "\n\n".join(b[1] for b in blocks) + "\n"
 
 

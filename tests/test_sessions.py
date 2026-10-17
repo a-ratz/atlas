@@ -203,7 +203,7 @@ def test_the_digest_shows_what_came_after_the_close_and_names_the_cutoff(engine,
     assert "Please fix the parser" not in out
     assert "and the docs too" in out
     cutoff = engine._iso_utc(DAY + dt.timedelta(hours=2))
-    assert f"close --agent claude --session sess-digest-001 --covered-until {cutoff}" in out
+    assert f"close --agent <id> --session sess-digest-001 --covered-until {cutoff}" in out
 
 
 def test_the_digest_stays_within_its_limit(engine, vault, home):
