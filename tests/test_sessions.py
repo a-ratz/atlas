@@ -436,14 +436,16 @@ def test_codex_output_blocks_with_json_results_are_unwrapped(engine, vault, home
     assert [(k, t) for _, k, t in items[0]["entries"] if k == "user"] == [("user", "USER [via command]: /distill all\nand the rest")]
 
 
-def test_a_background_wait_is_followed_to_where_its_output_is_read(engine, vault, home):
-    out_file = "/tmp/claude-1000/tasks/bwait1.output"
+@pytest.mark.parametrize("out_file", ["/tmp/claude-1000/tasks/bwait1.output",
+                                      "C:/Users/Ada Lovelace/AppData/Local/Temp/claude/tasks/bwait1.output"])
+def test_a_background_wait_is_followed_to_where_its_output_is_read(engine, vault, home, out_file):
     launch = {"type": "assistant", "timestamp": stamp(DAY + dt.timedelta(minutes=40)), "message": {"content": [
         {"type": "tool_use", "id": "w1", "name": "Bash",
          "input": {"command": "uv run --no-project engine/atlas.py wait --agent claude", "run_in_background": True}}]}}
     started = {"type": "user", "timestamp": stamp(DAY + dt.timedelta(minutes=40)), "message": {"content": [
         {"type": "tool_result", "tool_use_id": "w1",
-         "content": f"Command running in background with ID: bwait1. Output is being written to: {out_file}"}]}}
+         "content": f"Command running in background with ID: bwait1. Output is being written to: {out_file}. "
+                    "You will be notified when it completes — do not poll that file."}]}}
     read = {"type": "assistant", "timestamp": stamp(DAY + dt.timedelta(minutes=50)), "message": {"content": [
         {"type": "tool_use", "id": "r1", "name": "Read", "input": {"file_path": out_file}}]}}
     heard = {"type": "user", "timestamp": stamp(DAY + dt.timedelta(minutes=50)), "message": {"content": [
@@ -466,3 +468,10 @@ def test_messages_keep_their_continuation_lines(engine):
         "USER [via move]: Challenge this passage\n> the quoted passage\nSource: a paper\n"
         "  CABINET Jan Born (cabinet/people/jan-born.md): researcher | state",
         "USER: next one"]
+
+
+def test_json_a_user_wrote_stays_as_written(engine):
+    out = 'USER: use these settings\n{"input": "a", "output": "b", "reason": "important context"}\n'
+
+    assert engine._chat_messages(out) == ['USER: use these settings\n{"input": "a", "output": "b", "reason": "important context"}']
+    assert engine._chat_messages([{"type": "input_text", "text": out}]) == engine._chat_messages(out)

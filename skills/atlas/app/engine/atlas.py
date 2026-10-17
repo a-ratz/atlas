@@ -3316,35 +3316,36 @@ def _tool_line(name, detail) -> str:
 ATLAS_WAIT = re.compile(r"atlas\.py\b[^\n]*\swait\b")
 
 
-BACKGROUND_OUTPUT = re.compile(r"background with ID: (\S+?)\.? Output is being written to: (\S+)")
+# "… in background with ID: <id>. Output is being written to: <path>.output. You will be notified …";
+# the path may hold spaces and ends before the sentence's full stop
+BACKGROUND_OUTPUT = re.compile(r"background with ID: (\S+?)\.?\s+Output is being written to: (.+?\.output)(?=\.?(?:\s|$))")
 LINE_PREFIX = re.compile(r"^(?:\s*\d+\t)?(?:<[a-z_]+>)?")  # Read's line numbers, a wrapping tag
 
 
+def _envelope_output(text: str) -> str | None:
+    """The command output inside a Codex tool-result envelope ({"exit_code": …, "output": …}, or that inside
+    {"result": …}); None for any other text, JSON a user wrote included."""
+    try:
+        node = json.loads(text)
+    except ValueError:
+        return None
+    if isinstance(node, dict) and isinstance(node.get("result"), dict):
+        node = node["result"]
+    if isinstance(node, dict) and isinstance(node.get("output"), str) and (
+            {"exit_code", "chunk_id", "wall_time_seconds"} & node.keys()):
+        return node["output"]
+    return None
+
+
 def _output_text(output) -> str:
-    """A tool result as plain text: content blocks joined, and Codex's JSON results unwrapped to their output."""
+    """A tool result as plain text: its content blocks joined, each Codex result envelope unwrapped."""
     if isinstance(output, list):
-        output = "\n".join(b.get("text", "") if isinstance(b, dict) else str(b) for b in output)
-    text = output if isinstance(output, str) else json.dumps(output) if output is not None else ""
-    parts = []
-    for chunk in text.split("\n"):
-        if chunk.lstrip().startswith("{"):
-            try:
-                found = []
-                stack = [json.loads(chunk)]
-                while stack:  # the "output" strings anywhere in it ({"output": …}, {"result": {"output": …}})
-                    node = stack.pop()
-                    if isinstance(node, dict):
-                        found += [v for k, v in node.items() if k == "output" and isinstance(v, str)]
-                        stack += [v for k, v in node.items() if isinstance(v, (dict, list))]
-                    elif isinstance(node, list):
-                        stack += node
-                if found:
-                    parts.extend(found)
-                    continue
-            except ValueError:
-                pass
-        parts.append(chunk)
-    return "\n".join(parts)
+        blocks = [b.get("text", "") if isinstance(b, dict) else str(b) for b in output]
+        return "\n".join(_envelope_output(b.strip()) if b.lstrip().startswith("{") and _envelope_output(b.strip())
+                         is not None else b for b in blocks)
+    if isinstance(output, str):
+        return output
+    return json.dumps(output) if output is not None else ""
 
 
 def _chat_messages(output) -> list[str]:
