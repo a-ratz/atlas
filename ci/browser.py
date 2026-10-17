@@ -74,6 +74,7 @@ def main() -> None:
                         failures.append(f"[{scheme}] {route}: {e}")
                 checks(page, srv.base, scheme)
                 light_follows(ctx, srv, vault, scheme)
+                light_chip_camera_clear(ctx, srv, vault, scheme)
                 if scheme == "light":  # the last pass: it edits and moves a demo note
                     follows_changes(ctx, srv, vault)
                     move_waits_for_its_own_answer(ctx, srv, vault)
@@ -276,6 +277,58 @@ def _light_follows(page, srv: Server, vault: Path, scheme: str, extra: Path) -> 
     box = page.eval_on_selector(".gx-extra input[value=sketch]", "i => [i.checked, i.disabled]")
     if box != [False, False]:
         failures.append(f"[{scheme}] x kept the sketches shown for the light: checked, disabled = {box} (#63)")
+
+
+ZOOM_K = "[...document.querySelectorAll('#gx-canvas, #gx-canvas *')].find((e) => e.__zoom)?.__zoom.k"
+
+
+def light_chip_camera_clear(ctx, srv: Server, vault: Path, scheme: str) -> None:
+    """With a long title the chip's x stays inside the graph stage; zooming while the lit layout settles is not
+    pulled back by the highlight's fit; clearing a light that forced a kind hides it at once, also when the reload
+    fails (final review on #64). The chat is put back afterwards."""
+    outbox = vault / ".atlas" / "outbox.jsonl"
+    before = outbox.read_bytes() if outbox.exists() else b""
+    page = ctx.new_page()
+    errors: list[str] = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    try:
+        page.goto(f"{srv.base}/#/")
+        page.wait_for_selector("#main > *", timeout=15000)
+        page.wait_for_timeout(1500)  # the chat has loaded: a light from before the page opened is not followed
+        sketch = srv.get("/api/list?type=sketch")["items"][0]["id"]
+        title = "Everything this vault knows about sleep, memory, spacing, replay and what happens in the night"
+        r = atlas(vault, "light", title, sketch, "spacing-plus-sleep", "replay-reruns-the-day")
+        try:
+            page.wait_for_selector("#gx-lit:not([hidden])", timeout=15000)
+        except Exception:
+            return failures.append(f"[{scheme}] a light with a long title did not show its chip: {r.stdout}{r.stderr}")
+        inside = page.evaluate("""() => { const s = document.querySelector('#gx-stage').getBoundingClientRect(),
+            x = document.querySelector('#gx-lit .x').getBoundingClientRect();
+            return x.left >= s.left && x.right <= s.right && x.top >= s.top && x.bottom <= s.bottom; }""")
+        if not inside:
+            failures.append(f"[{scheme}] with a long title the chip's x falls outside the graph stage (#64 final)")
+        stage = page.eval_on_selector("#gx-stage", "e => { const b = e.getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]; }")
+        page.mouse.move(*stage)
+        for _ in range(4):
+            page.mouse.wheel(0, -400)
+            page.wait_for_timeout(80)
+        page.wait_for_timeout(300)
+        zoomed = page.evaluate(ZOOM_K)
+        page.wait_for_timeout(2500)  # the highlight's fit runs every 700 ms while the layout settles
+        later = page.evaluate(ZOOM_K)
+        if not zoomed or not later or abs(later - zoomed) > 0.05 * zoomed:
+            failures.append(f"[{scheme}] the highlight's fit pulled the zoom back from {zoomed} to {later} (#64 final)")
+        page.route("**/api/graph?*", lambda route: route.abort())
+        page.click("#gx-lit .x")
+        page.wait_for_timeout(300)
+        if page.is_visible("#gx-lit") or page.evaluate("location.hash") != "#/graph":
+            failures.append(f"[{scheme}] x with a failing reload left the light on (#64 final)")
+        page.unroute("**/api/graph?*")
+        for e in errors:
+            failures.append(f"[{scheme}] clearing a light: {e} (#64 final)")
+    finally:
+        page.close()
+        outbox.write_bytes(before)
 
 
 def light_catch_up_race(ctx, srv: Server, vault: Path) -> None:

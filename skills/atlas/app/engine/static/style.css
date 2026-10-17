@@ -770,9 +770,9 @@ iframe.bhtml { width: 100%; height: 240px; border: 1px solid var(--line); border
 .gx-stage { position: relative; flex: 1; min-height: 320px; border-radius: 16px; background-color: var(--stage); border: 1px solid var(--line-3); overflow: hidden;
   background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 96px 96px; background-position: -1px -1px; }
 .gx-canvas { position: absolute; inset: 0; cursor: grab; }
-.gx-title { position: absolute; left: 22px; top: 16px; z-index: 2; pointer-events: none; display: flex; flex-direction: column; gap: 2px; }
+.gx-title { position: absolute; left: 22px; right: 22px; top: 16px; z-index: 2; pointer-events: none; display: flex; flex-direction: column; gap: 2px; }
 .gx-title .serif { font-size: 34px; line-height: 1.05; }
-.gx-lit { pointer-events: auto; margin-top: 8px; display: inline-flex; align-items: center; align-self: flex-start; max-width: min(420px, calc(100vw - 72px)); border-radius: 999px; background: var(--surface); border: 1px solid color-mix(in srgb, var(--acc) 55%, var(--line)); box-shadow: var(--shadow); }
+.gx-lit { pointer-events: auto; margin-top: 8px; display: inline-flex; align-items: center; align-self: flex-start; max-width: min(420px, 100%); border-radius: 999px; background: var(--surface); border: 1px solid color-mix(in srgb, var(--acc) 55%, var(--line)); box-shadow: var(--shadow); }
 .gx-lit-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 6px 4px 6px 12px; border: 0; background: none; color: var(--text); font: 500 13px var(--sans); cursor: pointer; }
 .gx-lit-t .n { margin-left: 8px; font: 11.5px var(--mono); color: var(--faint); }
 .gx-lit .x { flex: none; width: 28px; height: 28px; margin-right: 3px; border: 0; border-radius: 999px; background: none; color: var(--soft); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }

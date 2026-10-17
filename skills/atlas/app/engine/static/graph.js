@@ -256,8 +256,9 @@ export async function viewGraph(main, ctx) {
   G.d3Force("charge").strength((n) => (n.k === "map" ? -260 : -24)).distanceMax(520);
   G.d3Force("link").distance((l) => (l.source.k === "map" || l.target.k === "map" ? 80 : 24))
     .strength((l) => (l.source.k === "map" || l.target.k === "map" ? 0.04 : 0.22));
-  let fitted = false;
-  G.onEngineStop(() => { if (!fitted) { fitted = true; lit ? fitLit() : G.zoomToFit(700, 60); } });
+  let fitted = false, steered = false;  // steered: the user moved the camera; no automatic fit overrides that
+  G.onEngineStop(() => { if (!fitted) { fitted = true; if (!steered) lit ? fitLit() : G.zoomToFit(700, 60); } });
+  for (const kind of ["wheel", "pointerdown"]) $("#gx-stage").addEventListener(kind, () => { steered = true; }, { capture: true, passive: true });
   const ro = new ResizeObserver(() => G.width(el.clientWidth).height(el.clientHeight));
   ro.observe(el);
 
@@ -327,7 +328,7 @@ export async function viewGraph(main, ctx) {
     T = buckets(nodes);
     sel = T ? T.count - 1 : 0;
     recolor();
-    hover = selected = focus = legendPick = legendKey = null; fitted = false;
+    hover = selected = focus = legendPick = legendKey = null; fitted = steered = false;
     lit = light ? new Set(light.ids.filter((id) => byId.has(id))) : null;
     if (lit && !lit.size) lit = null;
     setFocus();
@@ -335,10 +336,10 @@ export async function viewGraph(main, ctx) {
     drawBars(); stats(); drawLegend(); drawLit();
     if (indexGen !== gen) catchUp();  // the index moved while this request ran
     // the user asked to see these: follow the settling layout instead of waiting ~8 s for it to stop
-    if (lit) { const iv = setInterval(() => (alive && seq === loadSeq && lit && !fitted ? fitLit() : clearInterval(iv)), 700); }
+    if (lit) { const iv = setInterval(() => (alive && seq === loadSeq && lit && !fitted && !steered ? fitLit() : clearInterval(iv)), 700); }
   }
 
-  const fitLit = () => G.zoomToFit(600, 100, (x) => lit.has(x.id));  // labels hang below and beside their node
+  const fitLit = () => { if (lit) G.zoomToFit(600, 100, (x) => lit.has(x.id)); };  // labels hang below and beside their node
   function drawLit() {
     const box = $("#gx-lit");
     box.hidden = !lit;
@@ -350,8 +351,8 @@ export async function viewGraph(main, ctx) {
       const reload = forced.size > 0;
       light = lit = null; forced.clear(); syncExtra();
       history.replaceState(null, "", "#/graph");  // no hashchange: the view stays and keeps its layout
-      if (reload) load().catch((err) => toast(`Graph failed: ${err.message}`));
-      else { setFocus(); drawLit(); G.nodeVisibility((n) => visible(n)); }  // a settled graph draws only when told
+      setFocus(); drawLit(); G.nodeVisibility((n) => visible(n));  // cleared at once; a settled graph draws only when told
+      if (reload) load().catch((err) => toast(`Graph failed: ${err.message}`));  // then drop the kinds it forced
     };
   }
 
@@ -392,6 +393,7 @@ export async function viewGraph(main, ctx) {
   async function select(n, fly) {
     selected = n; setFocus();
     if (fly) {
+      steered = true;  // "Fly to a note" or a click: the highlight's fit must not pull the camera back
       if (bigHub(n)) { const nb = neighborhood(n); G.zoomToFit(700, 70, (x) => nb.has(x.id)); }
       else { G.centerAt(n.x, n.y, 650); if (G.zoom() < 2.2) G.zoom(2.6, 650); }
     }
