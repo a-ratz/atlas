@@ -282,7 +282,8 @@ function renderNav() {
     <a class="nav-link primary" href="#/chat">${navIcon("chat")}<span class="lbl">Operator</span></a>
     ${typeOf("project") ? `<a class="nav-link primary" href="#/projects">${navIcon("projects")}<span class="lbl">Projects</span></a>` : ""}
     ${notes >= 3 ? `<a class="nav-link primary" href="#/graph">${navIcon("graph")}<span class="lbl">Constellation</span></a>` : ""}
-    ${count("insight") + count("sketch") >= 3 ? `<a class="nav-link primary" href="#/rediscover">${navIcon("rediscover")}<span class="lbl">Rediscover</span></a>` : ""}`;
+    ${count("insight") + count("sketch") >= 3 ? `<a class="nav-link primary" href="#/rediscover">${navIcon("rediscover")}<span class="lbl">Rediscover</span></a>` : ""}
+    ${(m.addons || []).map((a) => `<a class="nav-link primary${a.error ? " broken" : ""}" href="#/addon/${enc(a.name)}"${a.error ? ` title="${esc(a.error)}"` : ""}><svg class="i" viewBox="0 0 16 16" aria-hidden="true">${a.icon}</svg><span class="lbl">${esc(a.title)}</span></a>`).join("")}`;
   const sections = {};
   for (const t of m.types) if (t.nav !== false) (sections[t.section] ??= []).push(t);
   for (const [sec, types] of Object.entries(sections)) {
@@ -2026,6 +2027,20 @@ function wireDrop() {
 }
 
 // ------------------------------------------------------------------ router, stream, boot
+// an addon's view: its own ES module, mounted in main; it returns what to clean up when the reader leaves
+async function viewAddon(name, params) {
+  const addon = (state.meta.addons || []).find((a) => a.name === name);
+  if (!addon) { main.innerHTML = `<div class="empty">No addon called ${esc(name)} is switched on in atlas.yaml.</div>`; return; }
+  if (addon.error || !addon.view) { main.innerHTML = `<div class="empty">The ${esc(addon.title)} addon could not start: ${esc(addon.error || "it has no view")}</div>`; return; }
+  const token = state.routeToken;
+  const current = () => token === state.routeToken && (location.hash || "").startsWith(`#/addon/${enc(name)}`);
+  const mod = await import(addon.view);
+  if (!current()) return;  // the reader went elsewhere while the module loaded
+  // `current` lets the view stop while it starts: it must not touch main once another view owns it
+  const destroy = await mod.view(main, { esc, enc, toast, params, current, base: `/api/addons/${enc(name)}` });
+  if (current()) state.destroyView = destroy || null;
+  else if (destroy) destroy();
+}
 function disposeView() {  // what the open view installed outside main (key handlers, the graph's loop)
   if (state.destroyView) { try { state.destroyView(); } catch {} state.destroyView = null; }
 }
@@ -2063,6 +2078,7 @@ async function route() {
       else destroy();
     }
     else if (path === "/rediscover") await viewRediscover();
+    else if (path.startsWith("/addon/")) await viewAddon(decodeURIComponent(path.slice(7)), params);
     else if (path.startsWith("/t/")) await viewList(decodeURIComponent(path.slice(3)), params);
     else if (path.startsWith("/e/")) await viewEntity(decodeURIComponent(path.slice(3)), params);
     else if (path === "/search") await viewSearch(params);

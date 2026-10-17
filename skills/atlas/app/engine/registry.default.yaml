@@ -37,6 +37,12 @@ qmd:                  # search by meaning (atlas-qmd); asked once at install
   enabled: ask        # ask | on | off
   index: atlas        # this vault's QMD index (qmd --index atlas): atlas-cabinet, -projects, -ideas, -insights, -sources
 
+# addons:             # none unless named here; each lives in addons/<name>/ next to engine/ (restart Atlas after a change)
+#   teams:            # Microsoft Teams chats and channels: addons/teams/README.md
+#     client_id: <Application (client) ID of your app registration>
+#     tenant: <Directory (tenant) ID>
+#     demo: true      # made-up people instead of a sign-in, to try it first
+
 commands:
   - {name: learn, args: "<topic or question>", help: "Research it and land the result as a capture", send: "/learn {args}"}
   - {name: distill, args: "[capture | all]", help: "Turn a capture into insights (the open one, the oldest, or all)", send: "/distill {args}"}

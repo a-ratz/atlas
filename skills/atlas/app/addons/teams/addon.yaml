@@ -1,0 +1,6 @@
+name: teams
+title: Teams
+version: 0.1.0
+description: Microsoft Teams chats and channels in Atlas, signed in with Entra ID (a proof of concept).
+# drawn in the navigation like Atlas's own icons: a 16 x 16 box, strokes in the text colour
+icon: '<path d="M2.5 3.5h7a1 1 0 0 1 1 1v4.5a1 1 0 0 1-1 1H6L3.5 12v-2H2.5a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z"/><path d="M12.5 6h1a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-.5v1.5L11 12H8.5"/>'

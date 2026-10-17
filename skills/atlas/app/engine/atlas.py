@@ -61,6 +61,9 @@ STATIC = APP / "static"
 DEFAULT_PORT = 8765
 VAULT = STATE = NOTES = REGISTRY = INBOX = OUTBOX = CURSOR = HEARTBEAT = SESSION = PRESENCE = SNOOZE = TOURS = Path()
 DROP_MAX = 50 * 1024 * 1024
+ADDONS = APP.parent / "addons"  # addons/<name>/: addon.yaml, addon.py, static/view.js (AGENTS.md: Addons)
+ADDON_DATA: Path | None = None  # where addons keep their own files; None: ~/.atlas/addons, outside every vault
+ADDON_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,39}$")
 AGENT_ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}$")
 
 
@@ -1656,12 +1659,74 @@ def write_note(action: str, target: str | None, text: str, index: Index) -> str:
 
 # --------------------------------------------------------------------------- web app
 
+# --------------------------------------------------------------------------- addons
+
+def addon_settings() -> dict:
+    """The addons the vault switches on (atlas.yaml `addons:`), by name, with their settings.
+    A registry without the key switches none on; `enabled: false` keeps an addon's settings but turns it off."""
+    import yaml
+    try:
+        reg = yaml.safe_load(REGISTRY.read_text(encoding="utf-8")) or {} if REGISTRY.exists() else {}
+    except (OSError, yaml.YAMLError):
+        return {}
+    wanted = reg.get("addons") if isinstance(reg, dict) else None
+    out = {}
+    for name, spec in (wanted.items() if isinstance(wanted, dict) else ()):
+        spec = spec if isinstance(spec, dict) else {}  # `teams:` alone switches it on without settings
+        if spec.get("enabled", True) is not False:
+            out[str(name)] = spec
+    return out
+
+
+class AddonContext:
+    """What Atlas hands an addon: its name, its settings from atlas.yaml, a folder of its own outside the vault."""
+
+    def __init__(self, name: str, settings: dict):
+        self.name, self.settings = name, settings
+        self.data_dir = (ADDON_DATA or Path.home() / ".atlas" / "addons") / name
+
+
+def load_addons() -> list[dict]:
+    """The switched-on addons, each with its manifest and routes, or the error that stopped it.
+    An addon the vault does not switch on is never imported; a broken one is reported and Atlas runs on."""
+    import importlib.util
+    import yaml
+    loaded = []
+    for name, settings in addon_settings().items():
+        entry = {"name": name, "title": name, "icon": "", "version": "", "routes": [], "view": "", "error": ""}
+        try:
+            folder = ADDONS / name
+            if not ADDON_NAME.match(name) or not (folder / "addon.yaml").is_file():
+                raise RuntimeError(f"no addon called {name!r} in addons/")
+            manifest = yaml.safe_load((folder / "addon.yaml").read_text(encoding="utf-8")) or {}
+            entry.update(title=str(manifest.get("title") or name), icon=str(manifest.get("icon") or ""),
+                         version=str(manifest.get("version") or ""))
+            spec = importlib.util.spec_from_file_location(f"atlas_addon_{name.replace('-', '_')}", folder / "addon.py")
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            entry["routes"] = list(module.register(AddonContext(name, settings)))
+            view = folder / "static" / "view.js"
+            if view.is_file():  # the mtime busts the browser's cache when the view changes
+                entry["view"] = f"/addons/{name}/view.js?v={int(view.stat().st_mtime)}"
+        except Exception as e:  # noqa: BLE001 - whatever an addon raises, it must not take Atlas down
+            entry.update(routes=[], view="", error=f"{type(e).__name__}: {e}")
+        loaded.append(entry)
+    return loaded
+
+
+def addon_rows(addons: list[dict]) -> list[dict]:
+    """The addons as /api/meta and `status` show them."""
+    return [{k: a[k] for k in ("name", "title", "icon", "version", "view", "error")} for a in addons]
+
+
 def make_app(index: Index):
     from starlette.applications import Starlette
     from starlette.concurrency import run_in_threadpool
     from starlette.responses import FileResponse, JSONResponse, Response, StreamingResponse
     from starlette.routing import Mount, Route
     from starlette.staticfiles import StaticFiles
+
+    addons = load_addons()
 
     def fresh():
         index.refresh()
@@ -1702,7 +1767,7 @@ def make_app(index: Index):
                              "operator": operator_state(), "vault": VAULT.name, "vault_path": str(VAULT), "user": index.user,
                              "total": len(index.entities), "content": content_count(index),
                              "qmd": bool(deep_collections()[1]), "commands": index.commands, "drop": index.drop,
-                             "projects": projects, "agents": agents})
+                             "projects": projects, "agents": agents, "addons": addon_rows(addons)})
 
     async def home_data(request):
         await run_in_threadpool(fresh)
@@ -1935,6 +2000,26 @@ def make_app(index: Index):
         Route("/api/chat", chat_history, methods=["GET"]), Route("/api/stream", stream),
         Route("/raw/{path:path}", raw), Mount("/static", StaticFiles(directory=STATIC)),
     ]
+
+    class AddonWrites:
+        """Writes to an addon need the header Atlas's own writes need (see forbidden), whatever the addon checks."""
+
+        def __init__(self, app):
+            self.app = app
+
+        async def __call__(self, scope, receive, send):
+            if scope["type"] == "http" and scope["method"] not in ("GET", "HEAD") and dict(scope["headers"]).get(b"x-atlas") != b"1":
+                await JSONResponse({"error": "forbidden"}, status_code=403)(scope, receive, send)
+                return
+            await self.app(scope, receive, send)
+
+    from starlette.routing import Router
+    for a in addons:
+        if a["error"]:
+            continue
+        routes.append(Mount(f"/api/addons/{a['name']}", app=AddonWrites(Router(a["routes"]))))
+        if a["view"]:
+            routes.append(Mount(f"/addons/{a['name']}", StaticFiles(directory=ADDONS / a["name"] / "static")))
     from starlette.middleware import Middleware
     from starlette.middleware.trustedhost import TrustedHostMiddleware
     hosts = ["localhost", "127.0.0.1", "*.ts.net"] + [h for h in os.environ.get("ATLAS_HOSTS", "").split(",") if h]
@@ -3737,7 +3822,8 @@ def cmd_status(args) -> None:
     s = session()
     url = f"http://localhost:{s['port']}" if s.get("port") else None
     print(json.dumps({**s, "url": url, "running": serving(url), "operator": operator_state(), "unread_for_agent":
-                      max(0, len(read_jsonl(INBOX)) - (read_cursor() if CURSOR.exists() else 0))}))
+                      max(0, len(read_jsonl(INBOX)) - (read_cursor() if CURSOR.exists() else 0)),
+                      "addons": {a["name"]: a["error"] or "ok" for a in load_addons()}}))
 
 
 def serving(url: str | None) -> bool:

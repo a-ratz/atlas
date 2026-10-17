@@ -1,0 +1,47 @@
+/* Teams addon: Atlas's own surfaces and lines, so it reads as part of Atlas in both themes. */
+.tm { display: flex; flex-direction: column; gap: 14px; height: calc(100vh - 120px); min-height: 420px; }
+.tm-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.tm-head h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -.3px; }
+.tm-tabs { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 999px; }
+.tm-tabs button { font: inherit; font-size: 13px; color: var(--soft); background: none; border: 0; border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+.tm-tabs button[aria-selected="true"] { background: var(--raised); color: var(--text-hi); }
+.tm-user { margin-left: auto; color: var(--faint); font-size: 13px; }
+.tm-body { flex: 1; min-height: 0; display: flex; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.tm-list { flex: 0 0 300px; min-width: 0; overflow: auto; border-right: 1px solid var(--line); padding: 6px; display: flex; flex-direction: column; gap: 1px; }
+.tm-row { font: inherit; color: var(--text); background: none; border: 0; border-radius: 9px; padding: 8px 10px; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+.tm-row:hover { background: var(--raised); }
+.tm-row[aria-current="true"] { background: var(--raised-2); }
+.tm-row-top { display: flex; gap: 8px; align-items: baseline; }
+.tm-row-title { font-weight: 500; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tm-row-last { font-size: 12.5px; color: var(--soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tm-channel { flex-direction: row; align-items: center; gap: 8px; }
+.tm-hash { color: var(--faint); font-family: var(--mono); }
+.tm-team { font-size: 12px; color: var(--faint); padding: 12px 10px 4px; letter-spacing: .3px; }
+.tm-time { font-family: var(--mono); font-size: 11.5px; color: var(--faint); white-space: nowrap; }
+.tm-conv { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tm-conv-head { display: flex; align-items: baseline; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.tm-conv-head h2 { margin: 0; font-size: 17px; font-weight: 600; }
+.tm-sub { color: var(--faint); font-size: 12.5px; }
+.tm-msgs { flex: 1; min-height: 0; overflow: auto; list-style: none; margin: 0; padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
+.tm-msg { display: flex; flex-direction: column; gap: 3px; max-width: 72ch; }
+.tm-msg.system { color: var(--faint); font-size: 12.5px; }
+.tm-meta { display: flex; gap: 8px; align-items: baseline; }
+.tm-from { font-weight: 500; }
+.tm-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-2); }
+.tm-extras { display: flex; gap: 12px; font-size: 12px; color: var(--faint); }
+.tm-note { margin: 0 20px 10px; padding: 10px 12px; border-radius: 10px; background: var(--warn-bg); color: var(--warn-fg); font-size: 13px; }
+.tm-compose { display: flex; gap: 10px; align-items: flex-end; padding: 10px 20px 16px; border-top: 1px solid var(--line); }
+.tm-compose textarea { flex: 1; resize: none; font: inherit; color: var(--text); background: var(--sunk); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; min-height: 42px; }
+.tm-empty { margin: auto; max-width: 560px; padding: 32px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+.tm-empty h2 { margin: 0; font-size: 18px; }
+.tm-empty p { margin: 0; color: var(--text-2); }
+.tm-empty pre { margin: 0; padding: 12px 14px; border-radius: 10px; background: var(--sunk); border: 1px solid var(--line); font-family: var(--mono); font-size: 12.5px; color: var(--text); }
+.tm-quiet { color: var(--faint); font-size: 13px; padding: 8px 10px; margin: 0; }
+.tm-err { color: var(--bad); font-size: 13px; padding: 8px 10px; margin: 0; }
+.tm-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (max-width: 760px) {
+  .tm { height: auto; }
+  .tm-body { flex-direction: column; }
+  .tm-list { flex: 0 0 auto; max-height: 40vh; border-right: 0; border-bottom: 1px solid var(--line); }
+  .tm-msgs { max-height: 60vh; }
+}

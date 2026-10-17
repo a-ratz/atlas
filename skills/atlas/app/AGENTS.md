@@ -55,6 +55,10 @@ user's and is never overwritten.
 7. **Ask before anything outward-facing or destructive:** publishing, pushing,
    deleting, exposing Atlas beyond localhost.
 8. Keep chat answers short; put substance in files and open them for the user.
+9. **Addons are the user's windows onto other services** (Teams, for example).
+   What they show is the user's, not the vault's: never read an addon's API
+   (`/api/addons/…`) or copy what it shows into notes, the chat or a commit
+   unless the user asks for exactly that.
 
 ## Who you are here
 

@@ -167,6 +167,11 @@ def prepare(args) -> None:
         sh([*uv, str(skill / "scripts" / "atlas_install.py"), "upgrade"], env)
         sh(["git", "-C", str(ROOT), "worktree", "remove", "--force", str(first)], env)
 
+    if sc.get("addons"):  # addons load when Atlas starts, so the scenario switches them on before it does
+        reg = atlas_dir / "vault" / "atlas.yaml"
+        reg.write_text(reg.read_text(encoding="utf-8") + "\n" + yaml.safe_dump({"addons": sc["addons"]}, sort_keys=False),
+                       encoding="utf-8")
+
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
