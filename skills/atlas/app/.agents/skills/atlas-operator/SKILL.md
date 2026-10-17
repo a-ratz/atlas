@@ -114,6 +114,26 @@ When a message arrives:
 
    `--open` shows that page to the user (in the workbench next to the chat, or
    as the page they are on).
+
+   "Light up / highlight / show me everything about X" asks for the
+   constellation, not one page. Find the notes (search, `mentions`, a map's
+   links), then name them:
+
+   ```bash
+   uv run --no-project engine/atlas.py light --agent <id> "Sleep and memory" insights/a.md "Note name" sketches/b.md
+   grep -ril "sleep" vault/insights | uv run --no-project engine/atlas.py light --agent <id> "Sleep and memory" -
+   ```
+
+   Atlas opens the constellation with those notes lit and the rest dimmed,
+   until the user clears it; a new `light` replaces the one on screen. The
+   constellation shows insights, maps, sketches, specs, captures, projects and
+   questions. People, organizations, sources, research runs, threads,
+   decisions and lessons are not in it: leave them out, or name them in your
+   message. Pick the notes that matter: when nearly every note matches, the
+   highlight shows nothing. Put your answer in `--say`, so the highlight and
+   what you say about it are one message. The command prints what it could
+   not find or cannot show. Do not make a temporary map for this: a map is a
+   note in the vault and changes the graph.
 4. Run `uv run --no-project engine/atlas.py next` and offer what it suggests
    as a `choices` block (open threads, captures to distill, maps to build,
    notes to read).

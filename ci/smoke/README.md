@@ -72,6 +72,7 @@ adds or changes a feature adds it to a scenario or writes a new one.
 | [open-page-follows](scenarios/open-page-follows.md) | an open page follows the agent: a distill moves the capture, "Later" changes a question |
 | [idea-to-project](scenarios/idea-to-project.md) | ideas from the vault, a spec, a project that knows where it came from |
 | [catch-up-session](scenarios/catch-up-session.md) | a session that ended without `/close` (staged with `stage: [earlier-session]`), caught up by the next agent |
+| [light-up](scenarios/light-up.md) | the agent lights up a topic in the constellation; the highlight is cleared without a trace |
 
 ## Budget
 

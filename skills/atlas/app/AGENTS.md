@@ -217,6 +217,7 @@ uv run --no-project engine/atlas.py wait --agent <id> [--timeout SECONDS]
 uv run --no-project engine/atlas.py say --agent <id> "text" [--open <vault path>]   # "-" reads stdin
 uv run --no-project engine/atlas.py say --agent <id> --progress "Reading 6 sources…"  # status line while you work
 uv run --no-project engine/atlas.py say --agent <id> --progress "…" --title "Researching X"  # what you are doing, shown above the conversation
+uv run --no-project engine/atlas.py light --agent <id> "Topic" <note>... [--say "text"]   # light up notes in the constellation; "-" reads one per line
 uv run --no-project engine/atlas.py next      # counts + suggested next steps (JSON)
 uv run --no-project engine/atlas.py check     # notes with broken links, bad frontmatter or no connection (exit 1)
 uv run --no-project engine/atlas.py boot [<project>] --agent <id> [--checkout DIR]   # your context for a project
