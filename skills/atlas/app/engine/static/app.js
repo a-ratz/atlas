@@ -1493,7 +1493,14 @@ function agentMsgHtml(m, i, bag) {
   return `<div class="amsg" data-agent="${esc(m.agent || "")}">${avatar(m.agent, "m")}<div class="abody">
     <div class="who">${esc(agentName(m.agent))} · ${clock(m.ts)}</div>
     ${blocks.map((b, j) => blockHtml(b, `${i}-${j}`, bag)).join("")}
-    ${m.open ? `<div class="opened">opened <a href="#/e/${enc(m.open)}">${esc(titleOf(m.open))}</a>${onChatPage() ? "" : ""}</div>` : ""}</div></div>`;
+    ${m.open ? `<div class="opened">opened <a href="#/e/${enc(m.open)}">${esc(titleOf(m.open))}</a>${onChatPage() ? "" : ""}</div>` : ""}
+    ${m.light ? `<div class="opened"><a href="#/graph?light=${enc(m.light.name)}">show in the constellation</a></div>` : ""}</div></div>`;
+}
+const litCount = (l) => `${l.ids.length} note${l.ids.length === 1 ? "" : "s"}`;
+// A highlight from `atlas.py light` is a chat message; the newest one of that name wins.
+async function findLight(name) {
+  const msgs = state.chatMessages.length ? state.chatMessages : (await api("/api/chat")).messages;
+  return [...msgs].reverse().find((m) => m.role === "agent" && m.light?.name === name)?.light || null;
 }
 // "> " lines are a quoted passage: one block in the bubble
 function bubbleText(s) {
@@ -1651,10 +1658,14 @@ async function loadChat() {
   if (state.chatOpen) renderLog($("#chat-log"), data.messages, empty);
   if (onChatPage()) { renderLog($("#page-log"), data.messages, chatWelcome()); renderFilter(); renderTabs(); renderOpTitle(); }
   refreshShift();
-  const opener = [...data.messages].reverse().find((m) => m.role === "agent" && m.open);
+  const opener = [...data.messages].reverse().find((m) => m.role === "agent" && (m.open || m.light));
   if (opener && lastOpen !== null && opener.ts !== lastOpen) {
     const who = agentName(opener.agent);
-    if (store.get("atlas.follow", true)) {
+    if (opener.light) {  // the operator page stays put: the message links to the constellation
+      const hash = `#/graph?light=${enc(opener.light.name)}`;
+      if (store.get("atlas.follow", true) && !onChatPage()) { if (location.hash === hash) route(); else location.hash = hash; }
+      toast(`${who} lit ${litCount(opener.light)}: ${opener.light.title}`);
+    } else if (store.get("atlas.follow", true)) {
       if (onChatPage()) { store.set("atlas.wb", opener.open); renderTabs(); renderWorkbench(); }
       else { location.hash = `#/e/${enc(opener.open)}`; toast(`${who} opened a page for you`); }
     } else toast(`${who} opened ${titleOf(opener.open)}`);
@@ -2060,7 +2071,9 @@ async function route() {
     else if (path === "/graph") {
       const token = state.routeToken;
       const mod = await import(`/static/graph.js?v=${window.ATLAS_V || ""}`);
-      const destroy = await mod.viewGraph(main, { api, esc, enc, toast, agentSlot, agentName, svg });
+      const name = params.get("light");
+      const light = name ? (await findLight(name)) || { name, gone: true } : null;
+      const destroy = await mod.viewGraph(main, { api, esc, enc, toast, agentSlot, agentName, svg, light });
       if (token === state.routeToken && (location.hash || "").startsWith("#/graph")) state.destroyView = destroy;
       else destroy();
     }
@@ -2089,6 +2102,7 @@ function connectStream() {
     if (state.chatOpen || onChatPage()) loadChat();
   });
   es.addEventListener("index", async () => {
+    window.dispatchEvent(new Event("atlas:index"));  // views that read more than one note (the constellation) listen
     cardCache.clear();
     state.meta = await api("/api/meta");
     renderNav();

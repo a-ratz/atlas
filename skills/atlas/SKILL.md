@@ -55,6 +55,7 @@ it is the manual for everything that follows. Then do what the user asked:
 | "restore the learn skill", "reset Atlas to factory" | `restore <what> --dry-run`, then `restore <what>`; `<what>` is a skill name (`atlas-learn`), `skills`, `engine`, `agents-md`, `registry` or `all` |
 | "my atlas is somewhere else now", "use this clone" | `locate <dir>` |
 | "where is my atlas", "which version" | `status` |
+| "remind agents of sessions that ended without /close", "install the session hook" | `hooks install` (Claude Code and Codex); `hooks status`, `hooks remove` |
 
 What these commands do and never do:
 
@@ -63,6 +64,10 @@ What these commands do and never do:
   template files that are new in this version.
 - `restore` first moves the current file to `.atlas-backup/<time>/`.
 - Neither command pushes.
+- `hooks install` adds one SessionStart hook to `~/.claude/settings.json` and
+  `~/.codex/hooks.json` and keeps every other hook; `hooks remove` takes only
+  that one out. It tells agents about sessions that ended without `/close` and
+  asks for a checkpoint after a compaction; it prints nothing otherwise.
 
 To get a new version of this skill, the user runs
 `npx skills update atlas`. After that, `upgrade` brings the home up to date.

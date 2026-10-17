@@ -19,6 +19,7 @@ fails the run. A few checks pin behavior that reviews found broken once.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import urllib.parse
@@ -28,6 +29,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from gate import Server, atlas, demo_vault  # noqa: E402
 
 from playwright.sync_api import sync_playwright  # noqa: E402
+
+# the engines this starts must not note the agent session running it in ~/.atlas/sessions.json (#65)
+for _name in ("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID", "CODEX_THREAD_ID", "CODEX_SESSION_ID"):
+    os.environ.pop(_name, None)
 
 failures: list[str] = []
 
@@ -168,12 +173,15 @@ def main() -> None:
                 checks(page, srv.base, scheme)
                 teams_demo(page, srv.base, scheme)
                 teams_races(page, srv.base, scheme)
+                light_follows(ctx, srv, vault, scheme)
+                light_chip_camera_clear(ctx, srv, vault, scheme)
                 if scheme == "light":  # the last pass: it edits and moves a demo note
                     follows_changes(ctx, srv, vault)
                     move_waits_for_its_own_answer(ctx, srv, vault)
                     move_ignores_late_history(ctx, srv, vault)
                     move_survives_pickup(ctx, srv, vault)
                     moves_release(ctx, srv, vault)
+                    light_catch_up_race(ctx, srv, vault)
                 ctx.close()
             empty_home_lists_notes(browser, Path(tmp))
             browser.close()
@@ -302,6 +310,225 @@ def slow_view_stays_behind(page, base: str, scheme: str) -> None:
         failures.append(f"[{scheme}] the slow-view check held no Home request")
     elif not page.query_selector(".reader-main h1:has-text('Can cueing work')"):
         failures.append(f"[{scheme}] a late Home answer painted over the open question (#18, CI)")
+
+
+def light_follows(ctx, srv: Server, vault: Path, scheme: str) -> None:
+    """`atlas.py light` takes the user to the constellation with its notes lit; a hidden kind it needs is shown
+    without changing the saved choice; a note written just before joins once the server's index catches up;
+    the chip's x clears the highlight and repaints a settled graph (#63, review round 1 on #64). The chat and
+    the vault are put back afterwards: the next pass expects them as they were."""
+    outbox, extra = vault / ".atlas" / "outbox.jsonl", vault / "insights" / "light-joins-late.md"
+    before = outbox.read_bytes() if outbox.exists() else b""
+    page = ctx.new_page()
+    try:
+        _light_follows(page, srv, vault, scheme, extra)
+    finally:
+        page.close()
+        extra.unlink(missing_ok=True)
+        outbox.write_bytes(before)
+
+
+def _light_follows(page, srv: Server, vault: Path, scheme: str, extra: Path) -> None:
+    page.goto(f"{srv.base}/#/")
+    page.wait_for_selector("#main > *", timeout=15000)
+    page.wait_for_timeout(1500)  # the chat has loaded: a light from before the page opened is not followed
+    extra.write_text("---\ndescription: written right before the light\n---\n\n# A note that joins late\n\n"
+                     "[[spacing-plus-sleep]]\n", encoding="utf-8")  # the server's index has not seen it yet
+    r = atlas(vault, "light", "Sleep and memory", "insights/spacing-plus-sleep.md", "replay-reruns-the-day", "light-joins-late")
+    if r.returncode or "lit 3 notes" not in r.stdout:
+        return failures.append(f"[{scheme}] atlas.py light failed (#63): {r.stdout}{r.stderr}")
+    try:
+        page.wait_for_function("location.hash === '#/graph?light=sleep-and-memory'", timeout=15000)
+        page.wait_for_selector("#gx-lit:not([hidden])", timeout=15000)
+    except Exception:
+        return failures.append(f"[{scheme}] a light did not take the user to the lit constellation (#63): {page.evaluate('location.hash')}")
+    try:
+        page.wait_for_function("document.querySelector('#gx-lit .n')?.textContent === '3'", timeout=30000)
+    except Exception:
+        failures.append(f"[{scheme}] the chip says {page.inner_text('#gx-lit')!r}: the note written right before never joined (#64 r1)")
+    page.evaluate("""() => { window.__draws = 0; const p = CanvasRenderingContext2D.prototype, real = p.clearRect;
+      p.clearRect = function (...a) { if (this.canvas.closest("#gx-canvas")) window.__draws++; return real.apply(this, a); }; }""")
+    last, still = -1, 0
+    for _ in range(60):  # wait until the layout has settled: a second without a frame
+        page.wait_for_timeout(500)
+        n = page.evaluate("window.__draws")
+        still, last = (still + 1 if n == last else 0), n
+        if still >= 2:
+            break
+    page.click("#gx-lit .x")
+    page.wait_for_timeout(600)
+    if page.is_visible("#gx-lit") or page.evaluate("location.hash") != "#/graph":
+        failures.append(f"[{scheme}] x left the light on: chip {page.is_visible('#gx-lit')}, {page.evaluate('location.hash')} (#63)")
+    if page.evaluate("window.__draws") == last:
+        failures.append(f"[{scheme}] x on a settled graph left the lit picture on the canvas (#64 r1)")
+    # a hidden kind the highlight needs: shown for this view, the saved choice untouched
+    sketch = srv.get("/api/list?type=sketch")["items"][0]["id"]
+    r = atlas(vault, "light", "An idea", sketch, "spacing-plus-sleep")
+    try:
+        page.wait_for_function("location.hash === '#/graph?light=an-idea'", timeout=15000)
+        page.wait_for_selector("#gx-lit:not([hidden])", timeout=15000)
+    except Exception:
+        return failures.append(f"[{scheme}] a second light did not take the user along (#63): {r.stdout}{r.stderr} {page.evaluate('location.hash')}")
+    box = page.eval_on_selector(".gx-extra input[value=sketch]", "i => [i.checked, i.disabled]")
+    if box != [True, True]:
+        failures.append(f"[{scheme}] a lit sketch did not show the sketches for this view: checked, disabled = {box} (#63)")
+    page.click("#gx-lit .x")
+    page.wait_for_timeout(800)
+    box = page.eval_on_selector(".gx-extra input[value=sketch]", "i => [i.checked, i.disabled]")
+    if box != [False, False]:
+        failures.append(f"[{scheme}] x kept the sketches shown for the light: checked, disabled = {box} (#63)")
+
+
+ZOOM_K = "[...document.querySelectorAll('#gx-canvas, #gx-canvas *')].find((e) => e.__zoom)?.__zoom.k"
+
+
+def light_chip_camera_clear(ctx, srv: Server, vault: Path, scheme: str) -> None:
+    """With a long title the chip's x stays inside the graph stage; zooming while the lit layout settles is not
+    pulled back by the highlight's fit; clearing a light that forced a kind hides it at once, also when the reload
+    fails (final review on #64). The chat is put back afterwards."""
+    outbox = vault / ".atlas" / "outbox.jsonl"
+    before = outbox.read_bytes() if outbox.exists() else b""
+    page = ctx.new_page()
+    errors: list[str] = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    try:
+        page.goto(f"{srv.base}/#/")
+        page.wait_for_selector("#main > *", timeout=15000)
+        page.wait_for_timeout(1500)  # the chat has loaded: a light from before the page opened is not followed
+        sketch = srv.get("/api/list?type=sketch")["items"][0]["id"]
+        title = "Everything this vault knows about sleep, memory, spacing, replay and what happens in the night"
+        r = atlas(vault, "light", title, sketch, "spacing-plus-sleep", "replay-reruns-the-day")
+        try:
+            page.wait_for_selector("#gx-lit:not([hidden])", timeout=15000)
+        except Exception:
+            return failures.append(f"[{scheme}] a light with a long title did not show its chip: {r.stdout}{r.stderr}")
+        inside = page.evaluate("""() => { const s = document.querySelector('#gx-stage').getBoundingClientRect(),
+            x = document.querySelector('#gx-lit .x').getBoundingClientRect();
+            return x.left >= s.left && x.right <= s.right && x.top >= s.top && x.bottom <= s.bottom; }""")
+        if not inside:
+            failures.append(f"[{scheme}] with a long title the chip's x falls outside the graph stage (#64 final)")
+        stage = page.eval_on_selector("#gx-stage", "e => { const b = e.getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]; }")
+        page.mouse.move(*stage)
+        for _ in range(4):
+            page.mouse.wheel(0, -400)
+            page.wait_for_timeout(80)
+        page.wait_for_timeout(300)
+        zoomed = page.evaluate(ZOOM_K)
+        page.wait_for_timeout(2500)  # the highlight's fit runs every 700 ms while the layout settles
+        later = page.evaluate(ZOOM_K)
+        if not zoomed or not later or abs(later - zoomed) > 0.05 * zoomed:
+            failures.append(f"[{scheme}] the highlight's fit pulled the zoom back from {zoomed} to {later} (#64 final)")
+        page.route("**/api/graph?*", lambda route: route.abort())
+        page.click("#gx-lit .x")
+        page.wait_for_timeout(300)
+        if page.is_visible("#gx-lit") or page.evaluate("location.hash") != "#/graph":
+            failures.append(f"[{scheme}] x with a failing reload left the light on (#64 final)")
+        page.unroute("**/api/graph?*")
+        for e in errors:
+            failures.append(f"[{scheme}] clearing a light: {e} (#64 final)")
+    finally:
+        page.close()
+        outbox.write_bytes(before)
+
+
+def light_catch_up_race(ctx, srv: Server, vault: Path) -> None:
+    """A note written right before `light` is missing from the first graph answers (the server re-reads the
+    vault at most every 10 s); the index event that brings it must not get lost on the way (#64):
+    - round 3: the event arrives while the first answer is still on its way;
+    - round 4: a newer load (an "Also show" toggle) has landed while the first one is still pending;
+    - round 5: as round 4, but the user has opened another highlight since: the old view must stay quiet.
+    Answers are fetched at once, while stale, and delivered in the order the case needs."""
+    outbox = vault / ".atlas" / "outbox.jsonl"
+    before = outbox.read_bytes() if outbox.exists() else b""
+    page = ctx.new_page()
+    written: list[Path] = []
+    try:
+        for case in ("first-load", "superseded", "replaced"):
+            for attempt in range(3):  # the server may re-read the vault at the wrong moment: stage it again
+                note = vault / "insights" / f"light-race-{case}-{attempt}.md"
+                written.append(note)
+                staged = _light_race(page, srv, vault, note, case)
+                if staged is not None:
+                    break
+            else:
+                print(f"note: the light race ({case}) could not be staged in three tries; not checked")
+    finally:
+        page.close()
+        for note in written:
+            note.unlink(missing_ok=True)
+        outbox.write_bytes(before)
+
+
+def _light_race(page, srv: Server, vault: Path, note: Path, case: str):
+    """None when the race could not be staged (an answer was already fresh), else True."""
+    page.goto(f"{srv.base}/#/")
+    page.wait_for_selector("#main > *", timeout=15000)
+    page.wait_for_timeout(1500)
+    page.evaluate("window.__idx = 0; addEventListener('atlas:index', () => window.__idx++)")
+    answers: list = []  # (route, response, stale) per graph request, in order
+
+    def hold(route):
+        if len(answers) >= 2 or (case == "first-load" and answers):
+            return route.continue_()
+        resp = route.fetch()
+        answers.append((route, resp, note.stem not in resp.text()))
+        if len(answers) == 2:  # the newer load lands at once
+            route.fulfill(response=resp)
+    page.route("**/api/graph?*", hold)
+    note.write_text(f"---\ndescription: written right before the light\n---\n\n# {note.stem}\n\n[[spacing-plus-sleep]]\n",
+                    encoding="utf-8")
+    name = note.stem
+    try:
+        r = atlas(vault, "light", name, "insights/spacing-plus-sleep.md", note.stem)
+        if r.returncode:
+            failures.append(f"atlas.py light failed (#64): {r.stdout}{r.stderr}")
+            return True
+        page.wait_for_function(f"location.hash === '#/graph?light={name}'", timeout=15000)
+        for _ in range(150):
+            if answers:
+                break
+            page.wait_for_timeout(100)
+        if not answers[0][2]:
+            return None
+        if case in ("superseded", "replaced"):
+            page.click(".gx-extra input[value=capture]")  # a newer load while the first is still held
+            page.wait_for_selector("#gx-lit:not([hidden])", timeout=15000)
+            if len(answers) < 2 or not answers[1][2] or page.evaluate("window.__idx") > 0:
+                answers[0][0].fulfill(response=answers[0][1])
+                return None  # the newer answer was fresh, or the event came before it landed
+            if case == "replaced":  # another highlight replaces the view whose first load is still held
+                page.wait_for_timeout(1100)  # chat times have whole seconds: the follow needs a later one (r6)
+                r = atlas(vault, "light", "New light", "insights/spacing-plus-sleep.md")
+                page.wait_for_function("location.hash === '#/graph?light=new-light'", timeout=15000)
+                page.wait_for_function("document.querySelector('#gx-lit')?.innerText.includes('New light')", timeout=15000)
+                if page.evaluate("window.__idx") > 0:
+                    answers[0][0].fulfill(response=answers[0][1])
+                    return None
+            page.wait_for_function("window.__idx > 0", timeout=30000)  # the event, after the newer load landed
+            if case == "replaced":
+                page.wait_for_timeout(2500)  # time for an old view to catch up and paint over the new one
+                chip = page.inner_text("#gx-lit") if page.is_visible("#gx-lit") else ""
+                answers[0][0].fulfill(response=answers[0][1])  # the old view's first answer, last of all
+                page.wait_for_timeout(1500)
+                after = page.inner_text("#gx-lit") if page.is_visible("#gx-lit") else ""
+                if "New light" not in chip or "New light" not in after:
+                    failures.append(f"light race replaced: an old graph view painted over the new highlight: {chip!r}, then {after!r} (#64 r5)")
+                return True
+            answers[0][0].fulfill(response=answers[0][1])  # the superseded answer comes in last
+        else:
+            page.wait_for_function("window.__idx > 0", timeout=30000)  # the event, before the first answer lands
+            answers[0][0].fulfill(response=answers[0][1])
+    except Exception as err:
+        failures.append(f"could not stage the light race {case} ({type(err).__name__}): {page.evaluate('location.hash')} (#64)")
+        return True
+    finally:
+        page.unroute("**/api/graph?*")
+    try:
+        page.wait_for_function("document.querySelector('#gx-lit .n')?.textContent === '2'", timeout=15000)
+    except Exception:
+        round_ = "r4" if case == "superseded" else "r3"
+        failures.append(f"light race {case}: the note never joined, chip {page.inner_text('#gx-lit')!r} (#64 {round_})")
+    return True
 
 
 def follows_changes(ctx, srv: Server, vault: Path) -> None:

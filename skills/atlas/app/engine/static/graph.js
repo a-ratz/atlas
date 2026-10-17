@@ -49,6 +49,10 @@ function buckets(nodes) {
 
 export async function viewGraph(main, ctx) {
   const { api, esc, enc, toast, agentSlot, agentName, svg } = ctx;
+  // A highlight the agent made with `atlas.py light`: its notes stay lit until the user clears it. Hidden kinds
+  // it needs are shown for this view only; the saved "Also show" choice stays as it was.
+  let light = ctx.light && !ctx.light.gone ? ctx.light : null;
+  const forced = new Set((light?.kinds || []).filter((k) => EXTRA.some(([x]) => x === k)));
   const saved = (() => { try { return JSON.parse(localStorage.getItem("atlas.graph")) || {}; } catch { return {}; } })();
   const opts = { color: ["map", "agent", "category"].includes(saved.color) ? saved.color : "map", extra: new Set(saved.extra || []) };
   const persist = () => { try { localStorage.setItem("atlas.graph", JSON.stringify({ color: opts.color, extra: [...opts.extra] })); } catch {} };
@@ -69,7 +73,7 @@ export async function viewGraph(main, ctx) {
       <div class="gx-main">
         <div class="gx-stage" id="gx-stage">
           <div class="gx-canvas" id="gx-canvas" role="img" aria-label="Graph of the vault's notes and their links"></div>
-          <div class="gx-title"><span class="serif">Constellation</span><span class="kicker" id="gx-day">your vault</span></div>
+          <div class="gx-title"><span class="serif">Constellation</span><span class="kicker" id="gx-day">your vault</span><div class="gx-lit" id="gx-lit" hidden></div></div>
           <div class="gx-zoom">
             <button class="icon-btn" id="gx-in" aria-label="Zoom in">${svg("plus")}</button>
             <button class="icon-btn" id="gx-out" aria-label="Zoom out"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10"/></svg></button>
@@ -101,7 +105,7 @@ export async function viewGraph(main, ctx) {
   themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   const mq = matchMedia("(prefers-color-scheme: light)");
   mq.addEventListener("change", repaint);
-  const cleanupBase = () => { alive = false; themeObs.disconnect(); mq.removeEventListener("change", repaint); main.classList.remove("bleed"); stopPlay(); };
+  const cleanupBase = () => { alive = false; themeObs.disconnect(); mq.removeEventListener("change", repaint); window.removeEventListener("atlas:index", onIndex); main.classList.remove("bleed"); stopPlay(); };
 
   try { await loadEngine(); }
   catch (err) {
@@ -111,8 +115,20 @@ export async function viewGraph(main, ctx) {
   }
   if (!alive) return () => {};
 
-  let data = null, adj = new Map(), byId = new Map(), hover = null, selected = null, focus = null, legendPick = null, legendKey = null;
+  let data = null, adj = new Map(), byId = new Map(), hover = null, selected = null, focus = null, legendPick = null, legendKey = null, lit = null;
   let mapColor = new Map(), catColor = {}, T = null, sel = 0, timer = null;
+  // `light` resolves its notes on a fresh index; the server's may be up to 10 s older. A note it does not have
+  // yet joins the highlight when the index catches up (a few tries: a note deleted since stays missing). An index
+  // change during a load counts too: that answer may predate it (round 3 on #64).
+  let catchUps = 3, indexGen = 0, settled = 0;  // settled: the latest load whose answer is in (or failed)
+  // A newer view replaced this one's page before route() could dispose it (it gets the cleanup only after the
+  // first load): such a view must neither catch up nor render (round 5 on #64).
+  const live = () => alive && el.isConnected;
+  function onIndex() { if (!live()) return; indexGen++; if (settled === loadSeq) catchUp(); }  // else that load catches up when it lands
+  function catchUp() {
+    if (light && data && catchUps > 0 && light.ids.some((id) => !byId.has(id))) { catchUps--; load().catch((err) => toast(`Graph failed: ${err.message}`)); }
+  }
+  window.addEventListener("atlas:index", onIndex);
   const node = (x) => (typeof x === "object" ? x : byId.get(x));
   const bucketOf = (n) => (T ? T.of(n) : 0);
   const visible = (n) => !T || bucketOf(n) <= sel;
@@ -146,7 +162,7 @@ export async function viewGraph(main, ctx) {
   const weight = (n) => (!big || n.k !== "insight" || n.d >= cut.p90 ? 1 : n.d >= cut.p75 ? 0.8 : 0.5);  // opacity at rest
   const neighborhood = (n) => new Set([n.id, ...(adj.get(n.id) || [])]);
   const bigHub = (n) => (adj.get(n.id)?.size || 0) > 60;
-  const setFocus = () => { focus = hover ? neighborhood(hover) : selected ? neighborhood(selected) : legendPick; };
+  const setFocus = () => { focus = hover ? neighborhood(hover) : selected ? neighborhood(selected) : legendPick || lit; };
 
   function shape(c, n, r, k) {
     c.beginPath();
@@ -156,10 +172,10 @@ export async function viewGraph(main, ctx) {
     else c.arc(n.x, n.y, r, 0, 2 * Math.PI);
   }
   function drawNode(n, c, k) {
-    const active = !focus || focus.has(n.id), r = radius(n), col = colorOf(n), fresh = isNew(n);
+    const active = !focus || focus.has(n.id), r = radius(n), col = colorOf(n), fresh = isNew(n), glow = focus && focus === lit;
     c.globalAlpha = !active ? 0.08 : focus ? 1 : weight(n);
     const top = big && n.k === "insight" && n.d >= cut.p99;
-    if (active && (fresh || top || n.k === "map" || n === hover || n === selected)) { c.shadowColor = fresh ? theme.acc : col; c.shadowBlur = fresh ? 14 : n.k === "map" ? 18 : 10; }
+    if (active && (fresh || top || glow || n.k === "map" || n === hover || n === selected)) { c.shadowColor = fresh ? theme.acc : col; c.shadowBlur = fresh ? 14 : n.k === "map" ? 18 : glow ? 16 : 10; }
     shape(c, n, r, k);
     if (n.k === "map") {  // hubs: a solid diamond in the map's colour, ringed so it reads against its own spokes
       c.fillStyle = col; c.fill();
@@ -172,18 +188,26 @@ export async function viewGraph(main, ctx) {
     } else { c.fillStyle = col; c.fill(); }
     c.shadowBlur = 0;
     if (fresh && active) { c.beginPath(); c.arc(n.x, n.y, r + 3.5 / k, 0, 2 * Math.PI); c.lineWidth = 1.2 / k; c.strokeStyle = withAlpha(theme.acc, 0.8); c.stroke(); }
+    if (glow && active && n.k !== "map") { c.beginPath(); c.arc(n.x, n.y, r + 4 / k, 0, 2 * Math.PI); c.lineWidth = 1.5 / k; c.strokeStyle = withAlpha(col, 0.75); c.stroke(); }  // lit: findable at any zoom
     if (n === selected) { c.beginPath(); c.arc(n.x, n.y, r + 3 / k, 0, 2 * Math.PI); c.lineWidth = 2 / k; c.strokeStyle = col; c.stroke(); }
     const show = active && (n.k === "map" ? (k > 0.7 || (k > 0.25 && n.d >= 120) || focus)
-      : n === hover || n === selected || (focus ? k > (focus.size < 40 ? 1.2 : 2.6) : top ? k > 1.3 : weight(n) >= 0.8 ? k > 2.6 : k > 6));
+      : n === hover || n === selected || (glow ? lit.size <= 40 || k > 1.2 : focus ? k > (focus.size < 40 ? 1.2 : 2.6) : top ? k > 1.3 : weight(n) >= 0.8 ? k > 2.6 : k > 6));
     if (show) {
       const fs = (n.k === "map" ? 13.5 : 10.5) / k;  // Geist with a firm halo: the italic serif blurred at a distance
       c.font = `${n.k === "map" ? 600 : 500} ${fs}px Geist, ui-sans-serif, system-ui, sans-serif`;
       c.textAlign = "center"; c.textBaseline = "top";
       const text = n.k === "map" ? mapName(n.id) : short(label(n), n === hover || n === selected ? 120 : 48);
-      c.lineJoin = "round"; c.lineWidth = (n.k === "map" ? 4.5 : 3.5) / k; c.strokeStyle = withAlpha(theme.stage, 0.95);
-      c.strokeText(text, n.x, n.y + r * 1.3 + 3 / k);
-      c.fillStyle = n.k === "map" ? col : withAlpha(theme.text, 0.92);
-      c.fillText(text, n.x, n.y + r * 1.3 + 3 / k);
+      const y = n.y + r * 1.3 + 3 / k, half = c.measureText(text).width / 2;
+      const box = [n.x - half, y, n.x + half, y + fs * 1.2];
+      // a lit set labels every note at any zoom: draw the ones that fit, zooming in or hovering shows the rest
+      const crowded = glow && n !== hover && n !== selected && placed.some((b) => box[0] < b[2] && b[0] < box[2] && box[1] < b[3] && b[1] < box[3]);
+      if (!crowded) {
+        if (glow) placed.push(box);
+        c.lineJoin = "round"; c.lineWidth = (n.k === "map" ? 4.5 : 3.5) / k; c.strokeStyle = withAlpha(theme.stage, 0.95);
+        c.strokeText(text, n.x, y);
+        c.fillStyle = n.k === "map" ? col : withAlpha(theme.text, 0.92);
+        c.fillText(text, n.x, y);
+      }
     }
     c.globalAlpha = 1;
   }
@@ -191,7 +215,7 @@ export async function viewGraph(main, ctx) {
   // Hover follows the hand, not the canvas: force-graph re-checks what lies under a resting pointer every
   // frame, so a wheel zoom slid random notes under it and lit up their neighbourhoods. Such a note waits
   // in `slid` and becomes the hover at the next real pointer move (force-graph will not report it again).
-  let movedAt = 0, slid;
+  let movedAt = 0, slid, placed = [];  // placed: label boxes of lit notes drawn in this frame
   const applyHover = (n) => { hover = n || null; setFocus(); el.style.cursor = n ? "pointer" : "grab"; };
   el.addEventListener("pointermove", () => {
     movedAt = Date.now();
@@ -203,6 +227,7 @@ export async function viewGraph(main, ctx) {
     .backgroundColor("rgba(0,0,0,0)")
     .nodeId("id").nodeRelSize(1).nodeVal((n) => radius(n) ** 2).nodeLabel(() => "")
     .nodeCanvasObject(drawNode)
+    .onRenderFramePre(() => { placed = []; })
     .nodePointerAreaPaint((n, color, c) => { c.fillStyle = color; c.beginPath(); c.arc(n.x, n.y, radius(n) + 2, 0, 2 * Math.PI); c.fill(); })
     .nodeVisibility((n) => visible(n))
     .linkVisibility((l) => visible(node(l.source)) && visible(node(l.target)))
@@ -231,8 +256,9 @@ export async function viewGraph(main, ctx) {
   G.d3Force("charge").strength((n) => (n.k === "map" ? -260 : -24)).distanceMax(520);
   G.d3Force("link").distance((l) => (l.source.k === "map" || l.target.k === "map" ? 80 : 24))
     .strength((l) => (l.source.k === "map" || l.target.k === "map" ? 0.04 : 0.22));
-  let fitted = false;
-  G.onEngineStop(() => { if (!fitted) { fitted = true; G.zoomToFit(700, 60); } });
+  let fitted = false, steered = false;  // steered: the user moved the camera; no automatic fit overrides that
+  G.onEngineStop(() => { if (!fitted) { fitted = true; if (!steered) lit ? fitLit() : G.zoomToFit(700, 60); } });
+  for (const kind of ["wheel", "pointerdown"]) $("#gx-stage").addEventListener(kind, () => { steered = true; }, { capture: true, passive: true });
   const ro = new ResizeObserver(() => G.width(el.clientWidth).height(el.clientHeight));
   ro.observe(el);
 
@@ -283,9 +309,11 @@ export async function viewGraph(main, ctx) {
 
   let loadSeq = 0;
   async function load() {
-    const seq = ++loadSeq;
-    const fresh = await api(`/api/graph?types=${enc(["insight", "map", ...opts.extra].join(","))}`);
-    if (!alive || seq !== loadSeq) return;
+    const seq = ++loadSeq, gen = indexGen;
+    let fresh;
+    try { fresh = await api(`/api/graph?types=${enc(["insight", "map", ...new Set([...opts.extra, ...forced])].join(","))}`); }
+    finally { if (seq === loadSeq) settled = seq; }  // a superseded answer neither holds nor releases events
+    if (!live() || seq !== loadSeq) return;
     data = fresh;
     const nodes = data.nodes.map((n) => ({ ...n }));
     const links = data.links.map(([a, b]) => ({ source: nodes[a].id, target: nodes[b].id }));
@@ -300,9 +328,32 @@ export async function viewGraph(main, ctx) {
     T = buckets(nodes);
     sel = T ? T.count - 1 : 0;
     recolor();
-    hover = selected = focus = legendPick = legendKey = null; fitted = false;
+    hover = selected = focus = legendPick = legendKey = null; fitted = steered = false;
+    lit = light ? new Set(light.ids.filter((id) => byId.has(id))) : null;
+    if (lit && !lit.size) lit = null;
+    setFocus();
     G.graphData({ nodes, links });
-    drawBars(); stats(); drawLegend();
+    drawBars(); stats(); drawLegend(); drawLit();
+    if (indexGen !== gen) catchUp();  // the index moved while this request ran
+    // the user asked to see these: follow the settling layout instead of waiting ~8 s for it to stop
+    if (lit) { const iv = setInterval(() => (alive && seq === loadSeq && lit && !fitted && !steered ? fitLit() : clearInterval(iv)), 700); }
+  }
+
+  const fitLit = () => { if (lit) G.zoomToFit(600, 100, (x) => lit.has(x.id)); };  // labels hang below and beside their node
+  function drawLit() {
+    const box = $("#gx-lit");
+    box.hidden = !lit;
+    if (!lit) return;
+    box.innerHTML = `<button type="button" class="gx-lit-t" title="Fit the view to the lit notes">✨ ${esc(light.title)}<span class="n">${lit.size}</span></button>
+      <button type="button" class="x" aria-label="Clear the highlight">${svg("x")}</button>`;
+    box.querySelector(".gx-lit-t").onclick = fitLit;
+    box.querySelector(".x").onclick = () => {
+      const reload = forced.size > 0;
+      light = lit = null; forced.clear(); syncExtra();
+      history.replaceState(null, "", "#/graph");  // no hashchange: the view stays and keeps its layout
+      setFocus(); drawLit(); G.nodeVisibility((n) => visible(n));  // cleared at once; a settled graph draws only when told
+      if (reload) load().catch((err) => toast(`Graph failed: ${err.message}`));  // then drop the kinds it forced
+    };
   }
 
   function drawLegend() {
@@ -342,6 +393,7 @@ export async function viewGraph(main, ctx) {
   async function select(n, fly) {
     selected = n; setFocus();
     if (fly) {
+      steered = true;  // "Fly to a note" or a click: the highlight's fit must not pull the camera back
       if (bigHub(n)) { const nb = neighborhood(n); G.zoomToFit(700, 70, (x) => nb.has(x.id)); }
       else { G.centerAt(n.x, n.y, 650); if (G.zoom() < 2.2) G.zoom(2.6, 650); }
     }
@@ -371,8 +423,13 @@ export async function viewGraph(main, ctx) {
       main.querySelectorAll("[data-color]").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); drawLegend();
     };
   });
+  const syncExtra = () => main.querySelectorAll(".gx-extra input").forEach((i) => {
+    i.checked = opts.extra.has(i.value) || forced.has(i.value);
+    i.disabled = forced.has(i.value);
+    i.parentElement.title = i.disabled ? "Shown while the highlight is on" : "";
+  });
+  syncExtra();
   main.querySelectorAll(".gx-extra input").forEach((i) => {
-    i.checked = opts.extra.has(i.value);
     i.onchange = () => { i.checked ? opts.extra.add(i.value) : opts.extra.delete(i.value); persist(); stopPlay(); load().catch((err) => toast(`Graph failed: ${err.message}`)); };
   });
   $("#gx-fit").onclick = () => G.zoomToFit(600, 60);
@@ -389,6 +446,7 @@ export async function viewGraph(main, ctx) {
   };
   q.onkeydown = (ev) => { if (ev.key === "Enter") sugg.querySelector("button")?.click(); if (ev.key === "Escape") { sugg.hidden = true; q.blur(); } };
 
+  if (ctx.light?.gone) toast("That highlight is no longer in the chat history.");
   try { await load(); } catch (err) { if (alive) toast(`Graph failed: ${err.message}`); }
 
   return () => { cleanupBase(); ro.disconnect(); G.pauseAnimation(); G._destructor?.(); };

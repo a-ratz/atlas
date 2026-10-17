@@ -40,6 +40,10 @@ from pathlib import Path
 
 import yaml
 
+# the engines this starts must not note the agent session running it in ~/.atlas/sessions.json (#65)
+for _name in ("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID", "CODEX_THREAD_ID", "CODEX_SESSION_ID"):
+    os.environ.pop(_name, None)
+
 ROOT = Path(__file__).resolve().parent.parent
 APP = ROOT / "skills" / "atlas" / "app"
 SITE = Path(__file__).resolve().parent

@@ -82,6 +82,43 @@ def isolate_qmd(env: dict) -> None:
             pass
 
 
+EARLIER_SESSION = "5e55a0e1-0d65-4c1a-9e0f-000000000065"
+
+
+def stage_earlier_session(home: Path, vault: Path) -> None:
+    """A Claude Code session from two days ago that worked on Nightlight's cue timing and ended without
+    /close (#65): its transcript under the run's HOME, and the note Atlas keeps of it."""
+    start = dt.datetime.now(dt.timezone.utc).replace(microsecond=0) - dt.timedelta(days=2)
+    at = lambda minutes: (start + dt.timedelta(minutes=minutes)).isoformat().replace("+00:00", "Z")
+    say = lambda minutes, text: {"type": "assistant", "timestamp": at(minutes),
+                                 "message": {"content": [{"type": "text", "text": text}]}}
+    lines = [
+        {"type": "ai-title", "aiTitle": "Nightlight cue timing"},
+        {"type": "user", "timestamp": at(0), "message": {"content": "/project nightlight, let's continue cue timing"}},
+        say(1, "Booted Nightlight. Cue timing is open; next: try the headband's phase API on three nights."),
+        {"type": "assistant", "timestamp": at(20), "message": {"content": [
+            {"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "python analyze_nights.py logs/"}}]}},
+        {"type": "user", "timestamp": at(21), "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "t1", "content": "3 nights: median cue latency 180 ms; 2 of 41 cues in N2"}]}},
+        say(22, "Three nights logged: median cue latency 180 ms, and 2 of 41 cues landed in N2 instead of N3."),
+        {"type": "user", "timestamp": at(30), "message": {"content":
+            "180 ms is fine. Let's cap the cue window at 30 minutes after the first N3 phase. "
+            "And we need a fourth night with the new firmware before we trust the N2 count."}},
+        say(31, "Agreed: the cue window ends 30 minutes after the first N3 phase, and a fourth night with the new "
+                "firmware comes next."),
+    ]
+    path = home / ".claude" / "projects" / "-smoke-elsewhere" / f"{EARLIER_SESSION}.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(json.dumps(o, separators=(",", ":")) + "\n" for o in lines), encoding="utf-8")
+    stamp = (start + dt.timedelta(minutes=31)).timestamp()
+    os.utime(path, (stamp, stamp))
+    notes = home / ".atlas" / "sessions.json"
+    notes.parent.mkdir(parents=True, exist_ok=True)
+    notes.write_text(json.dumps({"sessions": {EARLIER_SESSION: {
+        "harness": "claude-code", "vault": str(vault.resolve()), "agent": "claude", "first_seen": at(1)}}}, indent=1),
+        encoding="utf-8")
+
+
 def write_env(run: Path, env: dict) -> None:
     """The run's isolation as a file the operator sources before each command: its shell is not this one."""
     own = {k: v for k, v in env.items() if os.environ.get(k) != v}
@@ -121,6 +158,8 @@ def prepare(args) -> None:
     sh([*uv, str(skill / "scripts" / "atlas_install.py"), "install", str(atlas_dir)], env)
     if sc.get("demo"):
         sh([*uv, str(atlas_dir / "engine" / "atlas.py"), "demo", "--vault", str(atlas_dir / "vault")], env)
+    if "earlier-session" in sc.get("stage", []):
+        stage_earlier_session(home, atlas_dir / "vault")
     if args.ref:  # content made with the old version stays; then the skill and the app move to this checkout
         for setup in sc.get("before_upgrade", []):
             sh([*uv, str(atlas_dir / "engine" / "atlas.py"), "--vault", str(atlas_dir / "vault"), *setup.split()], env)

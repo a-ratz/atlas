@@ -146,7 +146,9 @@ tour marks its period as seen.
 
 Every insight and map as a living graph, with maps as hubs. Colour it by map,
 author or category, fly to a note, or press play and watch the vault grow out
-of your conversations, day by day.
+of your conversations, day by day. Ask your agent to light up everything about
+a topic: it names the notes (`atlas.py light`), the constellation dims the rest,
+and nothing is written to the vault.
 
 ### Ideas, from sketch to project
 
@@ -171,6 +173,11 @@ one memory that every agent shares: **threads** with their next step and a log,
 The page shows where you left off and exactly what an agent loads before it
 starts (`atlas.py boot <project> --agent <id>`), with its token budget.
 `atlas.py map-path` records where the project's code lives on each machine.
+
+A session that ends without `/close` is not lost. Atlas notes the Claude Code
+and Codex sessions that work in it, and the next agent catches up the ones that
+ended without `/close` from their transcripts: `boot`, `next` and an optional
+start hook list them, and after a compaction the hook asks for a checkpoint.
 
 ### People and organizations
 
@@ -290,7 +297,7 @@ Atlas ships the workflows as skills that every harness reads from
 | say "I have an idea…", or ask for ideas | `atlas-sketch`: write it down, or generate candidates from the vault and keep the survivors |
 | want a sketch worked out | `atlas-spec`: a spec grounded in your insights, with a first slice; then a project |
 | want a card for someone, or ask to look them up | `atlas-cabinet`: create and update cards, optionally from LinkedIn |
-| name a project, or close a session | `atlas-project`: load its memory, keep threads, decisions and lessons current |
+| name a project, or close a session | `atlas-project`: load its memory, keep threads, decisions and lessons current, catch up sessions that ended without `/close` |
 | want the demo gone | `atlas-clean-demo` |
 
 In the chat, `/` lists the commands (`/learn`, `/distill`, `/map`, `/sketch`, `/spec`,
@@ -344,11 +351,12 @@ single-user, local-first and young.
 
 ## Status and roadmap
 
-Atlas 0.11.0 is the current release. Stable: the
+Atlas 0.13.0 is the current release. Stable: the
 engine and reader, the duplex chat with answer blocks, project memory with boot
-packets, ideas from sketch to project, cards, search by meaning, the checks,
-tours, the installer with upgrade and restore. New and a proof of concept:
-addons, with Teams as the first.
+packets and catch-up of sessions that ended without `/close`, ideas from sketch
+to project, cards, search by meaning, lighting up notes in the constellation,
+the checks, tours, the installer with upgrade, restore and the session hook.
+New and a proof of concept: addons, with Teams as the first.
 
 Open:
 

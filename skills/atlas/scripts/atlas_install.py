@@ -10,6 +10,7 @@
     uv run --no-project scripts/atlas_install.py locate <dir>          # use an existing Atlas folder (e.g. a clone)
     uv run --no-project scripts/atlas_install.py upgrade [--dry-run]   # app files -> this skill's version
     uv run --no-project scripts/atlas_install.py restore <what> [--dry-run]   # factory copy: a skill, engine, ...
+    uv run --no-project scripts/atlas_install.py hooks install|remove|status [--harness claude-code|codex]
 
 The app ships in ../app. The user's Atlas is a copy of it in its own folder ("home"); the
 user's knowledge lives in home/vault and is never overwritten. The pointer to home lives in
@@ -159,6 +160,8 @@ def status(as_json: bool) -> dict:
                 elif current != bundled:
                     upgradable.append(rel)
             info.update(modified=sorted(modified), upgradable=sorted(upgradable), new=sorted(new))
+            info["hooks"] = {n: _hook_state(p, home) for n, p in hook_files().items()}
+            info["retention"] = retention_warning()
     if as_json:
         print(json.dumps(info, indent=2))
     else:
@@ -170,6 +173,10 @@ def status(as_json: bool) -> dict:
                       " (`atlas_install.py upgrade --dry-run`)")
             if info["modified"]:
                 print(f"changed in home since install (kept on upgrade): {', '.join(info['modified'])}")
+            print("session hooks: " + ", ".join(f"{n} {s}" for n, s in info["hooks"].items())
+                  + ("" if "installed" in info["hooks"].values() else " (`hooks install`)"))
+            if info.get("retention"):
+                print(f"note: {info['retention']}")
         elif info["state"] == "home missing":
             print("the folder moved or is gone: `locate <dir>`, or install again")
         else:
@@ -219,6 +226,125 @@ def _home_or_exit() -> Path:
     if not cfg or not is_home(Path(cfg["home"])):
         sys.exit("no Atlas installed or found: run `status`")
     return Path(cfg["home"])
+
+
+# --- session hooks (#65): a SessionStart hook that tells agents about sessions that ended without /close ---
+
+HOOK_ARGS = "hook session-start"  # with atlas.py in the same command: how the installer knows its own hook
+
+
+def hook_files() -> dict[str, Path]:
+    home = Path.home()
+    return {"claude-code": home / ".claude" / "settings.json", "codex": home / ".codex" / "hooks.json"}
+
+
+def hook_command(home: Path) -> str:
+    return f'uv run --no-project "{home / "engine" / "atlas.py"}" hook session-start'
+
+
+def _read_settings(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        sys.exit(f"{path} is not plain JSON ({exc}); add the hook by hand: see `hooks status`")
+    if not isinstance(data, dict):
+        sys.exit(f"{path} does not hold a JSON object; add the hook by hand: see `hooks status`")
+    return data
+
+
+def _is_our_command(command) -> bool:
+    command = str(command or "")
+    return "atlas.py" in command and command.rstrip().endswith(HOOK_ARGS)
+
+
+def _ours(group) -> bool:
+    return isinstance(group, dict) and any(isinstance(h, dict) and _is_our_command(h.get("command"))
+                                           for h in group.get("hooks") or [])
+
+
+def _hook_state(path: Path, home: Path | None) -> str:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except (OSError, json.JSONDecodeError):
+        return "unreadable"
+    groups = ((data.get("hooks") or {}).get("SessionStart") or []) if isinstance(data, dict) else []
+    commands = [str(h.get("command", "")) for g in groups if _ours(g) for h in g["hooks"] if isinstance(h, dict)]
+    if not commands:
+        return "not installed"
+    return "installed" if home and any(hook_command(home) == c for c in commands) else "installed for another folder"
+
+
+def _chosen(harness: str | None) -> list[str]:
+    if harness:
+        return [harness]
+    return [h for h, f in hook_files().items() if f.parent.is_dir()] or ["claude-code"]
+
+
+def hooks(action: str, harness: str | None) -> None:
+    files = hook_files()
+    if action == "status":
+        cfg = load_cfg()
+        home = Path(cfg["home"]) if cfg else None
+        for name, path in files.items():
+            print(f"{name}: {_hook_state(path, home)} ({path})")
+        warning = retention_warning()
+        if warning:
+            print(f"note: {warning}")
+        return
+    home = _home_or_exit() if action == "install" else None
+    for name in _chosen(harness):
+        path = files[name]
+        data = _read_settings(path)
+        if action == "remove" and not data:
+            print(f"{name}: no hook to remove")
+            continue
+        hooks_ = data.setdefault("hooks", {})
+        groups = []
+        for group in hooks_.get("SessionStart") or []:  # take out Atlas's commands, keep everything else
+            if isinstance(group, dict) and isinstance(group.get("hooks"), list):
+                kept = [h for h in group["hooks"] if not (isinstance(h, dict) and _is_our_command(h.get("command")))]
+                if not kept:
+                    continue
+                group = {**group, "hooks": kept}
+            groups.append(group)
+        if action == "install":
+            group: dict = {"hooks": [{"type": "command", "command": hook_command(home)}]}
+            if name == "codex":  # Codex fires SessionStart after a compaction only when the matcher names it
+                group = {"matcher": "startup|resume|compact", **group}
+            groups.append(group)
+        if groups:
+            hooks_["SessionStart"] = groups
+        else:
+            hooks_.pop("SessionStart", None)
+            if not hooks_:
+                data.pop("hooks")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        print(f"{name}: hook {'installed' if action == 'install' else 'removed'} ({path})")
+        if action == "install" and name == "codex":
+            print("  Codex runs hooks with `hooks = true` under [features] in ~/.codex/config.toml, "
+                  "and a new hook only after you trust it.")
+    if action == "install":
+        warning = retention_warning()
+        if warning:
+            print(f"note: {warning}")
+
+
+def retention_warning() -> str | None:
+    """Claude Code deletes transcripts after 30 days unless cleanupPeriodDays says otherwise."""
+    path = hook_files()["claude-code"]
+    if not path.parent.is_dir():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except (OSError, json.JSONDecodeError):
+        return None
+    if isinstance(data, dict) and data.get("cleanupPeriodDays"):
+        return None
+    return ("Claude Code deletes transcripts after 30 days (cleanupPeriodDays is not set in its settings.json); "
+            "a session older than that cannot be caught up")
 
 
 def upgrade(dry: bool) -> None:
@@ -321,6 +447,9 @@ def main() -> None:
     r = sub.add_parser("restore")
     r.add_argument("what")
     r.add_argument("--dry-run", action="store_true")
+    h = sub.add_parser("hooks")
+    h.add_argument("action", choices=["install", "remove", "status"])
+    h.add_argument("--harness", choices=["claude-code", "codex"], help="default: every harness installed here")
     a = ap.parse_args()
     if a.cmd == "status":
         status(a.json)
@@ -330,6 +459,8 @@ def main() -> None:
         locate(a.dir)
     elif a.cmd == "upgrade":
         upgrade(a.dry_run)
+    elif a.cmd == "hooks":
+        hooks(a.action, a.harness)
     else:
         restore(a.what, a.dry_run)
 
