@@ -73,6 +73,39 @@ def teams_demo(page, base: str, scheme: str) -> None:
         failures.append(f"[{scheme}] teams addon demo: {e}")
 
 
+def teams_drafts_and_failed_start(page, base: str, scheme: str) -> None:
+    """Final review on #60: a draft stays with its conversation, so Enter never sends it somewhere else; a view
+    whose first list fails cleans up after itself (no stylesheet or polling left behind on the next page)."""
+    try:
+        page.goto(f"{base}/#/addon/teams")
+        page.wait_for_selector(".tm-row:nth-of-type(2)", timeout=10000)
+        page.click(".tm-row >> nth=0")
+        page.wait_for_selector(".tm-msg", timeout=10000)
+        page.fill("#tm-text", "a draft for the first chat")
+        page.click(".tm-row >> nth=1")
+        page.wait_for_timeout(500)
+        if page.input_value("#tm-text"):
+            failures.append(f"[{scheme}] teams: the first chat's draft followed into the second chat (#60 final)")
+        page.click(".tm-row >> nth=0")
+        page.wait_for_timeout(500)
+        if page.input_value("#tm-text") != "a draft for the first chat":
+            failures.append(f"[{scheme}] teams: back in the first chat its draft was gone (#60 final)")
+        page.fill("#tm-text", "")
+        page.goto(f"{base}/#/")
+        page.wait_for_selector("#main > *", timeout=10000)
+        page.route("**/api/addons/teams/chats", lambda route: route.abort())
+        page.goto(f"{base}/#/addon/teams")
+        page.wait_for_timeout(1500)
+        page.unroute("**/api/addons/teams/chats")
+        page.goto(f"{base}/#/")
+        page.wait_for_selector("#main > *", timeout=10000)
+        page.wait_for_timeout(300)
+        if page.evaluate("[...document.querySelectorAll('link[rel=stylesheet]')].some((l) => l.href.includes('/addons/teams/'))"):
+            failures.append(f"[{scheme}] teams: a view whose first list failed left its stylesheet and polling behind (#60 final)")
+    except Exception as e:  # noqa: BLE001 - any failure here is a finding, not a crash of the run
+        failures.append(f"[{scheme}] teams drafts and failed start: {e}")
+
+
 def teams_races(page, base: str, scheme: str) -> None:
     """Review round 1 on #60: a double click sends once; an answer that comes back after the reader opened
     another chat stays out of it; leaving the page while it starts leaves the next page alone. Each race is
@@ -173,6 +206,7 @@ def main() -> None:
                 checks(page, srv.base, scheme)
                 teams_demo(page, srv.base, scheme)
                 teams_races(page, srv.base, scheme)
+                teams_drafts_and_failed_start(page, srv.base, scheme)
                 light_follows(ctx, srv, vault, scheme)
                 light_chip_camera_clear(ctx, srv, vault, scheme)
                 if scheme == "light":  # the last pass: it edits and moves a demo note

@@ -90,11 +90,20 @@ export async function view(main, ctx) {
     location.reload();
   };
   const openFor = {};  // each tab keeps the conversation it had open (smoke run on #60)
+  const drafts = new Map();  // each conversation keeps its own draft: a draft never changes its destination
+  const keyOf = (conv) => `${conv.kind}:${conv.team || ""}:${conv.id}`;
+  const keepDraft = () => {
+    if (!open) return;
+    const text = $("#tm-text").value;
+    if (text) drafts.set(keyOf(open), text); else drafts.delete(keyOf(open));
+  };
   for (const b of main.querySelectorAll(".tm-tabs button")) b.onclick = () => {
     if (b.dataset.tab === tab) return;
+    keepDraft();
     openFor[tab] = open;
     tab = b.dataset.tab;
     open = null;
+    $("#tm-text").value = "";
     showTab();
     if (openFor[tab]) openConv(openFor[tab]);
   };
@@ -167,7 +176,9 @@ export async function view(main, ctx) {
   }
 
   async function openConv(conv) {
+    keepDraft();
     open = conv;
+    $("#tm-text").value = drafts.get(keyOf(conv)) || "";
     $(".tm-conv-head h2").textContent = conv.kind === "channel" ? `# ${conv.title}` : conv.title;
     $(".tm-sub").textContent = conv.sub || "";
     $(".tm-compose").hidden = false;
@@ -236,7 +247,8 @@ export async function view(main, ctx) {
     }
     if (!live()) return;
     if (status === 200 && data.sent) {
-      if (area.value.trim() === text) area.value = "";
+      drafts.delete(keyOf(target));
+      if (target === open && area.value.trim() === text) area.value = "";
       if (target !== open) ctx.toast(`Sent to ${target.title}.`);  // the reader moved on: the answer is not this conversation's
       else if (data.messages) renderMessages(data.messages, true);
       else loadMessages(true);
@@ -262,7 +274,12 @@ export async function view(main, ctx) {
   }
   every(OPEN_EVERY, () => loadMessages(false));
   every(LISTS_EVERY, () => (tab === "chats" ? loadChats() : loadTeams()));
-  await showTab();
+  try {
+    await showTab();
+  } catch (err) {
+    destroy();  // the router never gets the cleanup of a view that failed to start: stop the polling here
+    throw err;
+  }
   if (!live()) destroy();
   return destroy;
 

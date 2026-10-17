@@ -331,3 +331,59 @@ def test_signing_out_never_blocks_other_requests(teams_module, tmp_path):
         waited = clock.monotonic() - started
         out.join(5)
     assert waited < 0.6, f"another request waited {waited:.2f}s for the sign-out"
+
+
+# ------------------------------------------------------------------ final review on #60
+
+def test_a_token_graph_refuses_before_its_time_is_refreshed_once(teams_module, tmp_path):
+    sent = []
+
+    def opener(req, timeout):
+        sent.append(req.headers["Authorization"])
+        if req.headers["Authorization"] == "Bearer old":
+            raise urllib.error.HTTPError(req.full_url, 401, "Unauthorized", {}, io.BytesIO(b"{}"))
+        return io.BytesIO(b'{"value": []}')
+
+    def post_form(url, fields):
+        return {"access_token": "new", "refresh_token": "r2", "expires_in": 3600}
+
+    account = teams_module.Account({"client_id": "id"}, tmp_path, opener=opener, post_form=post_form)
+    account.store.save({"access_token": "old", "refresh_token": "r", "expires_at": 9e12})
+    assert account.graph("GET", "/me/chats") == {"value": []}
+    assert sent == ["Bearer old", "Bearer new"]
+
+
+def test_a_token_refused_twice_signs_out(teams_module, tmp_path):
+    def opener(req, timeout):
+        raise urllib.error.HTTPError(req.full_url, 401, "Unauthorized", {}, io.BytesIO(b"{}"))
+
+    def post_form(url, fields):
+        return {"access_token": "also-refused", "refresh_token": "r2", "expires_in": 3600}
+
+    account = teams_module.Account({"client_id": "id"}, tmp_path, opener=opener, post_form=post_form)
+    account.store.save({"access_token": "old", "refresh_token": "r", "expires_at": 9e12})
+    with pytest.raises(teams_module.GraphError) as refused:
+        account.graph("GET", "/me/chats")
+    assert refused.value.code == "signed_out" and not account.signed_in()
+    assert teams_module._error(refused.value).status_code == 401
+
+
+def test_no_answer_from_graph_is_a_502_not_a_crash(teams_module, tmp_path):
+    def opener(req, timeout):
+        raise urllib.error.URLError("connection reset")
+
+    account = teams_module.Account({"client_id": "id"}, tmp_path, opener=opener)
+    account.store.save({"access_token": "a", "refresh_token": "r", "expires_at": 9e12})
+    with pytest.raises(teams_module.GraphError) as gone:
+        account.graph("GET", "/me/chats")
+    assert teams_module._error(gone.value).status_code == 502
+
+
+def test_an_accepted_message_stays_sent_when_the_refresh_gets_no_answer(teams_module, tmp_path):
+    def graph(method, path, body):
+        if method == "POST":
+            return {"id": "new"}
+        raise urllib.error.URLError("connection reset")
+    c = fake_teams_app(teams_module, tmp_path, graph)
+    r = c.post("/api/addons/teams/chats/19%3Aa%40thread.v2/messages", json={"text": "hello"})
+    assert r.status_code == 200 and r.json() == {"sent": True, "messages": None}

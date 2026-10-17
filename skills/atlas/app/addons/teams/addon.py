@@ -218,17 +218,19 @@ class Account:
         with self.lock:  # waits for a refresh in flight, so the refresh cannot sign the user back in
             self.store.clear()
 
-    def access_token(self) -> str | None:
-        """A valid access token, refreshed when it is about to expire; None when signed out.
-        Raises Throttled while the token endpoint is down or busy: the refresh token stays."""
+    def access_token(self, rejected: str | None = None) -> str | None:
+        """A valid access token, refreshed when it is about to expire, or when Graph `rejected` it before its
+        time; None when signed out. Raises Throttled while the token endpoint is down or busy: the refresh
+        token stays."""
+        fine = lambda t: t.get("expires_at", 0) - time.time() > 300 and t.get("access_token") != rejected
         token = self.store.load()
-        if token and token.get("expires_at", 0) - time.time() > 300:
+        if token and fine(token):
             return token["access_token"]
         with self.lock:
             token = self.store.load()  # again: another request may have refreshed it, or signed out
             if not token:
                 return None
-            if token.get("expires_at", 0) - time.time() > 300:
+            if fine(token):
                 return token["access_token"]
             if not token.get("refresh_token"):
                 return None
@@ -253,26 +255,40 @@ class Account:
         wait = self.blocked_until - time.time()
         if wait > 0:
             raise Throttled(int(wait) + 1)
-        token = self.access_token()
-        if not token:
-            raise GraphError(401, "signed_out", "Sign in to Microsoft first.")
-        data = json.dumps(body).encode("utf-8") if body is not None else None
-        req = urllib.request.Request(path if path.startswith("https://") else GRAPH + path, data=data, method=method,
-                                     headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
-        try:
-            with self.opener(req, timeout=20) as r:
-                raw = r.read().decode("utf-8")
-                return json.loads(raw) if raw else {}
-        except urllib.error.HTTPError as e:
-            if e.code in (429, 503):
-                retry = int(e.headers.get("Retry-After") or 10)
-                self.blocked_until = time.time() + retry
-                raise Throttled(retry)
+        rejected = None
+        while True:
+            token = self.access_token(rejected)
+            if not token:
+                raise GraphError(401, "signed_out", "Sign in to Microsoft first.")
+            data = json.dumps(body).encode("utf-8") if body is not None else None
+            req = urllib.request.Request(path if path.startswith("https://") else GRAPH + path, data=data, method=method,
+                                         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
             try:
-                err = json.loads(e.read().decode("utf-8")).get("error", {})
-            except ValueError:
-                err = {}
-            raise GraphError(e.code, err.get("code", "graph_error"), err.get("message", ""))
+                with self.opener(req, timeout=20) as r:
+                    raw = r.read().decode("utf-8")
+                    return json.loads(raw) if raw else {}
+            except urllib.error.HTTPError as e:
+                if e.code == 401 and rejected is None:
+                    rejected = token  # Graph refused the token before its time: refresh once and ask again
+                    continue
+                if e.code == 401:
+                    self.store.clear()  # refused again: sign in again instead of polling with a dead token
+                    raise GraphError(401, "signed_out", "Sign in to Microsoft again.")
+                self._raise_http(e)
+            except (urllib.error.URLError, TimeoutError, OSError) as e:  # no answer at all: a 502, not a crash
+                raise GraphError(502, "unreachable", f"Microsoft Graph did not answer: {e}")
+
+    def _raise_http(self, e: urllib.error.HTTPError) -> None:
+        """Graph's error as Throttled (429, 503: wait as asked) or GraphError."""
+        if e.code in (429, 503):
+            retry = int(e.headers.get("Retry-After") or 10)
+            self.blocked_until = time.time() + retry
+            raise Throttled(retry)
+        try:
+            err = json.loads(e.read().decode("utf-8")).get("error", {})
+        except ValueError:
+            err = {}
+        raise GraphError(e.code, err.get("code", "graph_error"), err.get("message", ""))
 
 
 # ---------------------------------------------------------------------------------------------
@@ -403,7 +419,7 @@ async def _read_after_write(read) -> list[dict] | None:
     a failed send (the view would offer to send it again)."""
     try:
         return await run_in_threadpool(read)
-    except (GraphError, Throttled):
+    except (GraphError, Throttled, OSError):  # OSError: no answer at all (URLError, a timeout)
         return None
 
 
