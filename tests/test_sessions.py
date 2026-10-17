@@ -85,7 +85,7 @@ def test_an_agent_command_notes_its_session_once(engine, vault, home, monkeypatc
     engine.note_session("claude")
 
     assert first["harness"] == "claude-code"
-    assert first["vault"] == str(vault)
+    assert first["vaults"] == [str(vault)]
     assert first["agent"] == "claude"
     assert engine.load_sessions()["sess-claude-0001"] == first
 
@@ -475,3 +475,90 @@ def test_json_a_user_wrote_stays_as_written(engine):
 
     assert engine._chat_messages(out) == ['USER: use these settings\n{"input": "a", "output": "b", "reason": "important context"}']
     assert engine._chat_messages([{"type": "input_text", "text": out}]) == engine._chat_messages(out)
+
+
+# --- final review pass on #66 --------------------------------------------------------------------
+
+def codex_rollout(home: Path, sid: str, items: list[tuple[int, dict]]) -> None:
+    path = home / ".codex" / "sessions" / "2026" / "10" / "16" / f"rollout-2026-10-16T12-00-00-{sid}.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [{"timestamp": stamp(DAY), "type": "session_meta", "payload": {"id": sid, "originator": "codex-tui"}}]
+    lines += [{"timestamp": stamp(DAY + dt.timedelta(minutes=m)), "type": "response_item", "payload": p} for m, p in items]
+    path.write_text("".join(json.dumps(o, separators=(",", ":")) + "\n" for o in lines), encoding="utf-8")
+    last = DAY + dt.timedelta(minutes=max(m for m, _ in items))
+    os.utime(path, (last.timestamp(), last.timestamp()))
+
+
+@pytest.mark.parametrize("name, given, running", [
+    ("wait", {"cell_id": "10", "yield_time_ms": 20000}, "Script running with cell ID 10"),
+    ("write_stdin", {"session_id": 4242, "chars": ""}, "Process running with session ID 4242"),
+])
+def test_codex_wait_output_that_arrives_through_a_continuation(engine, vault, home, name, given, running):
+    sid = "01a12f70-e8f8-7e80-b793-ae386e5b3188"
+    codex_rollout(home, sid, [
+        (0, {"type": "custom_tool_call", "name": "exec", "call_id": "c1",
+             "input": 'text(await tools.exec_command({cmd:"uv run --no-project engine/atlas.py wait --agent codex"}))'}),
+        (1, {"type": "custom_tool_call_output", "call_id": "c1",
+             "output": [{"type": "input_text", "text": f"{running}\nWall time 31.0 seconds\nOutput:\n"}]}),
+        (2, {"type": "function_call", "name": name, "call_id": "c2", "arguments": json.dumps(given)}),
+        (3, {"type": "function_call_output", "call_id": "c2",
+             "output": [{"type": "input_text", "text": "Script completed\nOutput:\n"},
+                        {"type": "input_text", "text": "USER [via command]: /distill all"}]}),
+    ])
+    session(engine, sid, home=home, harness="codex")
+
+    items = engine.open_sessions()
+
+    assert [s["id"] for s in items] == [sid] and items[0]["users"] == 1
+
+
+def test_a_session_keeps_every_vault_it_worked_in(engine, vault, home, monkeypatch, tmp_path):
+    session(engine, "sess-twovault01", *basic(DAY), home=home)
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "sess-twovault01")
+    other = tmp_path / "gate-vault"
+    other.mkdir()
+    engine.set_vault(other)  # a test vault, as the gate's operator check starts one
+    engine.note_session("claude")
+    engine.set_vault(vault)
+    monkeypatch.delenv("CLAUDE_CODE_SESSION_ID")
+
+    assert engine.session_vaults(engine.load_sessions()["sess-twovault01"]) == [str(vault), str(other)]
+    assert open_ids(engine) == ["sess-twovault01"]
+
+
+def test_the_checkpoint_commands_own_result_is_no_work_after_it(engine, vault, home):
+    at = DAY + dt.timedelta(minutes=10)
+    call = {"type": "assistant", "timestamp": stamp(at - dt.timedelta(seconds=2)), "message": {"content": [
+        {"type": "tool_use", "id": "k1", "name": "Bash",
+         "input": {"command": "uv run --no-project engine/atlas.py close --agent claude --checkpoint"}}]}}
+    done = {"type": "user", "timestamp": stamp(at + dt.timedelta(seconds=1)), "message": {"content": [
+        {"type": "tool_result", "tool_use_id": "k1", "content": "checkpoint: sess until now"}]}}
+    session(engine, "sess-ckptonly01", *basic(DAY), call, done, home=home, checkpoint_at=stamp(at))
+
+    assert open_ids(engine) == []
+
+
+def test_codex_wait_continued_with_write_stdin_inside_a_script(engine, vault, home):
+    # the shape of a real Codex operator run: the wait's result names its process session, and a later
+    # script call reads it with write_stdin({session_id: …})
+    sid = "01a12f70-e8f8-7e80-b793-ae386e5b3199"
+    envelope = lambda **k: json.dumps({"chunk_id": "x1", "wall_time_seconds": 1.0, **k})
+    codex_rollout(home, sid, [
+        (0, {"type": "custom_tool_call", "name": "exec", "call_id": "c1",
+             "input": "await Promise.allSettled([tools.exec_command({cmd:'uv run --no-project engine/atlas.py say --agent codex hi'}), "
+                      "tools.exec_command({cmd:'uv run --no-project engine/atlas.py wait --agent codex --timeout 240'})])"}),
+        (1, {"type": "custom_tool_call_output", "call_id": "c1", "output": [
+            {"type": "input_text", "text": "Script completed\nOutput:\n"},
+            {"type": "input_text", "text": envelope(exit_code=0, output="sent\n")},
+            {"type": "input_text", "text": envelope(session_id=14712, output="")}]}),
+        (5, {"type": "custom_tool_call", "name": "exec", "call_id": "c2",
+             "input": 'text(await tools.write_stdin({session_id:14712,chars:"",yield_time_ms:50000}));'}),
+        (6, {"type": "custom_tool_call_output", "call_id": "c2", "output": [
+            {"type": "input_text", "text": "Script completed\nOutput:\n"},
+            {"type": "input_text", "text": envelope(exit_code=0, output="USER [via command]: /next\n")}]}),
+    ])
+    session(engine, sid, home=home, harness="codex")
+
+    items = engine.open_sessions()
+
+    assert [t for _, k, t in items[0]["entries"] if k == "user"] == ["USER [via command]: /next"]

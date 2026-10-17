@@ -3240,17 +3240,24 @@ def note_session(agent: str | None) -> None:
         return
     harness, sid = found
     entry = load_sessions().get(sid) or {}
-    if entry.get("vault") == str(VAULT) and (entry.get("agent") or not agent):
+    if str(VAULT) in session_vaults(entry) and (entry.get("agent") or not agent):
         return
     try:
         with sessions_locked():
             sessions = load_sessions()  # again, under the lock
             entry = sessions.get(sid) or {}
-            sessions[sid] = {**entry, "harness": harness, "vault": str(VAULT),
+            # every vault the session worked in: a test vault it touched must not hide it from the real one
+            vaults = [*session_vaults(entry), *([] if str(VAULT) in session_vaults(entry) else [str(VAULT)])]
+            sessions[sid] = {**{k: v for k, v in entry.items() if k != "vault"}, "harness": harness, "vaults": vaults,
                              "first_seen": entry.get("first_seen") or now_iso(), **({"agent": agent} if agent else {})}
             save_sessions(sessions)
     except (OSError, TimeoutError):
         pass  # bookkeeping: never fail an agent's command over it
+
+
+def session_vaults(entry: dict) -> list[str]:
+    vaults = entry.get("vaults") if isinstance(entry.get("vaults"), list) else []
+    return [str(v) for v in vaults] + ([str(entry["vault"])] if entry.get("vault") and entry["vault"] not in vaults else [])
 
 
 def _when(value) -> dt.datetime | None:
@@ -3314,6 +3321,12 @@ def _tool_line(name, detail) -> str:
 
 
 ATLAS_WAIT = re.compile(r"atlas\.py\b[^\n]*\swait\b")
+ATLAS_CHECKPOINT = re.compile(r"atlas\.py\b[^\n]*\sclose\b[^\n]*--checkpoint")
+# Codex: a command still running after its first output goes on in a process session ("session_id" in its
+# result) or a script cell ("running with cell ID 10"); its later output comes back from a call naming that
+# id, `write_stdin({session_id: …})` or `wait {"cell_id": …}`, as a function call or inside a script
+RUNNING_IDS = re.compile(r"""running with (cell|session) ID (\w+)|"(session)_id"\s*:\s*"?(\w+)""")
+NAMED_IDS = re.compile(r"""\b(session|cell)_id['"]?\s*:\s*['"]?(\w+)""")
 
 
 # "… in background with ID: <id>. Output is being written to: <path>.output. You will be notified …";
@@ -3374,12 +3387,14 @@ def read_transcript(path: Path, harness: str) -> dict:
     waits: set[str] = set()  # tool calls that ran `atlas.py wait`: their output is what the user wrote in the chat
     wait_files: set[str] = set()  # where a background wait writes its output (Claude Code, listening mode A)
     wait_tasks: set[str] = set()
+    wait_running: set[tuple[str, str]] = set()  # Codex: ("cell" | "session", id) of a wait still running
+    checkpoints: set[str] = set()  # `close --checkpoint` calls: their own result is no work after the checkpoint
     if harness == "codex":
         for obj in _jsonl_lines(path, ('"type":"compacted"', '"type":"response_item"')):
             p, at = obj.get("payload") or {}, _when(obj.get("timestamp"))
             if not isinstance(p, dict):
                 continue
-            if at and obj.get("type") == "response_item":
+            if at and obj.get("type") == "response_item" and p.get("call_id") not in checkpoints:
                 activity.append(at)
             if obj.get("type") == "compacted" and isinstance(p.get("message"), str) and p["message"].strip():
                 entries.append((at, "summary", p["message"]))
@@ -3394,9 +3409,16 @@ def read_transcript(path: Path, harness: str) -> dict:
             elif str(p.get("type", "")).endswith("_call"):
                 detail = p.get("input") or p.get("arguments")
                 entries.append((at, "tool", _tool_line(p.get("name"), detail)))
-                if ATLAS_WAIT.search(str(detail or "")) and p.get("call_id"):
+                follows = any((kind, value) in wait_running for kind, value in NAMED_IDS.findall(str(detail or "")))
+                if p.get("call_id") and (ATLAS_WAIT.search(str(detail or "")) or follows):
                     waits.add(str(p["call_id"]))
+                if p.get("call_id") and ATLAS_CHECKPOINT.search(str(detail or "")):
+                    checkpoints.add(str(p["call_id"]))
             elif str(p.get("type", "")).endswith("_call_output") and p.get("call_id") in waits:
+                raw = p.get("output")
+                raw = "\n".join(b.get("text", "") for b in raw if isinstance(b, dict)) if isinstance(raw, list) else str(raw)
+                for cell_or_session, value, session, session_value in RUNNING_IDS.findall(raw):
+                    wait_running.add((cell_or_session or session, value or session_value))
                 entries.extend((at, "user", m) for m in _chat_messages(p.get("output")))
     else:
         for obj in _jsonl_lines(path, ('"type":"user"', '"type":"assistant"', '"type":"ai-title"')):
@@ -3406,7 +3428,9 @@ def read_transcript(path: Path, harness: str) -> dict:
                 title = str(obj["aiTitle"])
                 continue
             at, content = _when(obj.get("timestamp")), (obj.get("message") or {}).get("content")
-            if at:
+            results = [b for b in content if isinstance(b, dict) and b.get("type") == "tool_result"] \
+                if isinstance(content, list) else []
+            if at and not (results and all(b.get("tool_use_id") in checkpoints for b in results)):
                 activity.append(at)
             text = _block_text(content, {"text"})
             if obj.get("type") == "assistant":
@@ -3423,6 +3447,8 @@ def read_transcript(path: Path, harness: str) -> dict:
                                             or any(f in command for f in wait_files)
                                             or str(given.get("task_id") or given.get("bash_id") or "") in wait_tasks):
                             waits.add(str(b["id"]))
+                        if b.get("id") and ATLAS_CHECKPOINT.search(command):
+                            checkpoints.add(str(b["id"]))
             elif obj.get("type") == "user" and obj.get("isCompactSummary"):
                 if text.strip():
                     entries.append((at, "summary", text))
@@ -3472,7 +3498,7 @@ def open_sessions(current: str | None = None, now: dt.datetime | None = None) ->
     now = now or dt.datetime.now(dt.timezone.utc)
     out = []
     for sid, entry in load_sessions().items():
-        if not isinstance(entry, dict) or sid == current or entry.get("vault") != str(VAULT):
+        if not isinstance(entry, dict) or sid == current or str(VAULT) not in session_vaults(entry):
             continue
         path = transcript_path(entry.get("harness", ""), sid)
         if path is None:
@@ -3584,7 +3610,9 @@ def cmd_close(args) -> None:
         if not entry.get("harness"):  # a session no agent command noted: find its transcript
             entry["harness"] = next((h for h in SESSION_ENV if transcript_path(h, sid)),
                                     found[0] if found else "claude-code")
-        entry.setdefault("vault", str(VAULT))
+        if str(VAULT) not in session_vaults(entry):
+            entry["vaults"] = [*session_vaults(entry), str(VAULT)]
+            entry.pop("vault", None)
         entry.setdefault("first_seen", now_iso())
         key = "checkpoint_at" if args.checkpoint else "closed_at"
         if not _when(entry.get(key)) or _when(entry[key]) < until:
@@ -3626,7 +3654,10 @@ def cmd_sessions(args) -> None:
         with sessions_locked():
             sessions = load_sessions()
             entry = sessions.get(args.id) or {}
-            entry.update(harness=harness, vault=entry.get("vault") or str(VAULT),
+            if str(VAULT) not in session_vaults(entry):
+                entry["vaults"] = [*session_vaults(entry), str(VAULT)]
+                entry.pop("vault", None)
+            entry.update(harness=harness,
                          skipped={"reason": args.reason, "on": dt.date.today().isoformat(), "through": _iso_utc(through)})
             sessions[args.id] = entry
             save_sessions(sessions)
@@ -3649,7 +3680,7 @@ def cmd_hook(args) -> None:
     sid = str(payload.get("session_id") or "")
     parts = []
     entry = load_sessions().get(sid) if sid else None
-    if payload.get("source") == "compact" and isinstance(entry, dict) and entry.get("vault") == str(VAULT):
+    if payload.get("source") == "compact" and isinstance(entry, dict) and str(VAULT) in session_vaults(entry):
         agent = entry.get("agent") or "<id>"
         parts.append("Atlas: this session was just compacted. Before you continue, run the /close steps for what the "
                      "compaction summary covers (thread log lines, decisions, lessons, commit; skill atlas-project), "
