@@ -437,7 +437,7 @@ def test_codex_output_blocks_with_json_results_are_unwrapped(engine, vault, home
 
 
 @pytest.mark.parametrize("out_file", ["/tmp/claude-1000/tasks/bwait1.output",
-                                      "C:/Users/Ada Lovelace/AppData/Local/Temp/claude/tasks/bwait1.output"])
+                                      "D:/Shared Work/temp/claude/tasks/bwait1.output"])
 def test_a_background_wait_is_followed_to_where_its_output_is_read(engine, vault, home, out_file):
     launch = {"type": "assistant", "timestamp": stamp(DAY + dt.timedelta(minutes=40)), "message": {"content": [
         {"type": "tool_use", "id": "w1", "name": "Bash",
