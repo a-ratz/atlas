@@ -1,6 +1,6 @@
 ---
 name: atlas-project
-description: Work on a project that lives in the vault - load its memory, group rules and checkout with `atlas.py boot`, keep its threads, decisions and lessons current, and close the session with a handoff. Use when the user says "/project <name>", "let's work on <project>", "new project", "/close", "close the session", or when you notice something during project work that is worth remembering.
+description: Work on a project that lives in the vault - load its memory, group rules and checkout with `atlas.py boot`, keep its threads, decisions and lessons current, close the session with a handoff, and catch up sessions that ended without /close. Use when the user says "/project <name>", "let's work on <project>", "new project", "/close", "close the session", when boot, `next` or a start hook lists sessions that ended without /close, after a compaction asks for a checkpoint, or when you notice something during project work that is worth remembering.
 ---
 
 # Projects
@@ -175,3 +175,37 @@ the records that survived it; close or supersede the rest.
 
 6. In Atlas, say what changed and what comes next. Put the threads you worked
    on in an `atlas:notes` block.
+7. Mark the session closed, so the next agent does not catch it up again:
+
+   ```bash
+   uv run --no-project engine/atlas.py close --agent <id>
+   ```
+
+## Catch up: sessions that ended without `/close`
+
+Sessions often end without `/close`: the window stays open for days, or the
+user closes it. Atlas notes every Claude Code or Codex session that runs an
+agent command here, and `boot`, `next` and the start hook list those that
+ended without `/close`, or where the user wrote more after it. For each one,
+before new work:
+
+1. Read it: `uv run --no-project engine/atlas.py sessions digest <id>`. It shows
+   the user's and the agent's messages and the compaction summaries, only what
+   came after the last close.
+2. Run the `/close` steps 1 to 5 for what it shows: thread log lines saying what
+   that session did (dated by the session, not today), decisions, lessons,
+   `check`, commit.
+3. Run the `close` command the digest prints. Its `--covered-until` keeps the
+   mark at what you read, even if that session goes on in another window.
+4. Tell the user in one line per session what you caught up.
+
+A session that holds nothing worth keeping (a quick question):
+`uv run --no-project engine/atlas.py sessions skip <id> --reason "…"`. If the
+user writes in it again later, it comes back.
+
+## Checkpoint: right after a compaction
+
+When the start hook says the session was just compacted, run the `/close`
+steps 1 to 5 for what the compaction summary covers, then the `close … --checkpoint`
+command the hook prints. A checkpoint is not a close: once work goes on, the
+session counts as open again until `/close`.

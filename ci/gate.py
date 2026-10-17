@@ -261,7 +261,23 @@ def check_installer(args) -> None:
             fail("restore did not put the factory copy back")
         if not note.exists():
             fail("restore touched the vault")
-    ok("install → upgrade keeps the user's files → restore brings the factory copy back")
+        settings = user / ".claude" / "settings.json"  # the session hook (#65): in, once, and out again
+        settings.parent.mkdir(parents=True, exist_ok=True)
+        mine = {"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "echo mine"}]}]}}
+        settings.write_text(json.dumps(mine), encoding="utf-8")
+        run("hooks", "install", "--harness", "claude-code")
+        run("hooks", "install", "--harness", "claude-code")
+        groups = json.loads(settings.read_text(encoding="utf-8"))["hooks"]["SessionStart"]
+        if len(groups) != 2:
+            fail(f"hooks install twice left {len(groups)} SessionStart groups, expected the user's and Atlas's")
+        hook = subprocess.run(groups[1]["hooks"][0]["command"], shell=True, input='{"session_id": "x", "source": "startup"}',
+                              capture_output=True, text=True, encoding="utf-8", errors="replace", env=env)
+        if hook.returncode:
+            fail(f"the installed hook command failed:\n{hook.stdout}{hook.stderr}")
+        run("hooks", "remove", "--harness", "claude-code")
+        if json.loads(settings.read_text(encoding="utf-8")) != mine:
+            fail("hooks remove did not leave the user's settings as they were")
+    ok("install → upgrade keeps the user's files → restore brings the factory copy back → the session hook goes in and out")
 
 
 def check_docs(args) -> None:
