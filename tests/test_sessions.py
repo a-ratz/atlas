@@ -408,3 +408,61 @@ def test_a_group_shared_with_another_hook_keeps_that_hook(installer, home):
 
     groups = json.loads(settings.read_text(encoding="utf-8"))["hooks"]["SessionStart"]
     assert groups == [{"hooks": [{"type": "command", "command": "bash mine.sh"}]}]
+
+
+# --- review round 2 on #66 -----------------------------------------------------------------------
+
+def test_codex_output_blocks_with_json_results_are_unwrapped(engine, vault, home):
+    sid = "01a12f70-e8f8-7e80-b793-ae386e5b3177"
+    path = home / ".codex" / "sessions" / "2026" / "10" / "16" / f"rollout-2026-10-16T11-00-00-{sid}.jsonl"
+    path.parent.mkdir(parents=True)
+    result = json.dumps({"chunk_id": "f9", "exit_code": 0, "output": "USER [via command]: /distill all\nand the rest\n"})
+    lines = [
+        {"timestamp": stamp(DAY), "type": "session_meta", "payload": {"id": sid, "originator": "codex-tui"}},
+        {"timestamp": stamp(DAY), "type": "response_item", "payload": {
+            "type": "custom_tool_call", "name": "exec", "call_id": "c1",
+            "input": 'text(await tools.exec_command({cmd:"uv run --no-project engine/atlas.py wait --agent codex"}))'}},
+        {"timestamp": stamp(DAY + dt.timedelta(minutes=1)), "type": "response_item", "payload": {
+            "type": "custom_tool_call_output", "call_id": "c1", "output": [
+                {"type": "input_text", "text": "Script completed\nWall time 0.1 seconds\nOutput:\n"},
+                {"type": "input_text", "text": result}]}},
+    ]
+    path.write_text("".join(json.dumps(o, separators=(",", ":")) + "\n" for o in lines), encoding="utf-8")
+    os.utime(path, (DAY.timestamp() + 60, DAY.timestamp() + 60))
+    session(engine, sid, home=home, harness="codex")
+
+    items = engine.open_sessions()
+
+    assert [(k, t) for _, k, t in items[0]["entries"] if k == "user"] == [("user", "USER [via command]: /distill all\nand the rest")]
+
+
+def test_a_background_wait_is_followed_to_where_its_output_is_read(engine, vault, home):
+    out_file = "/tmp/claude-1000/tasks/bwait1.output"
+    launch = {"type": "assistant", "timestamp": stamp(DAY + dt.timedelta(minutes=40)), "message": {"content": [
+        {"type": "tool_use", "id": "w1", "name": "Bash",
+         "input": {"command": "uv run --no-project engine/atlas.py wait --agent claude", "run_in_background": True}}]}}
+    started = {"type": "user", "timestamp": stamp(DAY + dt.timedelta(minutes=40)), "message": {"content": [
+        {"type": "tool_result", "tool_use_id": "w1",
+         "content": f"Command running in background with ID: bwait1. Output is being written to: {out_file}"}]}}
+    read = {"type": "assistant", "timestamp": stamp(DAY + dt.timedelta(minutes=50)), "message": {"content": [
+        {"type": "tool_use", "id": "r1", "name": "Read", "input": {"file_path": out_file}}]}}
+    heard = {"type": "user", "timestamp": stamp(DAY + dt.timedelta(minutes=50)), "message": {"content": [
+        {"type": "tool_result", "tool_use_id": "r1", "content": "     1\tUSER [viewing: a.md]: please log it\n     2\tand cite the paper"}]}}
+    session(engine, "sess-backgrnd01", *basic(DAY), launch, started, read, heard, home=home,
+            closed_at=stamp(DAY + dt.timedelta(minutes=5)))
+
+    items = engine.open_sessions()
+
+    assert [s["id"] for s in items] == ["sess-backgrnd01"]
+    assert ("user", "USER [viewing: a.md]: please log it\nand cite the paper") in [(k, t) for _, k, t in items[0]["entries"]]
+
+
+def test_messages_keep_their_continuation_lines(engine):
+    out = ("USER [via move]: Challenge this passage\n> the quoted passage\nSource: a paper\n"
+           "  CABINET Jan Born (cabinet/people/jan-born.md): researcher | state\n"
+           "USER: next one\n")
+
+    assert engine._chat_messages(out) == [
+        "USER [via move]: Challenge this passage\n> the quoted passage\nSource: a paper\n"
+        "  CABINET Jan Born (cabinet/people/jan-born.md): researcher | state",
+        "USER: next one"]

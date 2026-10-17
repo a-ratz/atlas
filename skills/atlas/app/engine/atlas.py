@@ -3316,16 +3316,52 @@ def _tool_line(name, detail) -> str:
 ATLAS_WAIT = re.compile(r"atlas\.py\b[^\n]*\swait\b")
 
 
+BACKGROUND_OUTPUT = re.compile(r"background with ID: (\S+?)\.? Output is being written to: (\S+)")
+LINE_PREFIX = re.compile(r"^(?:\s*\d+\t)?(?:<[a-z_]+>)?")  # Read's line numbers, a wrapping tag
+
+
+def _output_text(output) -> str:
+    """A tool result as plain text: content blocks joined, and Codex's JSON results unwrapped to their output."""
+    if isinstance(output, list):
+        output = "\n".join(b.get("text", "") if isinstance(b, dict) else str(b) for b in output)
+    text = output if isinstance(output, str) else json.dumps(output) if output is not None else ""
+    parts = []
+    for chunk in text.split("\n"):
+        if chunk.lstrip().startswith("{"):
+            try:
+                found = []
+                stack = [json.loads(chunk)]
+                while stack:  # the "output" strings anywhere in it ({"output": …}, {"result": {"output": …}})
+                    node = stack.pop()
+                    if isinstance(node, dict):
+                        found += [v for k, v in node.items() if k == "output" and isinstance(v, str)]
+                        stack += [v for k, v in node.items() if isinstance(v, (dict, list))]
+                    elif isinstance(node, list):
+                        stack += node
+                if found:
+                    parts.extend(found)
+                    continue
+            except ValueError:
+                pass
+        parts.append(chunk)
+    return "\n".join(parts)
+
+
 def _chat_messages(output) -> list[str]:
-    """The user's chat messages in the output of `atlas.py wait`: its USER lines (and their CABINET lines)."""
-    text = _block_text(output, {"text"}) if not isinstance(output, str) else output
+    """The user's chat messages in the output of `atlas.py wait`: each USER line with the lines that follow it
+    (a message can span lines) up to the next message or the end of what wait printed."""
     found: list[str] = []
-    for line in (text or "").splitlines():
+    current: list[str] | None = None
+    for raw in _output_text(output).splitlines():
+        line = LINE_PREFIX.sub("", raw, count=1)
         if line.startswith("USER"):
-            found.append(line)
-        elif line.startswith("  CABINET") and found:
-            found[-1] += "\n" + line
-    return found
+            current = [line]
+            found.append(current)
+        elif line.startswith(("(no message from the user", "(another `atlas.py wait")):
+            current = None
+        elif current is not None:
+            current.append(line)
+    return ["\n".join(m).rstrip() for m in found]
 
 
 def read_transcript(path: Path, harness: str) -> dict:
@@ -3335,6 +3371,8 @@ def read_transcript(path: Path, harness: str) -> dict:
     activity: list[dt.datetime] = []
     title = None
     waits: set[str] = set()  # tool calls that ran `atlas.py wait`: their output is what the user wrote in the chat
+    wait_files: set[str] = set()  # where a background wait writes its output (Claude Code, listening mode A)
+    wait_tasks: set[str] = set()
     if harness == "codex":
         for obj in _jsonl_lines(path, ('"type":"compacted"', '"type":"response_item"')):
             p, at = obj.get("payload") or {}, _when(obj.get("timestamp"))
@@ -3358,8 +3396,7 @@ def read_transcript(path: Path, harness: str) -> dict:
                 if ATLAS_WAIT.search(str(detail or "")) and p.get("call_id"):
                     waits.add(str(p["call_id"]))
             elif str(p.get("type", "")).endswith("_call_output") and p.get("call_id") in waits:
-                out = p.get("output")
-                entries.extend((at, "user", m) for m in _chat_messages(out if isinstance(out, str) else json.dumps(out)))
+                entries.extend((at, "user", m) for m in _chat_messages(p.get("output")))
     else:
         for obj in _jsonl_lines(path, ('"type":"user"', '"type":"assistant"', '"type":"ai-title"')):
             if obj.get("isSidechain"):
@@ -3377,8 +3414,13 @@ def read_transcript(path: Path, harness: str) -> dict:
                 for b in content if isinstance(content, list) else []:
                     if isinstance(b, dict) and b.get("type") == "tool_use":
                         entries.append((at, "tool", _tool_line(b.get("name"), b.get("input"))))
-                        command = (b.get("input") or {}).get("command") if isinstance(b.get("input"), dict) else None
-                        if b.get("id") and ATLAS_WAIT.search(str(command or "")):
+                        given = b.get("input") if isinstance(b.get("input"), dict) else {}
+                        command = str(given.get("command") or "")
+                        # a wait in the foreground, or the call that reads a background wait's output later
+                        if b.get("id") and (ATLAS_WAIT.search(command)
+                                            or str(given.get("file_path") or "") in wait_files
+                                            or any(f in command for f in wait_files)
+                                            or str(given.get("task_id") or given.get("bash_id") or "") in wait_tasks):
                             waits.add(str(b["id"]))
             elif obj.get("type") == "user" and obj.get("isCompactSummary"):
                 if text.strip():
@@ -3388,6 +3430,10 @@ def read_transcript(path: Path, harness: str) -> dict:
             if obj.get("type") == "user" and isinstance(content, list):
                 for b in content:
                     if isinstance(b, dict) and b.get("type") == "tool_result" and b.get("tool_use_id") in waits:
+                        background = BACKGROUND_OUTPUT.search(_output_text(b.get("content")))
+                        if background:  # Claude Code's background mode: the messages come when its file is read
+                            wait_tasks.add(background.group(1))
+                            wait_files.add(background.group(2))
                         entries.extend((at, "user", m) for m in _chat_messages(b.get("content")))
     times = [*activity, *(e[0] for e in entries if e[0])]
     return {"entries": entries, "activity": activity, "title": title, "started": min(times, default=None),
