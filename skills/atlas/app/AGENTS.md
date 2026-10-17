@@ -190,7 +190,7 @@ The current state in a few sentences. Rewrite it when something changes.
 | `/sketch <idea> \| ideas for <goal>` | atlas-sketch: capture the idea, or generate ideas from the vault |
 | `/spec [sketch]` | atlas-spec, on the named sketch or the one the user is viewing |
 | `/project <name>` | atlas-project: start |
-| `/close` | atlas-project: close (also outside a project: commit what you wrote, say what is next) |
+| `/close` | atlas-project: close (also outside a project: commit what you wrote, say what is next), ending with `engine/atlas.py close` |
 | `/expand-cards [name]` | atlas-cabinet, section 4: complete the minimal cards (or the one named) within the budget |
 | `/remember <fact>` | add it to `vault/you/profile.md` as `- <fact> (told by the user, YYYY-MM-DD)`; the user's own words beat anything an agent inferred |
 | `/check` | run `engine/atlas.py check`, fix what it reports, commit |
@@ -198,6 +198,16 @@ The current state in a few sentences. Rewrite it when something changes.
 | `/tour [since]` | atlas-operator: Tours (a guided walk through what changed since that date) |
 
 A command you do not know: say so, and show what `/` lists.
+
+## Sessions that ended without /close
+
+Claude Code and Codex keep a transcript of every session. Atlas notes each
+session that runs an agent command here (`boot`, `wait`, `say`, `commit`) in
+`~/.atlas/sessions.json`, outside the vault, and `close` marks how far `/close`
+got. `boot`, `next` and the optional start hook (`atlas_install.py hooks install`)
+list sessions that ended without `/close`. Catch them up before new work: the
+atlas-project skill, section "Catch up". After a compaction the hook asks for a
+checkpoint (same skill).
 
 ## Commands
 
@@ -212,6 +222,8 @@ uv run --no-project engine/atlas.py next      # counts + suggested next steps (J
 uv run --no-project engine/atlas.py check     # notes with broken links, bad frontmatter or no connection (exit 1)
 uv run --no-project engine/atlas.py boot [<project>] --agent <id> [--checkout DIR]   # your context for a project
 uv run --no-project engine/atlas.py commit --agent <id> -m "msg" <paths>   # stamp created_by/updated_by, commit only these
+uv run --no-project engine/atlas.py close --agent <id> [--checkpoint]   # /close covered this session (last /close step)
+uv run --no-project engine/atlas.py sessions [digest <id> | skip <id> --reason "…"]   # sessions that ended without /close
 uv run --no-project engine/atlas.py machine   # this machine's key in project paths
 uv run --no-project engine/atlas.py map-path <project> <dir>   # record (and verify) a checkout on this machine
 uv run --no-project engine/atlas.py status

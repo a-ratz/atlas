@@ -19,6 +19,7 @@ fails the run. A few checks pin behavior that reviews found broken once.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import urllib.parse
@@ -28,6 +29,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from gate import Server, atlas, demo_vault  # noqa: E402
 
 from playwright.sync_api import sync_playwright  # noqa: E402
+
+# the engines this starts must not note the agent session running it in ~/.atlas/sessions.json (#65)
+for _name in ("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID", "CODEX_THREAD_ID", "CODEX_SESSION_ID"):
+    os.environ.pop(_name, None)
 
 failures: list[str] = []
 

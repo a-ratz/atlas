@@ -21,6 +21,9 @@ Run from the repo root (or anywhere; paths resolve from this file):
     uv run --no-project engine/atlas.py check              # notes that need a fix (exit 1 if any)
     uv run --no-project engine/atlas.py boot <project> --agent <id>   # an agent's context for a project
     uv run --no-project engine/atlas.py commit --agent <id> -m "msg" <paths>   # stamp authorship, commit
+    uv run --no-project engine/atlas.py close --agent <id> [--checkpoint]   # /close covered this session
+    uv run --no-project engine/atlas.py sessions [digest <id> | skip <id> --reason "…"]   # sessions without /close
+    uv run --no-project engine/atlas.py hook session-start   # SessionStart hook (payload on stdin)
     uv run --no-project engine/atlas.py tour --since 2026-10-04 --agent <id>   # scaffold a tour of what changed (tours/)
     uv run --no-project engine/atlas.py demo [--remove]    # load the demo notes, or take them out again
     uv run --no-project engine/atlas.py machine            # this machine's id (keys of project paths)
@@ -1998,6 +2001,7 @@ def cmd_wait(args) -> None:
     side by side: each gets the messages addressed to it and those addressed to nobody."""
     ensure_state()
     agent = agent_id(args.agent)
+    note_session(agent)
     lock = open(STATE / (f"wait-{agent}.lock" if agent else "wait.lock"), "w", encoding="utf-8")
     try:
         try:
@@ -2086,6 +2090,7 @@ def note_path(path: str) -> str:
 
 
 def cmd_say(args) -> None:
+    note_session(agent_id(args.agent))
     text = args.text if args.text != "-" else sys.stdin.read()
     record = {"ts": now_iso(), "role": "agent", "text": text}
     if args.progress:  # a short status line while you work; the user still sees "agent is working"
@@ -2104,6 +2109,7 @@ def cmd_say(args) -> None:
 def cmd_light(args) -> None:
     """Light up notes in the constellation: the agent names them, Atlas dims the rest. The highlight is a chat
     message with a `light` field, so nothing lands in the vault and no temporary map has to be deleted later."""
+    note_session(agent_id(args.agent))  # an agent command like say: the session works in this vault (#65)
     names = []
     for arg in args.notes:
         names += [s.strip() for s in sys.stdin.read().splitlines()] if arg == "-" else [arg.strip()]
@@ -2215,6 +2221,11 @@ def suggestions(index: Index) -> list[str]:
     out = []
     if notes:
         out.append(f"{len(notes)} new note(s) from the user in you/notes/: read and handle them, then set status: done")
+    current = current_session()
+    ended = open_sessions(current[1] if current else None)
+    if ended:
+        out.append(f"{len(ended)} earlier session(s) ended without /close: offer to catch them up "
+                   "(`engine/atlas.py sessions`, skill atlas-project)")
     threads = sorted((e for e in ents if e.type == "thread" and str(e.status) == "open"),
                      key=lambda e: (index.touched.get(e.id) or "", e.mtime), reverse=True)
     for t in threads[:3]:  # project work first: what the user is most likely in the middle of
@@ -2518,6 +2529,7 @@ def cmd_boot(args) -> None:
         if attempt == 2:
             text += "\n\n⚠ a file changed while boot was reading it; boot again before relying on this."
     agent = agent_id(args.agent)
+    note_session(agent)
     if agent:  # Atlas shows which project an agent works on (disposable state, not vault content)
         ensure_state()
         PRESENCE.mkdir(parents=True, exist_ok=True)
@@ -2525,6 +2537,11 @@ def cmd_boot(args) -> None:
                                                             "group": project.group if project else None, "booted": now_iso()}),
                                                 encoding="utf-8")
     print(text)
+    current = current_session()
+    ended = open_sessions(current[1] if current else None)
+    if ended:  # outside the budgeted packet: boot_packet stays deterministic
+        print(f"\n## Sessions that ended without /close ({len(ended)})\n")
+        print("\n".join(session_lines(ended)))
 
 
 def cmd_machine(args) -> None:
@@ -2720,6 +2737,7 @@ def cmd_commit(args) -> None:
     """Commit exactly the paths an agent names, stamping who wrote them. Declared attribution, not authentication."""
     index = Index()
     agent = args.agent.strip().lower()
+    note_session(agent_id(args.agent))
     paths = [Path(p) if Path(p).is_absolute() else (Path.cwd() / p) for p in args.paths]
     paths = [p.resolve() for p in paths]  # follows links before "..", and resolves a moved file through its folder (/var → /private/var)
     own_file = VAULT / "agents" / f"{agent}.md"
@@ -3171,6 +3189,550 @@ def cmd_tour(args) -> None:
         print(f"  M {index.entities[p].type:<8} ({ch['touches'][p]} commits) {named(index.entities[p])}")
 
 
+# ---------------------------------------------------------------------------
+# Sessions: agent sessions that worked in this vault, and whether /close covered them (#65)
+# ---------------------------------------------------------------------------
+# Claude Code and Codex keep a transcript of every session. The agent commands note the session
+# they run in (~/.atlas/sessions.json, outside every vault); `close` records how far /close got.
+# A session is open when it never closed, when the user wrote more after its close, or when
+# anything happened after a checkpoint (an interim close after a compaction).
+
+SESSIONS: Path | None = None  # tests point this elsewhere; None: ~/.atlas/sessions.json
+SESSION_LIVE = dt.timedelta(minutes=15)  # a transcript touched this recently: the session probably still runs
+# Codex first: Codex started from a Claude Code shell (reviews, a second opinion) inherits Claude's
+# variables next to its own, while Claude Code is rarely started from inside Codex.
+SESSION_ENV = {"codex": ("CODEX_THREAD_ID", "CODEX_SESSION_ID"),
+               "claude-code": ("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID")}
+SESSION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{7,63}$")
+# wrappers the harnesses write into user turns; pasted text, images and typed shell input stay the user's
+INJECTED = re.compile(
+    r"<(task-notification|command-name|command-message|command-args|local-command-stdout|local-command-stderr|"
+    r"local-command-caveat|bash-stdout|bash-stderr|system-reminder|artifact-view-context|user-prompt-submit-hook|"
+    r"teammate-message|environment_context|user_instructions|user_action|turn_aborted|INSTRUCTIONS)[\s>]")
+FOREVER = dt.datetime.max.replace(tzinfo=dt.timezone.utc)
+
+
+def sessions_file() -> Path:
+    return SESSIONS or Path.home() / ".atlas" / "sessions.json"
+
+
+def current_session() -> tuple[str, str] | None:
+    """(harness, session id) of the agent session this command runs in, from the harness's variables."""
+    for harness, names in SESSION_ENV.items():
+        for name in names:
+            if os.environ.get(name):
+                return harness, os.environ[name]
+    return None
+
+
+def load_sessions() -> dict:
+    try:
+        data = json.loads(sessions_file().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    found = data.get("sessions") if isinstance(data, dict) else None
+    return found if isinstance(found, dict) else {}
+
+
+class sessions_locked:
+    """Hold ~/.atlas/sessions.json for one read-modify-write: agents side by side must not drop each
+    other's notes. `with sessions_locked(): …` waits up to ten seconds, then raises TimeoutError."""
+
+    def __enter__(self):
+        path = sessions_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self.handle = open(path.with_name(path.name + ".lock"), "w", encoding="utf-8")
+        deadline = time.time() + 10
+        while True:
+            try:
+                try:
+                    import fcntl
+                    fcntl.flock(self.handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except ImportError:  # Windows
+                    import msvcrt
+                    msvcrt.locking(self.handle.fileno(), msvcrt.LK_NBLCK, 1)
+                return self
+            except OSError:
+                if time.time() > deadline:
+                    self.handle.close()
+                    raise TimeoutError(f"another Atlas command holds {path}")
+                time.sleep(0.1)
+
+    def __exit__(self, *exc) -> None:
+        self.handle.close()
+
+
+def save_sessions(sessions: dict) -> None:
+    path = sessions_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps({"sessions": sessions}, indent=1, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def note_session(agent: str | None) -> None:
+    """Remember that the session this command runs in works in this vault. Writes only what is new."""
+    found = current_session()
+    if not found:
+        return
+    harness, sid = found
+    entry = load_sessions().get(sid) or {}
+    if str(VAULT) in session_vaults(entry) and (entry.get("agent") or not agent):
+        return
+    try:
+        with sessions_locked():
+            sessions = load_sessions()  # again, under the lock
+            entry = sessions.get(sid) or {}
+            # every vault the session worked in: a test vault it touched must not hide it from the real one
+            vaults = [*session_vaults(entry), *([] if str(VAULT) in session_vaults(entry) else [str(VAULT)])]
+            sessions[sid] = {**{k: v for k, v in entry.items() if k != "vault"}, "harness": harness, "vaults": vaults,
+                             "first_seen": entry.get("first_seen") or now_iso(), **({"agent": agent} if agent else {})}
+            save_sessions(sessions)
+    except (OSError, TimeoutError):
+        pass  # bookkeeping: never fail an agent's command over it
+
+
+def session_vaults(entry: dict) -> list[str]:
+    vaults = entry.get("vaults") if isinstance(entry.get("vaults"), list) else []
+    return [str(v) for v in vaults] + ([str(entry["vault"])] if entry.get("vault") and entry["vault"] not in vaults else [])
+
+
+def _when(value) -> dt.datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        moment = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return moment if moment.tzinfo else moment.replace(tzinfo=dt.timezone.utc)
+
+
+def _iso_utc(moment: dt.datetime) -> str:
+    return moment.astimezone(dt.timezone.utc).isoformat(timespec="milliseconds")
+
+
+def transcript_path(harness: str, sid: str) -> Path | None:
+    if not SESSION_ID.match(sid):
+        return None
+    home = Path.home()
+    if harness == "codex":
+        hits = sorted((home / ".codex" / "sessions").glob(f"*/*/*/rollout-*{sid}.jsonl"))
+    else:
+        hits = sorted((home / ".claude" / "projects").glob(f"*/{sid}.jsonl"))
+    return hits[0] if hits else None
+
+
+def _jsonl_lines(path: Path, wanted: tuple[str, ...]):
+    """JSON objects of the lines holding one of `wanted` (both harnesses write compact JSON); transcripts run
+    to hundreds of MB of request blobs, and the substring test skips those lines without decoding them."""
+    with path.open(encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            if any(w in line for w in wanted):
+                try:
+                    obj = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(obj, dict):
+                    yield obj
+
+
+def _block_text(content, kinds: set[str]) -> str:
+    if isinstance(content, str):
+        return content
+    return "\n".join(b["text"] for b in content or [] if isinstance(b, dict) and b.get("type") in kinds
+                     and isinstance(b.get("text"), str)) if isinstance(content, list) else ""
+
+
+def _injected(text: str) -> bool:
+    s = text.lstrip()
+    return not s or bool(INJECTED.match(s)) or s.startswith("# AGENTS.md instructions") or s.startswith("[Request interrupted")
+
+
+def _tool_line(name, detail) -> str:
+    """One line about a tool call, for the digest: its name and what it ran or touched."""
+    if isinstance(detail, dict):
+        detail = next((detail[k] for k in ("command", "cmd", "file_path", "path", "pattern", "url", "description")
+                       if isinstance(detail.get(k), str)), json.dumps(detail, ensure_ascii=False))
+    text = " ".join(str(detail or "").split())
+    return f"{name or 'tool'}: {text[:200]}{'…' if len(text) > 200 else ''}"
+
+
+ATLAS_WAIT = re.compile(r"atlas\.py\b[^\n]*\swait\b")
+ATLAS_CHECKPOINT = re.compile(r"atlas\.py\b[^\n]*\sclose\b[^\n]*--checkpoint")
+# Codex: a command still running after its first output goes on in a process session ("session_id" in its
+# result) or a script cell ("running with cell ID 10"); its later output comes back from a call naming that
+# id, `write_stdin({session_id: …})` or `wait {"cell_id": …}`, as a function call or inside a script
+RUNNING_IDS = re.compile(r"""running with (cell|session) ID (\w+)|"(session)_id"\s*:\s*"?(\w+)""")
+NAMED_IDS = re.compile(r"""\b(session|cell)_id['"]?\s*:\s*['"]?(\w+)""")
+
+
+# "… in background with ID: <id>. Output is being written to: <path>.output. You will be notified …";
+# the path may hold spaces and ends before the sentence's full stop
+BACKGROUND_OUTPUT = re.compile(r"background with ID: (\S+?)\.?\s+Output is being written to: (.+?\.output)(?=\.?(?:\s|$))")
+LINE_PREFIX = re.compile(r"^(?:\s*\d+\t)?(?:<[a-z_]+>)?")  # Read's line numbers, a wrapping tag
+
+
+def _envelope_output(text: str) -> str | None:
+    """The command output inside a Codex tool-result envelope ({"exit_code": …, "output": …}, or that inside
+    {"result": …}); None for any other text, JSON a user wrote included."""
+    try:
+        node = json.loads(text)
+    except ValueError:
+        return None
+    if isinstance(node, dict) and isinstance(node.get("result"), dict):
+        node = node["result"]
+    if isinstance(node, dict) and isinstance(node.get("output"), str) and (
+            {"exit_code", "chunk_id", "wall_time_seconds"} & node.keys()):
+        return node["output"]
+    return None
+
+
+def _output_text(output) -> str:
+    """A tool result as plain text: its content blocks joined, each Codex result envelope unwrapped."""
+    if isinstance(output, list):
+        blocks = [b.get("text", "") if isinstance(b, dict) else str(b) for b in output]
+        return "\n".join(_envelope_output(b.strip()) if b.lstrip().startswith("{") and _envelope_output(b.strip())
+                         is not None else b for b in blocks)
+    if isinstance(output, str):
+        return output
+    return json.dumps(output) if output is not None else ""
+
+
+def _chat_messages(output) -> list[str]:
+    """The user's chat messages in the output of `atlas.py wait`: each USER line with the lines that follow it
+    (a message can span lines) up to the next message or the end of what wait printed."""
+    found: list[str] = []
+    current: list[str] | None = None
+    for raw in _output_text(output).splitlines():
+        line = LINE_PREFIX.sub("", raw, count=1)
+        if line.startswith("USER"):
+            current = [line]
+            found.append(current)
+        elif line.startswith(("(no message from the user", "(another `atlas.py wait")):
+            current = None
+        elif current is not None:
+            current.append(line)
+    return ["\n".join(m).rstrip() for m in found]
+
+
+def read_transcript(path: Path, harness: str) -> dict:
+    """The user's and the agent's messages and the compaction summaries of a transcript, in order, and the
+    times of every line (tool calls and results too: work without prose counts after a checkpoint)."""
+    entries: list[tuple[dt.datetime | None, str, str]] = []
+    activity: list[dt.datetime] = []
+    title = None
+    waits: set[str] = set()  # tool calls that ran `atlas.py wait`: their output is what the user wrote in the chat
+    wait_files: set[str] = set()  # where a background wait writes its output (Claude Code, listening mode A)
+    wait_tasks: set[str] = set()
+    wait_running: set[tuple[str, str]] = set()  # Codex: ("cell" | "session", id) of a wait still running
+    checkpoints: set[str] = set()  # `close --checkpoint` calls: their own result is no work after the checkpoint
+    if harness == "codex":
+        for obj in _jsonl_lines(path, ('"type":"compacted"', '"type":"response_item"')):
+            p, at = obj.get("payload") or {}, _when(obj.get("timestamp"))
+            if not isinstance(p, dict):
+                continue
+            if at and obj.get("type") == "response_item" and p.get("call_id") not in checkpoints:
+                activity.append(at)
+            if obj.get("type") == "compacted" and isinstance(p.get("message"), str) and p["message"].strip():
+                entries.append((at, "summary", p["message"]))
+            elif p.get("type") == "message" and p.get("role") == "user":
+                text = _block_text(p.get("content"), {"input_text"})
+                if not _injected(text):
+                    entries.append((at, "user", text))
+            elif p.get("type") == "message" and p.get("role") == "assistant":
+                text = _block_text(p.get("content"), {"output_text"})
+                if text.strip():
+                    entries.append((at, "agent", text))
+            elif str(p.get("type", "")).endswith("_call"):
+                detail = p.get("input") or p.get("arguments")
+                entries.append((at, "tool", _tool_line(p.get("name"), detail)))
+                follows = any((kind, value) in wait_running for kind, value in NAMED_IDS.findall(str(detail or "")))
+                if p.get("call_id") and (ATLAS_WAIT.search(str(detail or "")) or follows):
+                    waits.add(str(p["call_id"]))
+                if p.get("call_id") and ATLAS_CHECKPOINT.search(str(detail or "")):
+                    checkpoints.add(str(p["call_id"]))
+            elif str(p.get("type", "")).endswith("_call_output") and p.get("call_id") in waits:
+                raw = p.get("output")
+                raw = "\n".join(b.get("text", "") for b in raw if isinstance(b, dict)) if isinstance(raw, list) else str(raw)
+                for cell_or_session, value, session, session_value in RUNNING_IDS.findall(raw):
+                    wait_running.add((cell_or_session or session, value or session_value))
+                entries.extend((at, "user", m) for m in _chat_messages(p.get("output")))
+    else:
+        for obj in _jsonl_lines(path, ('"type":"user"', '"type":"assistant"', '"type":"ai-title"')):
+            if obj.get("isSidechain"):
+                continue
+            if obj.get("type") == "ai-title" and obj.get("aiTitle"):
+                title = str(obj["aiTitle"])
+                continue
+            at, content = _when(obj.get("timestamp")), (obj.get("message") or {}).get("content")
+            results = [b for b in content if isinstance(b, dict) and b.get("type") == "tool_result"] \
+                if isinstance(content, list) else []
+            if at and not (results and all(b.get("tool_use_id") in checkpoints for b in results)):
+                activity.append(at)
+            text = _block_text(content, {"text"})
+            if obj.get("type") == "assistant":
+                if text.strip():
+                    entries.append((at, "agent", text))
+                for b in content if isinstance(content, list) else []:
+                    if isinstance(b, dict) and b.get("type") == "tool_use":
+                        entries.append((at, "tool", _tool_line(b.get("name"), b.get("input"))))
+                        given = b.get("input") if isinstance(b.get("input"), dict) else {}
+                        command = str(given.get("command") or "")
+                        # a wait in the foreground, or the call that reads a background wait's output later
+                        if b.get("id") and (ATLAS_WAIT.search(command)
+                                            or str(given.get("file_path") or "") in wait_files
+                                            or any(f in command for f in wait_files)
+                                            or str(given.get("task_id") or given.get("bash_id") or "") in wait_tasks):
+                            waits.add(str(b["id"]))
+                        if b.get("id") and ATLAS_CHECKPOINT.search(command):
+                            checkpoints.add(str(b["id"]))
+            elif obj.get("type") == "user" and obj.get("isCompactSummary"):
+                if text.strip():
+                    entries.append((at, "summary", text))
+            elif obj.get("type") == "user" and not obj.get("isMeta") and not _injected(text):
+                entries.append((at, "user", text))
+            if obj.get("type") == "user" and isinstance(content, list):
+                for b in content:
+                    if isinstance(b, dict) and b.get("type") == "tool_result" and b.get("tool_use_id") in waits:
+                        background = BACKGROUND_OUTPUT.search(_output_text(b.get("content")))
+                        if background:  # Claude Code's background mode: the messages come when its file is read
+                            wait_tasks.add(background.group(1))
+                            wait_files.add(background.group(2))
+                        entries.extend((at, "user", m) for m in _chat_messages(b.get("content")))
+    times = [*activity, *(e[0] for e in entries if e[0])]
+    return {"entries": entries, "activity": activity, "title": title, "started": min(times, default=None),
+            "last": max(times, default=None), "users": sum(1 for e in entries if e[1] == "user")}
+
+
+def session_cover(entry: dict) -> tuple[dt.datetime, bool] | None:
+    """How far the newest close, checkpoint or skip reaches: (time, is a checkpoint). A summary beats a tie."""
+    marks = []
+    if _when(entry.get("closed_at")):
+        marks.append((_when(entry["closed_at"]), False))
+    if _when(entry.get("checkpoint_at")):
+        marks.append((_when(entry["checkpoint_at"]), True))
+    if entry.get("skipped"):
+        marks.append((_when(entry["skipped"].get("through")) or FOREVER, False))
+    return max(marks, key=lambda m: (m[0], not m[1]), default=None)
+
+
+def needs_catch_up(scan: dict, cover: tuple[dt.datetime, bool] | None) -> bool:
+    """After a close only the user's words count (the agent finishing its close adds nothing to catch
+    up); after a checkpoint everything does, because the work went on."""
+    if cover is None:
+        return True
+    at, checkpoint = cover
+    if at == FOREVER:
+        return False
+    if checkpoint:
+        return any(when > at for when in scan.get("activity") or [w for w, _, _ in scan["entries"] if w])
+    return any(when and when > at and kind == "user" for when, kind, _ in scan["entries"])
+
+
+def open_sessions(current: str | None = None, now: dt.datetime | None = None) -> list[dict]:
+    """Earlier sessions in this vault that ended without /close, newest first. Leaves out the current
+    session, sessions still running, and sessions in which the user wrote nothing."""
+    now = now or dt.datetime.now(dt.timezone.utc)
+    out = []
+    for sid, entry in load_sessions().items():
+        if not isinstance(entry, dict) or sid == current or str(VAULT) not in session_vaults(entry):
+            continue
+        path = transcript_path(entry.get("harness", ""), sid)
+        if path is None:
+            continue
+        touched = dt.datetime.fromtimestamp(path.stat().st_mtime, tz=dt.timezone.utc)
+        cover = session_cover(entry)
+        if now - touched < SESSION_LIVE or (cover and not cover[1] and touched <= cover[0]):
+            continue  # still running, or closed after its last write: no need to read it
+        scan = read_transcript(path, entry.get("harness", ""))
+        if not scan["users"] or not scan["last"] or now - scan["last"] < SESSION_LIVE:
+            continue
+        if needs_catch_up(scan, cover):
+            out.append({"id": sid, "harness": entry.get("harness"), "agent": entry.get("agent"), "path": path,
+                        "cover": cover, **scan})
+    return sorted(out, key=lambda s: s["last"], reverse=True)
+
+
+def _local_time(moment: dt.datetime | None, fmt: str = "%Y-%m-%d %H:%M") -> str:
+    return moment.astimezone().strftime(fmt) if moment else "?"
+
+
+def _session_label(s: dict) -> str:
+    if s.get("title"):
+        return s["title"]
+    first = " ".join(next((t for _, k, t in s["entries"] if k == "user"), "").split())
+    return first[:60] + ("…" if len(first) > 60 else "")
+
+
+def session_lines(items: list[dict], limit: int = 5) -> list[str]:
+    lines = []
+    for s in items[:limit]:
+        start, end = _local_time(s["started"], "%Y-%m-%d"), _local_time(s["last"], "%Y-%m-%d")
+        if s["cover"] is None:
+            state = f"{s['users']} user message(s), never closed"
+        elif s["cover"][1]:
+            state = f"work went on after the checkpoint of {_local_time(s['cover'][0])}"
+        else:
+            later = sum(1 for when, kind, _ in s["entries"] if kind == "user" and when and when > s["cover"][0])
+            state = f"{later} user message(s) after the close of {_local_time(s['cover'][0])}"
+        lines.append(f"- {start if start == end else start + ' → ' + end} · {s['id']} · \"{_session_label(s)}\" · {state}")
+    if len(items) > limit:
+        lines.append(f"- … and {len(items) - limit} more: `engine/atlas.py sessions`")
+    lines.append("Catch up before new work (skill atlas-project, Catch up): `engine/atlas.py sessions digest <id>`, the "
+                 "/close steps for what it shows, then the `close` command the digest prints. Nothing to keep: "
+                 "`engine/atlas.py sessions skip <id> --reason \"…\"`.")
+    return lines
+
+
+DIGEST_CAPS = {"user": 1500, "agent": 600, "tool": 300, "summary": 8000}
+
+
+def session_digest(sid: str, entry: dict, scan: dict, path: Path, max_chars: int, everything: bool) -> str:
+    """A transcript, compactly, for catching it up: only what came after its close unless `everything`. Over
+    budget the oldest tool lines go first, then agent messages, then user messages, then all compaction
+    summaries but the newest, which is cut to fit last."""
+    cover = None if everything else session_cover(entry)
+    since = cover[0] if cover and cover[0] != FOREVER else None
+    blocks = []
+    for when, kind, text in scan["entries"]:
+        if since and when and when <= since:
+            continue
+        text = text.strip()
+        if len(text) > DIGEST_CAPS[kind]:
+            text = text[:DIGEST_CAPS[kind]] + " […]"
+        blocks.append([kind, f"[{_local_time(when)}] {kind.capitalize()}: {text}"])
+    size = lambda: sum(len(b[1]) + 2 for b in blocks)
+    summaries = [b for b in blocks if b[0] == "summary"]
+    newest = summaries[-1] if summaries else None
+    omitted = 0
+    for drop in ("tool", "agent", "user", "summary"):
+        i = 0
+        while size() > max_chars and i < len(blocks):
+            if blocks[i][0] == drop and blocks[i] is not newest:
+                del blocks[i]
+                omitted += 1
+            else:
+                i += 1
+    if size() > max_chars and blocks:
+        keep = max(0, max_chars - (size() - len(blocks[-1][1])) - 8)
+        blocks[-1][1] = blocks[-1][1][:keep] + " […]"
+    agent = entry.get("agent") or "<id>"
+    head = [f"Session {sid} ({entry.get('harness')}), agent {agent}", f"Transcript: {path}",
+            f"Span: {_local_time(scan['started'])} → {_local_time(scan['last'])}"]
+    if scan.get("title"):
+        head.append(f"Title: {scan['title']}")
+    if since:
+        head.append(f"Closed until {_local_time(since)}; this shows what came after.")
+    if omitted:
+        head.append(f"{omitted} older message(s) left out to fit {max_chars} characters (`--max-chars`, `--all`).")
+    cut = f" --covered-until {_iso_utc(scan['last'])}" if scan["last"] else ""
+    head.append(f"When its /close steps are done: `engine/atlas.py close --agent <id> --session {sid}{cut}` (your id)")
+    return "\n".join(head) + "\n\n" + "\n\n".join(b[1] for b in blocks) + "\n"
+
+
+def cmd_close(args) -> None:
+    """Record that /close covered a session: this one, or a caught-up one (`--session`)."""
+    agent = agent_id(args.agent)
+    note_session(agent)
+    found = current_session()
+    sid = args.session or (found[1] if found else None)
+    if not sid:
+        sys.exit("not inside a Claude Code or Codex session: name the session with --session <id>")
+    until = _when(args.covered_until) if args.covered_until is not None else dt.datetime.now(dt.timezone.utc)
+    if until is None:
+        sys.exit(f"--covered-until is not an ISO time: {args.covered_until}")
+    with sessions_locked():
+        sessions = load_sessions()
+        entry = sessions.get(sid) or {}
+        if not entry.get("harness"):  # a session no agent command noted: find its transcript
+            entry["harness"] = next((h for h in SESSION_ENV if transcript_path(h, sid)),
+                                    found[0] if found else "claude-code")
+        if str(VAULT) not in session_vaults(entry):
+            entry["vaults"] = [*session_vaults(entry), str(VAULT)]
+            entry.pop("vault", None)
+        entry.setdefault("first_seen", now_iso())
+        key = "checkpoint_at" if args.checkpoint else "closed_at"
+        if not _when(entry.get(key)) or _when(entry[key]) < until:
+            entry[key] = _iso_utc(until)
+        sessions[sid] = entry
+        save_sessions(sessions)
+    print(f"{'checkpoint' if args.checkpoint else 'closed'}: {sid} until {_local_time(until)}")
+
+
+def cmd_sessions(args) -> None:
+    """List the sessions that ended without /close, print one compactly, or skip one."""
+    current = current_session()
+    if args.action == "list":
+        items = open_sessions(current[1] if current else None)
+        if args.json:
+            print(json.dumps([{"id": s["id"], "harness": s["harness"], "agent": s["agent"], "path": str(s["path"]),
+                               "label": _session_label(s), "last": _iso_utc(s["last"]), "user_messages": s["users"],
+                               "covered_until": _iso_utc(s["cover"][0]) if s["cover"] else None,
+                               "checkpoint": bool(s["cover"] and s["cover"][1])} for s in items], indent=2))
+        elif items:
+            print(f"{len(items)} earlier session(s) in this vault ended without /close:")
+            print("\n".join(session_lines(items, limit=len(items))))
+        else:
+            print("No open sessions.")
+        return
+    if not args.id:
+        sys.exit(f"sessions {args.action} needs a session id")
+    sessions = load_sessions()
+    entry = sessions.get(args.id) or {}
+    harness = entry.get("harness") or next((h for h in SESSION_ENV if transcript_path(h, args.id)), None)
+    path = transcript_path(harness, args.id) if harness else None
+    if args.action == "skip":
+        if not args.reason:
+            sys.exit("sessions skip needs --reason")
+        # the skip reaches as far as the session went; later user messages open it again
+        through = read_transcript(path, harness)["last"] if path else None
+        if through is None:  # a skip without a date would hide the session for good
+            sys.exit(f"cannot read how far session {args.id} went: no transcript found, or it has no times")
+        with sessions_locked():
+            sessions = load_sessions()
+            entry = sessions.get(args.id) or {}
+            if str(VAULT) not in session_vaults(entry):
+                entry["vaults"] = [*session_vaults(entry), str(VAULT)]
+                entry.pop("vault", None)
+            entry.update(harness=harness,
+                         skipped={"reason": args.reason, "on": dt.date.today().isoformat(), "through": _iso_utc(through)})
+            sessions[args.id] = entry
+            save_sessions(sessions)
+        print(f"skipped: {args.id}")
+        return
+    if path is None:
+        sys.exit(f"no transcript found for session {args.id}")
+    print(session_digest(args.id, {**entry, "harness": harness}, read_transcript(path, harness), path,
+                         args.max_chars, args.all), end="")
+
+
+def cmd_hook(args) -> None:
+    """SessionStart hook for Claude Code and Codex: the payload arrives on stdin. Prints hook JSON only
+    when there is something to say: open sessions, or a checkpoint right after a compaction."""
+    try:
+        payload = json.loads(sys.stdin.read() or "{}")
+    except ValueError:
+        payload = {}
+    payload = payload if isinstance(payload, dict) else {}
+    sid = str(payload.get("session_id") or "")
+    parts = []
+    entry = load_sessions().get(sid) if sid else None
+    if payload.get("source") == "compact" and isinstance(entry, dict) and str(VAULT) in session_vaults(entry):
+        agent = entry.get("agent") or "<id>"
+        parts.append("Atlas: this session was just compacted. Before you continue, run the /close steps for what the "
+                     "compaction summary covers (thread log lines, decisions, lessons, commit; skill atlas-project), "
+                     f"then `uv run --no-project \"{APP / 'atlas.py'}\" close --agent {agent} --session {sid} --checkpoint`. "
+                     "A checkpoint "
+                     "is not a close: the session counts as open again once work goes on.")
+    items = open_sessions(sid or None)
+    if items:
+        parts.append(f"Atlas ({VAULT.parent}): {len(items)} earlier session(s) ended without /close. Work from that "
+                     "folder (its AGENTS.md):\n" + "\n".join(session_lines(items)))
+    if parts:
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart",
+                                                 "additionalContext": "\n\n".join(parts)}}, ensure_ascii=False))
+
+
 def cmd_status(args) -> None:
     s = session()
     url = f"http://localhost:{s['port']}" if s.get("port") else None
@@ -3262,6 +3824,20 @@ def main() -> None:
     mp.add_argument("dir")
     e = sub.add_parser("expose", parents=[common])
     e.add_argument("--port", type=int, default=DEFAULT_PORT)
+    cl = sub.add_parser("close", parents=[common], help="record that /close covered this session (or --session <id>)")
+    cl.add_argument("--agent", required=True, help="your id: the file name in agents/ (claude, codex, ...)")
+    cl.add_argument("--session", help="a session caught up from another one (default: the one this runs in)")
+    cl.add_argument("--covered-until", help="ISO time up to which /close covered it; `sessions digest` prints it (default: now)")
+    cl.add_argument("--checkpoint", action="store_true", help="an interim close after a compaction, not the end")
+    ss = sub.add_parser("sessions", parents=[common], help="sessions that ended without /close: list, digest <id>, skip <id>")
+    ss.add_argument("action", nargs="?", default="list", choices=["list", "digest", "skip"])
+    ss.add_argument("id", nargs="?")
+    ss.add_argument("--json", action="store_true", help="list as JSON")
+    ss.add_argument("--max-chars", type=int, default=24000, help="size limit for digest")
+    ss.add_argument("--all", action="store_true", help="digest the whole transcript, also what a close covered")
+    ss.add_argument("--reason", help="why the session needs no catch-up (for skip)")
+    hk = sub.add_parser("hook", parents=[common], help="SessionStart hook for Claude Code and Codex (payload on stdin)")
+    hk.add_argument("event", choices=["session-start"])
     args = ap.parse_args()
     set_vault(args.vault_sub or args.vault_top)
     if args.cmd != "expose" and not VAULT.is_dir():
@@ -3269,7 +3845,7 @@ def main() -> None:
     {"serve": cmd_serve, "wait": cmd_wait, "say": cmd_say, "light": cmd_light, "status": cmd_status, "expose": cmd_expose,
      "next": cmd_next, "check": cmd_check, "boot": cmd_boot, "commit": cmd_commit, "machine": cmd_machine, "tour": cmd_tour,
      "demo": cmd_demo, "recall": cmd_recall, "mentions": cmd_mentions,
-     "map-path": cmd_map_path, "qmd": cmd_qmd}[args.cmd](args)
+     "map-path": cmd_map_path, "qmd": cmd_qmd, "close": cmd_close, "sessions": cmd_sessions, "hook": cmd_hook}[args.cmd](args)
 
 
 if __name__ == "__main__":

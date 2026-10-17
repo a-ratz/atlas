@@ -1,7 +1,7 @@
 # First run: install Atlas
 
-The user does not want an onboarding. Ask at most three short questions, then
-start Atlas. If your harness has a question tool (Claude Code: AskUserQuestion),
+The user does not want an onboarding. Ask only the short questions below that
+apply, then start Atlas. If your harness has a question tool (Claude Code: AskUserQuestion),
 use it with the options below. Otherwise ask in one message with numbered
 options.
 
@@ -113,7 +113,20 @@ gh repo create <name> --private --source <dir> --remote origin --push
 knowledge, so the repository is always private. With this backup, another
 machine can install Atlas there and pick option 4 with the repository URL.
 
-## 6. Start
+## 6. Session hook? (optional)
+
+Ask: "Should agents be reminded of sessions that ended without /close? This adds
+a start hook to Claude Code and Codex." The default answer is yes. If the user
+says yes:
+
+```bash
+uv run --no-project <skill>/scripts/atlas_install.py hooks install
+```
+
+It prints a note when Claude Code deletes transcripts after 30 days; pass it on
+in one line (`cleanupPeriodDays` in `~/.claude/settings.json` keeps them longer).
+
+## 7. Start
 
 Hand over to the home. Follow `<dir>/.agents/skills/atlas-operator/SKILL.md`,
 which also has you write your own identity file in `vault/agents/`.
