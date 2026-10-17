@@ -91,6 +91,23 @@ def teams_drafts_and_failed_start(page, base: str, scheme: str) -> None:
         if page.input_value("#tm-text") != "a draft for the first chat":
             failures.append(f"[{scheme}] teams: back in the first chat its draft was gone (#60 final)")
         page.fill("#tm-text", "")
+        # a send still in flight while the reader leaves the chat and comes back: once it is confirmed,
+        # its text must not wait in the composer for a second Enter
+        held = []
+        page.route("**/api/addons/teams/chats/*/messages", lambda route: held.append(route) if route.request.method == "POST" else route.continue_())
+        page.fill("#tm-text", "sent while switching")
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(300)
+        page.click(".tm-row >> nth=1")
+        page.wait_for_timeout(400)
+        page.click(".tm-row >> nth=0")
+        page.wait_for_timeout(400)
+        while held:
+            held.pop().continue_()
+        page.wait_for_timeout(1000)
+        page.unroute("**/api/addons/teams/chats/*/messages")
+        if page.input_value("#tm-text"):
+            failures.append(f"[{scheme}] teams: a confirmed send stayed in the composer after leaving and reopening the chat (#60 final)")
         page.goto(f"{base}/#/")
         page.wait_for_selector("#main > *", timeout=10000)
         page.route("**/api/addons/teams/chats", lambda route: route.abort())

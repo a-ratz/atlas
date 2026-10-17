@@ -387,3 +387,23 @@ def test_an_accepted_message_stays_sent_when_the_refresh_gets_no_answer(teams_mo
     c = fake_teams_app(teams_module, tmp_path, graph)
     r = c.post("/api/addons/teams/chats/19%3Aa%40thread.v2/messages", json={"text": "hello"})
     assert r.status_code == 200 and r.json() == {"sent": True, "messages": None}
+
+
+def test_a_late_refusal_never_signs_out_a_newer_sign_in(teams_module, tmp_path):
+    account = None
+
+    def opener(req, timeout):
+        token = req.headers["Authorization"]
+        if token == "Bearer refreshed":  # while this request waits, the user signs in again in another tab
+            account.store.save({"access_token": "newest", "refresh_token": "r3", "expires_at": 9e12})
+        if token in ("Bearer old", "Bearer refreshed"):
+            raise urllib.error.HTTPError(req.full_url, 401, "Unauthorized", {}, io.BytesIO(b"{}"))
+        return io.BytesIO(b'{"value": []}')
+
+    def post_form(url, fields):
+        return {"access_token": "refreshed", "refresh_token": "r2", "expires_in": 3600}
+
+    account = teams_module.Account({"client_id": "id"}, tmp_path, opener=opener, post_form=post_form)
+    account.store.save({"access_token": "old", "refresh_token": "r", "expires_at": 9e12})
+    assert account.graph("GET", "/me/chats") == {"value": []}
+    assert account.store.load()["access_token"] == "newest"

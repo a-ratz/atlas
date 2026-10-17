@@ -246,19 +246,20 @@ export async function view(main, ctx) {
       area.disabled = button.disabled = false;
     }
     if (!live()) return;
+    const here = !!open && keyOf(open) === keyOf(target);  // the same conversation, even if reopened meanwhile
     if (status === 200 && data.sent) {
       drafts.delete(keyOf(target));
-      if (target === open && area.value.trim() === text) area.value = "";
-      if (target !== open) ctx.toast(`Sent to ${target.title}.`);  // the reader moved on: the answer is not this conversation's
+      if (here && area.value.trim() === text) area.value = "";
+      if (!here) ctx.toast(`Sent to ${target.title}.`);  // the reader moved on: the answer is not this conversation's
       else if (data.messages) renderMessages(data.messages, true);
       else loadMessages(true);
     } else if (!status) {
       // unconfirmed, not failed: show the conversation as it is, and keep the draft in case it did not arrive
       ctx.toast("No answer, so the message may have gone out. Check the conversation before sending it again.");
-      if (target === open) loadMessages(true);
+      if (here) loadMessages(true);
     } else if (status === 403 && data.error === "post_refused") ctx.toast("Not sent: this channel does not take your posts.");
     else ctx.toast(status === 429 ? "Microsoft asks to slow down; try again in a moment." : `Not sent: Teams answered ${status}.`);
-    if (target === open) area.focus();
+    if (here) area.focus();
   }
 
   // ---------------------------------------------------------------- staying current

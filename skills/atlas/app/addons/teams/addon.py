@@ -256,7 +256,7 @@ class Account:
         if wait > 0:
             raise Throttled(int(wait) + 1)
         rejected = None
-        while True:
+        for attempt in range(3):  # the token, a refreshed one, and one that a new sign-in put there meanwhile
             token = self.access_token(rejected)
             if not token:
                 raise GraphError(401, "signed_out", "Sign in to Microsoft first.")
@@ -272,11 +272,18 @@ class Account:
                     rejected = token  # Graph refused the token before its time: refresh once and ask again
                     continue
                 if e.code == 401:
-                    self.store.clear()  # refused again: sign in again instead of polling with a dead token
+                    with self.lock:  # refused again: sign out, unless a newer sign-in replaced this token meanwhile
+                        stored = self.store.load()
+                        if stored and stored.get("access_token") != token and attempt < 2:
+                            rejected = token
+                            continue
+                        if stored and stored.get("access_token") == token:
+                            self.store.clear()
                     raise GraphError(401, "signed_out", "Sign in to Microsoft again.")
                 self._raise_http(e)
             except (urllib.error.URLError, TimeoutError, OSError) as e:  # no answer at all: a 502, not a crash
                 raise GraphError(502, "unreachable", f"Microsoft Graph did not answer: {e}")
+        raise GraphError(401, "signed_out", "Sign in to Microsoft again.")
 
     def _raise_http(self, e: urllib.error.HTTPError) -> None:
         """Graph's error as Throttled (429, 503: wait as asked) or GraphError."""
