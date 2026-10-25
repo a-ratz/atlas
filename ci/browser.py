@@ -235,6 +235,7 @@ def main() -> None:
                     light_catch_up_race(ctx, srv, vault)
                 ctx.close()
             empty_home_lists_notes(browser, Path(tmp))
+            odd_group_names(browser, Path(tmp))
             browser.close()
             print(f"{len(pages)} pages × 2 color schemes opened")
     for f in failures:
@@ -725,6 +726,40 @@ def empty_home_lists_notes(browser, tmp: Path) -> None:
                 failures.append("the empty Home's Needs you does not show the reminder (#18)")
         except Exception:
             failures.append("a fresh vault's Home does not show a new reminder under Needs you (#18)")
+        page.close()
+
+
+def odd_group_names(browser, tmp: Path) -> None:
+    """Groups named like built-in object properties still make a tree that opens, closes and remembers
+    (#68, review round 1: a plain object turned "constructor" into a crash on load)."""
+    import shutil
+    from gate import APP
+    vault = tmp / "odd-groups" / "vault"
+    shutil.copytree(APP / "vault", vault, ignore=shutil.ignore_patterns(".atlas"))
+    for group in ("constructor", "__proto__", "toString"):
+        folder = vault / "projects" / group / "p"
+        folder.mkdir(parents=True)
+        (folder / "project.md").write_text(f"---\ntitle: In {group}\nstatus: active\n---\n\n# In {group}\n", encoding="utf-8")
+    with Server(vault, operator=True) as srv:
+        page = browser.new_page()
+        errors: list[str] = []
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.goto(f"{srv.base}/#/")
+        try:
+            page.wait_for_selector("details.nav-tree", timeout=10000)
+            groups = page.eval_on_selector_all("details.nav-tree", "ds => ds.map((d) => d.dataset.group)")
+            if sorted(groups) != ["__proto__", "constructor", "toString"]:
+                failures.append(f"groups named like object properties make the nodes {groups} (#68)")
+            page.click("details.nav-tree[data-group='__proto__'] > summary")
+            page.wait_for_timeout(200)
+            page.reload()
+            page.wait_for_selector("details.nav-tree", timeout=10000)
+            if page.eval_on_selector("details.nav-tree[data-group='__proto__']", "d => d.open"):
+                failures.append("a closed group named __proto__ opened again after a reload (#68)")
+        except Exception as e:
+            failures.append(f"a vault with groups named like object properties does not load its tree (#68): {e}")
+        if errors:
+            failures.append(f"groups named like object properties raise in the page (#68): {errors[0]}")
         page.close()
 
 

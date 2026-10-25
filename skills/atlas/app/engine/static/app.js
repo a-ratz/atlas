@@ -272,13 +272,18 @@ const PROJECT_TYPES = new Set(["project", "thread", "decision", "lesson", "group
 // projects as a tree: a node per group, titled from its _group.md, with its number of projects. A group stays
 // open or closed as the user left it in this browser; groups start open.
 function projectTree(m) {
+  // Maps and Object.hasOwn: a group may be called "constructor" or "__proto__" (#68, review round 1)
   const opened = store.get("atlas.navGroups", {});
-  const titles = Object.fromEntries((m.groups || []).map((gr) => [gr.id, gr.title]));
-  const byGroup = {};
-  for (const p of m.projects || []) (byGroup[p.group || ""] ??= []).push(p);  // the server sorts by group, then title
-  return Object.entries(byGroup).map(([id, ps]) => {
+  const titles = new Map((m.groups || []).map((gr) => [gr.id, gr.title]));
+  const byGroup = new Map();
+  for (const p of m.projects || []) {  // the server sorts by group, then title
+    const id = p.group || "";
+    if (!byGroup.has(id)) byGroup.set(id, []);
+    byGroup.get(id).push(p);
+  }
+  return [...byGroup].map(([id, ps]) => {
     const leaves = ps.map((p) => `<a class="nav-link nav-leaf" href="#/e/${enc(p.id)}"><span style="width:12px;display:inline-flex;justify-content:center">${g("project")}</span><span class="lbl">${esc(p.title)}</span>${p.open ? `<span class="count">${p.open} open</span>` : ""}</a>`).join("");
-    return `<details class="nav-tree" data-group="${esc(id)}"${(opened[id] ?? true) ? " open" : ""}><summary class="nav-link"><svg class="i sm chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg><span class="lbl">${esc(titles[id] || id || "Other")}</span><span class="count">${ps.length}</span></summary>${leaves}</details>`;
+    return `<details class="nav-tree" data-group="${esc(id)}"${(Object.hasOwn(opened, id) ? opened[id] : true) ? " open" : ""}><summary class="nav-link"><svg class="i sm chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg><span class="lbl">${esc(titles.get(id) || id || "Other")}</span><span class="count">${ps.length}</span></summary>${leaves}</details>`;
   }).join("");
 }
 function renderNav() {
