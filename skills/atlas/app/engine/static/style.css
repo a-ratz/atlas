@@ -150,7 +150,11 @@ body.chat-open .layout { grid-template-columns: 232px minmax(0, 1fr) var(--chat-
 .sidebar { position: sticky; top: 60px; height: calc(100vh - 60px); overflow-y: auto; padding: 16px 12px 32px; border-right: 1px solid var(--line-2); display: flex; flex-direction: column; gap: 2px; }
 .nav-section { margin: 18px 10px 6px; display: flex; align-items: center; font: 500 10.5px/1.4 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--faint); }
 .nav-section a { margin-left: auto; letter-spacing: .06em; color: var(--soft); }
-.nav-group { padding: 4px 10px 2px 32px; font-size: 12px; color: var(--faint); }
+details.nav-tree > summary { list-style: none; cursor: pointer; user-select: none; }
+details.nav-tree > summary::-webkit-details-marker { display: none; }
+details.nav-tree > summary .chev { transition: transform .15s; color: var(--faint); }
+details.nav-tree[open] > summary .chev { transform: rotate(90deg); }
+.nav-link.nav-leaf { padding-left: 32px; min-height: 30px; font-size: 13px; }
 .nav-link { display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 0 10px; border-radius: 8px; color: var(--soft); font-size: 13.5px; }
 .nav-link:hover { background: var(--raised); color: var(--text); text-decoration: none; }
 .nav-link.active { background: var(--raised); color: var(--text); font-weight: 500; }

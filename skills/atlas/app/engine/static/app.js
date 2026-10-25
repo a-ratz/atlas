@@ -269,6 +269,18 @@ const NAV_ICONS = {
 const navIcon = (k) => `<svg class="i" viewBox="0 0 16 16" aria-hidden="true">${NAV_ICONS[k]}</svg>`;
 const PROJECT_TYPES = new Set(["project", "thread", "decision", "lesson", "group"]);
 
+// projects as a tree: a node per group, titled from its _group.md, with its number of projects. A group stays
+// open or closed as the user left it in this browser; groups start open.
+function projectTree(m) {
+  const opened = store.get("atlas.navGroups", {});
+  const titles = Object.fromEntries((m.groups || []).map((gr) => [gr.id, gr.title]));
+  const byGroup = {};
+  for (const p of m.projects || []) (byGroup[p.group || ""] ??= []).push(p);  // the server sorts by group, then title
+  return Object.entries(byGroup).map(([id, ps]) => {
+    const leaves = ps.map((p) => `<a class="nav-link nav-leaf" href="#/e/${enc(p.id)}"><span style="width:12px;display:inline-flex;justify-content:center">${g("project")}</span><span class="lbl">${esc(p.title)}</span>${p.open ? `<span class="count">${p.open} open</span>` : ""}</a>`).join("");
+    return `<details class="nav-tree" data-group="${esc(id)}"${(opened[id] ?? true) ? " open" : ""}><summary class="nav-link"><svg class="i sm chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg><span class="lbl">${esc(titles[id] || id || "Other")}</span><span class="count">${ps.length}</span></summary>${leaves}</details>`;
+  }).join("");
+}
 function renderNav() {
   const m = state.meta, seen = seenCounts();
   const count = (id) => typeOf(id)?.count || 0;
@@ -287,13 +299,9 @@ function renderNav() {
   const sections = {};
   for (const t of m.types) if (t.nav !== false) (sections[t.section] ??= []).push(t);
   for (const [sec, types] of Object.entries(sections)) {
-    if (types.some((t) => t.id === "project")) {  // projects by group, then the memory types in one line
+    if (types.some((t) => t.id === "project")) {  // projects as a tree under their groups, then the memory types in one line
       html += `<div class="nav-section"><span>${esc(sec)}</span><a href="#/projects">all</a></div>`;
-      let group = null;
-      for (const p of m.projects || []) {
-        if (p.group !== group) { group = p.group; html += `<div class="nav-group">${esc(group || "")}</div>`; }
-        html += `<a class="nav-link" href="#/e/${enc(p.id)}"><span style="width:12px;display:inline-flex;justify-content:center">${g("project")}</span><span class="lbl">${esc(p.title)}</span>${p.open ? `<span class="count">${p.open} open</span>` : ""}</a>`;
-      }
+      html += projectTree(m);
       const rest = types.filter((t) => t.id !== "project");
       if (rest.length) html += `<div class="nav-sub">${rest.map((t) => `<a href="#/t/${enc(t.id)}">${esc(t.plural.toLowerCase())} <span class="mono">${t.count}</span></a>`).join("")}</div>`;
       continue;
@@ -310,6 +318,10 @@ function renderNav() {
     html += `<div class="nav-section">${esc(sec)}</div>` + flow(types, typeLink);
   }
   $("#sidebar").innerHTML = html;
+  $$("#sidebar details.nav-tree").forEach((d) => d.addEventListener("toggle", () => {
+    if (d.dataset.auto) { delete d.dataset.auto; return; }  // opened to show the current page, not by the user
+    store.set("atlas.navGroups", { ...store.get("atlas.navGroups", {}), [d.dataset.group]: d.open });
+  }));
   const arrow = $("#distill-all");
   if (arrow) arrow.onclick = distillAll;
   markNav();
@@ -353,6 +365,8 @@ function markNav() {
   const h = location.hash || "#/";
   const base = h.split("?")[0];
   $$(".nav-link").forEach((a) => a.classList.toggle("active", (a.getAttribute("href") || "").split("?")[0] === base));
+  const tree = $(".nav-link.active")?.closest("details.nav-tree");  // the open page's project shows in a closed group
+  if (tree && !tree.open) { tree.dataset.auto = "1"; tree.open = true; }
   const tab = base.startsWith("#/chat") ? "chat" : base.startsWith("#/projects") || (state.current?.type && PROJECT_TYPES.has(state.current.type)) ? "projects" : base.startsWith("#/graph") ? "graph" : base === "#/" ? "home" : "";
   $$(".tabbar a").forEach((a) => a.classList.toggle("on", a.dataset.tab === tab));
 }

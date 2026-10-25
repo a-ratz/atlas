@@ -257,6 +257,7 @@ def checks(page, base: str, scheme: str) -> None:
     deep_after_nothing(page, base, scheme)
     slow_view_stays_behind(page, base, scheme)
     project_pages(page, base, scheme)
+    project_tree(page, base, scheme)
     card_facts(page, base, scheme)
     log_links(page, base, scheme)
     page.goto(f"{base}/#/chat")
@@ -338,6 +339,35 @@ def project_pages(page, base: str, scheme: str) -> None:
             lines = page.eval_on_selector_all(".left-off .line", "ls => ls.map((l) => l.innerText)")
             if any(head in line for line in lines) and len(lines) == 1:
                 failures.append(f"[{scheme}] {project}: 'Where we left off' says {head!r} twice (#16 smoke run)")
+
+def project_tree(page, base: str, scheme: str) -> None:
+    """Projects sit in a tree under their groups; a closed group stays closed after a reload, and a project
+    opened from elsewhere shows its group without changing what was saved (#67)."""
+    page.goto(f"{base}/#/")
+    page.wait_for_selector("details.nav-tree", timeout=15000)
+    page.evaluate("localStorage.removeItem('atlas.navGroups')")
+    page.reload()
+    page.wait_for_selector("details.nav-tree", timeout=15000)
+    titles = page.eval_on_selector_all("details.nav-tree > summary .lbl", "els => els.map((e) => e.textContent)")
+    if titles != ["Private", "Work"]:
+        failures.append(f"[{scheme}] the project tree's groups are {titles}, not their titles Private and Work (#67)")
+        return
+    page.click("details.nav-tree[data-group='work'] > summary")
+    page.wait_for_timeout(200)
+    page.reload()
+    page.wait_for_selector("details.nav-tree", timeout=15000)
+    state = page.eval_on_selector_all("details.nav-tree", "ds => ds.map((d) => d.dataset.group + ':' + d.open)")
+    if state != ["private:true", "work:false"]:
+        failures.append(f"[{scheme}] a closed group did not stay closed after a reload: {state} (#67)")
+    page.goto(f"{base}/#/e/{urllib.parse.quote('projects/work/thesis/project.md', safe='')}")
+    page.wait_for_selector(".side-col .path:has-text('projects/work/thesis/project.md')", timeout=15000)
+    page.wait_for_timeout(200)
+    if not page.eval_on_selector("details.nav-tree[data-group='work']", "d => d.open"):
+        failures.append(f"[{scheme}] the open project's closed group did not open (#67)")
+    if page.evaluate("JSON.parse(localStorage.getItem('atlas.navGroups') || '{}').work") is not False:
+        failures.append(f"[{scheme}] showing the open project changed the saved state of its group (#67)")
+    page.evaluate("localStorage.removeItem('atlas.navGroups')")
+
 
 def slow_view_stays_behind(page, base: str, scheme: str) -> None:
     """A view whose data comes late does not paint over the page the reader opened meanwhile (CI on #18: Home,

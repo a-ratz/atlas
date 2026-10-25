@@ -1762,12 +1762,16 @@ def make_app(index: Index):
                      "open": sum(1 for x in ents if x.type == "thread" and x.group == e.group and x.project == e.project
                                  and str(x.status) == "open")}
                     for e in sorted((e for e in ents if e.type == "project"), key=lambda e: (e.group or "", e.title.lower()))]
+        # the navigation's tree: one node per group, titled from projects/<group>/_group.md
+        groups = [{"id": g, "title": (index.entities[f"projects/{g}/_group.md"].title
+                                      if f"projects/{g}/_group.md" in index.entities else g)}
+                  for g in sorted({p["group"] for p in projects if p["group"]})]
         agents = [{"id": Path(e.id).stem, "title": e.title, "path": e.id} for e in sorted(ents, key=lambda e: e.id) if e.type == "agent"]
         return JSONResponse({"types": types, "version": index.version, "built_at": index.built_at,
                              "operator": operator_state(), "vault": VAULT.name, "vault_path": str(VAULT), "user": index.user,
                              "total": len(index.entities), "content": content_count(index),
                              "qmd": bool(deep_collections()[1]), "commands": index.commands, "drop": index.drop,
-                             "projects": projects, "agents": agents, "addons": addon_rows(addons)})
+                             "projects": projects, "groups": groups, "agents": agents, "addons": addon_rows(addons)})
 
     async def home_data(request):
         await run_in_threadpool(fresh)
