@@ -167,7 +167,8 @@ the sketch it came from. The operator view above shows a spec in the workbench.
   <img alt="A project page: where we left off, open threads with next steps, and what an agent loads" src="docs/assets/project.png" width="900">
 </p>
 
-Projects live in groups (private, work, …) with group rules. Each project has
+Projects live in groups (private, work, …) with group rules; the sidebar shows
+them as a tree, each group opening and closing as you leave it. Each project has
 one memory that every agent shares: **threads** with their next step and a log,
 **decisions** (proposed → accepted), **lessons** that hold beyond one session.
 The page shows where you left off and exactly what an agent loads before it
@@ -351,7 +352,7 @@ single-user, local-first and young.
 
 ## Status and roadmap
 
-Atlas 0.13.0 is the current release. Stable: the
+Atlas 0.14.0 is the current release. Stable: the
 engine and reader, the duplex chat with answer blocks, project memory with boot
 packets and catch-up of sessions that ended without `/close`, ideas from sketch
 to project, cards, search by meaning, lighting up notes in the constellation,

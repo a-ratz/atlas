@@ -235,6 +235,7 @@ def main() -> None:
                     light_catch_up_race(ctx, srv, vault)
                 ctx.close()
             empty_home_lists_notes(browser, Path(tmp))
+            odd_group_names(browser, Path(tmp))
             browser.close()
             print(f"{len(pages)} pages × 2 color schemes opened")
     for f in failures:
@@ -257,6 +258,7 @@ def checks(page, base: str, scheme: str) -> None:
     deep_after_nothing(page, base, scheme)
     slow_view_stays_behind(page, base, scheme)
     project_pages(page, base, scheme)
+    project_tree(page, base, scheme)
     card_facts(page, base, scheme)
     log_links(page, base, scheme)
     page.goto(f"{base}/#/chat")
@@ -338,6 +340,35 @@ def project_pages(page, base: str, scheme: str) -> None:
             lines = page.eval_on_selector_all(".left-off .line", "ls => ls.map((l) => l.innerText)")
             if any(head in line for line in lines) and len(lines) == 1:
                 failures.append(f"[{scheme}] {project}: 'Where we left off' says {head!r} twice (#16 smoke run)")
+
+def project_tree(page, base: str, scheme: str) -> None:
+    """Projects sit in a tree under their groups; a closed group stays closed after a reload, and a project
+    opened from elsewhere shows its group without changing what was saved (#67)."""
+    page.goto(f"{base}/#/")
+    page.wait_for_selector("details.nav-tree", timeout=15000)
+    page.evaluate("localStorage.removeItem('atlas.navGroups')")
+    page.reload()
+    page.wait_for_selector("details.nav-tree", timeout=15000)
+    titles = page.eval_on_selector_all("details.nav-tree > summary .lbl", "els => els.map((e) => e.textContent)")
+    if titles != ["Private", "Work"]:
+        failures.append(f"[{scheme}] the project tree's groups are {titles}, not their titles Private and Work (#67)")
+        return
+    page.click("details.nav-tree[data-group='work'] > summary")
+    page.wait_for_timeout(200)
+    page.reload()
+    page.wait_for_selector("details.nav-tree", timeout=15000)
+    state = page.eval_on_selector_all("details.nav-tree", "ds => ds.map((d) => d.dataset.group + ':' + d.open)")
+    if state != ["private:true", "work:false"]:
+        failures.append(f"[{scheme}] a closed group did not stay closed after a reload: {state} (#67)")
+    page.goto(f"{base}/#/e/{urllib.parse.quote('projects/work/thesis/project.md', safe='')}")
+    page.wait_for_selector(".side-col .path:has-text('projects/work/thesis/project.md')", timeout=15000)
+    page.wait_for_timeout(200)
+    if not page.eval_on_selector("details.nav-tree[data-group='work']", "d => d.open"):
+        failures.append(f"[{scheme}] the open project's closed group did not open (#67)")
+    if page.evaluate("JSON.parse(localStorage.getItem('atlas.navGroups') || '{}').work") is not False:
+        failures.append(f"[{scheme}] showing the open project changed the saved state of its group (#67)")
+    page.evaluate("localStorage.removeItem('atlas.navGroups')")
+
 
 def slow_view_stays_behind(page, base: str, scheme: str) -> None:
     """A view whose data comes late does not paint over the page the reader opened meanwhile (CI on #18: Home,
@@ -695,6 +726,40 @@ def empty_home_lists_notes(browser, tmp: Path) -> None:
                 failures.append("the empty Home's Needs you does not show the reminder (#18)")
         except Exception:
             failures.append("a fresh vault's Home does not show a new reminder under Needs you (#18)")
+        page.close()
+
+
+def odd_group_names(browser, tmp: Path) -> None:
+    """Groups named like built-in object properties still make a tree that opens, closes and remembers
+    (#68, review round 1: a plain object turned "constructor" into a crash on load)."""
+    import shutil
+    from gate import APP
+    vault = tmp / "odd-groups" / "vault"
+    shutil.copytree(APP / "vault", vault, ignore=shutil.ignore_patterns(".atlas"))
+    for group in ("constructor", "__proto__", "toString"):
+        folder = vault / "projects" / group / "p"
+        folder.mkdir(parents=True)
+        (folder / "project.md").write_text(f"---\ntitle: In {group}\nstatus: active\n---\n\n# In {group}\n", encoding="utf-8")
+    with Server(vault, operator=True) as srv:
+        page = browser.new_page()
+        errors: list[str] = []
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.goto(f"{srv.base}/#/")
+        try:
+            page.wait_for_selector("details.nav-tree", timeout=10000)
+            groups = page.eval_on_selector_all("details.nav-tree", "ds => ds.map((d) => d.dataset.group)")
+            if sorted(groups) != ["__proto__", "constructor", "toString"]:
+                failures.append(f"groups named like object properties make the nodes {groups} (#68)")
+            page.click("details.nav-tree[data-group='__proto__'] > summary")
+            page.wait_for_timeout(200)
+            page.reload()
+            page.wait_for_selector("details.nav-tree", timeout=10000)
+            if page.eval_on_selector("details.nav-tree[data-group='__proto__']", "d => d.open"):
+                failures.append("a closed group named __proto__ opened again after a reload (#68)")
+        except Exception as e:
+            failures.append(f"a vault with groups named like object properties does not load its tree (#68): {e}")
+        if errors:
+            failures.append(f"groups named like object properties raise in the page (#68): {errors[0]}")
         page.close()
 
 
